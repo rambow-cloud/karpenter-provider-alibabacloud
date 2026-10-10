@@ -1,8 +1,4 @@
----
-title: 为什么继续维护
-description: 以 AWS Karpenter 的体验为方向，延续 Alibaba Cloud provider 的维护。
-weight: 10
----
+# 为什么继续维护
 
 ## 项目的动力
 
@@ -19,7 +15,7 @@ weight: 10
 3. **ECSNodeClass 定义云资源。** 用户选择镜像、交换机、安全组与磁盘，provider 将这些配置连接到 ECS API。
 4. **节点进入集群。** 新 ECS 完成引导、注册和初始化后承载工作负载；实例发现与删除遵守集群所有权边界。
 
-这是我们要推进的工作流。每一环都需要实现、回归与真实云端证据；当前完成程度见[项目状态](../status/)。
+这是我们要推进的工作流。每一环都需要实现、回归与真实云端证据；当前完成程度见[项目状态](../status/index.md)。
 
 ## 为什么参考 AWS provider
 
@@ -29,4 +25,4 @@ weight: 10
 
 ## 来源与许可
 
-Provider 延续自 AliyunContainerService 的开源实现，项目代码遵循 [Apache License 2.0](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE)。网站使用 [Pigsty OINK](https://github.com/pgsty/oink) 与 [Hugo](https://gohugo.io/) 构建。
+Provider 延续自 AliyunContainerService 的开源实现，项目代码遵循 [Apache License 2.0](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE)。网站使用 [Zensical](https://zensical.org/) 构建。

@@ -1,43 +1,53 @@
 # Project website
 
-The project introduction is published at <https://rambow-cloud.github.io/karpenter-provider-alibabacloud/>. Simplified Chinese is at the root; English is at `/en/`. The site is tracked by [Issue #30](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/30) and the [website launch milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/6).
+The project introduction and guide use [Zensical](https://zensical.org/) **0.0.69** with the native modern theme. Python **3.14.2** and uv **0.12.21** are used in CI; `uv.lock` locks the website's Python dependencies independently of the Go controller.
 
-## Toolchain
+Chinese is published at https://rambow-cloud.github.io/karpenter-provider-alibabacloud/ and English at `/en/`. Both languages preserve the previous `docs/motivation/`, `docs/status/`, and `docs/participate/` URLs.
 
-- Hugo **Extended 0.167.0**
-- Go **1.27.1** for website tooling
-- [OINK **v1.2.0**](https://github.com/pgsty/oink), pinned in this directory's separate `go.mod` / `go.sum`
+## Build
 
-Run Hugo from `website/`. The controller's root Go module is independent. No Node.js, npm, analytics, or comment service is required.
-
-## Edit and build
-
-`data/home/zh.yaml` and `data/home/en.yaml` contain the native OINK landing content. Translated guides live side by side in `content/docs/` with explicit `.zh.md` and `.en.md` suffixes. Keep both languages consistent, and distinguish project goals, merged implementation, offline evidence, and pending cloud acceptance.
+Install uv, then run from this directory:
 
 ```sh
-cd website
-go mod download
-hugo --cleanDestinationDir --gc --minify --environment production --printPathWarnings --panicOnWarning
+uv sync --frozen --python 3.14.2
+uv run --frozen python build.py
 ```
 
-For local preview:
+The script stages each language in `.generated/` with a copy of the shared `assets/`, then runs two clean, strict Zensical builds. Chinese writes `site/`; English writes `site/en/`. Cleanup is restricted to the generated `.generated/` and `site/` directories under `website/`. The Pages artifact is `site/`; generated assets, caches and the virtual environment are ignored by Git.
+
+For a Chinese local preview:
 
 ```sh
-hugo server
+uv run --frozen python build.py --prepare-only
+uv run --frozen zensical serve --config-file zensical.toml
 ```
 
-Open the URL printed by Hugo in a browser. Generated `public/`, `resources/`, caches, and build locks are ignored. Theme upgrades are deliberate changes to the website module; update the lockfile and run the strict build once after changing inputs.
+Use `zensical.en.toml` instead for the English preview. Language-selector links intentionally point to the production Pages subpath; use separate preview commands to inspect each language locally. Restage after changing shared assets or source content.
 
-## Publish and roll back
+## Editing
 
-`.github/workflows/website.yaml` builds website PRs with read-only permissions. After merge to `main`, or a manual workflow run on `main`, it builds and deploys through the GitHub Pages artifact API. The deployment job alone receives `pages: write` and `id-token: write`; a PR cannot deploy. Tool releases are fixed, actions are pinned to commits, and Hugo downloads are checksum-verified.
+- `content/zh/` and `content/en/`: translated Markdown; edit both together.
+- `zensical.toml` and `zensical.en.toml`: navigation, site language, Pages URL, and theme settings.
+- `assets/brand.css`: small branding adjustments; keep the native layout and responsive navigation.
+- `assets/rambow-karpenter.png`: transparent Rambow ram/cloud + K logo. Original input and edit provenance are in [branding/README.md](branding/README.md).
+- `pyproject.toml` and `uv.lock`: pinned generator and resolved dependencies. Review upgrades in an issue and regenerate the lockfile with `uv lock`.
 
-Repository Settings → Pages must use **GitHub Actions** as the source. The production base URL is taken from `actions/configure-pages`, with the canonical project subpath also present in `hugo.yaml`. No custom DNS configuration is needed.
+System fonts avoid external font requests. Search and light/dark appearance use Zensical's native components. Each language is built separately so its HTML language, search index, and interface translations agree. Goals and planned work must remain distinct from completed implementation and ACK/ECS acceptance evidence.
 
-To roll back, revert the relevant website commit through a PR and merge it to `main`. A manual deployment rebuilds current `main`; it does not deploy an arbitrary historical commit.
+## Publication and review
 
-The GitHub Actions deployment result confirms publication. Browser appearance is a separate visual check: open the Chinese and English homepages, a guide page, and try mobile navigation, search, and the dark-mode toggle. Do not substitute command-line HTTP checks for that review.
+Website changes follow issue → `feat/<issue-number>-<description>` → PR, using the repository PR template. `.github/workflows/website.yaml` builds on website PRs and pushes to `main`; only `main` deployments have Pages write permissions. Actions and tool versions are pinned. A successful PR build does not publish the site. Merging triggers a production build and the GitHub Pages deployment.
 
-## Attribution
+The repository Pages source is **GitHub Actions**. No custom domain is needed. If the repository URL changes, update both `site_url` values and language-selector links.
 
-The provider and site content remain under the repository's Apache-2.0 license. OINK is an Apache-2.0 theme derived from Docsy; its own NOTICE and third-party vendor notices remain in the pinned theme module. The project motivation page links to the official Alibaba Cloud provider, AWS provider, OINK, and Hugo.
+After deployment succeeds, open these in a browser (use Ctrl+F5 if the previous site is cached):
+
+- Chinese: https://rambow-cloud.github.io/karpenter-provider-alibabacloud/
+- English: https://rambow-cloud.github.io/karpenter-provider-alibabacloud/en/
+- Guide: https://rambow-cloud.github.io/karpenter-provider-alibabacloud/docs/motivation/
+
+Check the Rambow + K logo, desktop/mobile navigation, language selector, light/dark toggle, and search. This browser review is separate from the strict build and deployment status; neither establishes real ACK/ECS acceptance.
+
+To roll back a website release, revert its PR through a new PR. After the required checks pass and it merges, the website workflow republishes the reverted source. Do not manually edit the deployed artifact.
+
+Provider source retains its Apache-2.0 license and AliyunContainerService attribution. Zensical is MIT-licensed and supplies its own native theme and assets. Branding is supplied by Rambow Cloud and is independent of provider code licensing.

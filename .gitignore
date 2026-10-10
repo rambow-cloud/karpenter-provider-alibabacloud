@@ -47,8 +47,8 @@ Thumbs.db
 
 # Docs
 docs/
-!website/content/docs/
-!website/content/docs/**
+!website/content/**/docs/
+!website/content/**/docs/**
 
 # Agent instructions
 AGENT.md

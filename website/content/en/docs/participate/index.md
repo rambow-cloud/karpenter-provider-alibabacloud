@@ -1,12 +1,8 @@
----
-title: Get started and contribute
-description: Review deployment conditions and contribute verifiable changes through issues, branches, and pull requests.
-weight: 30
----
+# Get started and contribute
 
 ## Before trying the provider
 
-Read the [current status](../status/), [quick start](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md), and [upgrade notes](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md). Historical quick-start version examples need the upgrade notes; an old image must not be paired with the current development chart.
+Read the [current status](../status/index.md), [quick start](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md), and [upgrade notes](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md). Historical quick-start version examples need the upgrade notes; an old image must not be paired with the current development chart.
 
 Identify the ACK cluster, region, VPC/vSwitches, security groups, available images, and RAM permissions, and use an isolated test environment. The current candidate requires a controller image built from matching source. Follow the upgrade notes for build requirements and feature-gate migration.
 

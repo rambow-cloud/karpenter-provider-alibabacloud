@@ -1,8 +1,4 @@
----
-title: Status and roadmap
-description: Distinguish the merged development baseline, validation evidence, and remaining work.
-weight: 20
----
+# Status and roadmap
 
 ## Current development baseline
 
