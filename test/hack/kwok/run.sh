@@ -120,6 +120,11 @@ require kubectl
 require helm
 require ko
 
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  mkdir -p "${KWOK_REPORT_DIR}"
+  KWOK_REPORT_DIR="$(cd "${KWOK_REPORT_DIR}" && pwd)"
+fi
+
 # Module archives are read-only and omit executable bits. Use a writable copy
 # for upstream builds/tests without modifying the shared Go module cache.
 core_work_dir="$(mktemp -d "${TMPDIR:-/tmp}/karpenter-kwok.XXXXXX")"
@@ -131,7 +136,7 @@ if ! kind get clusters | grep -qx "${KWOK_CLUSTER_NAME}"; then
   kind create cluster --name "${KWOK_CLUSTER_NAME}"
 fi
 
-trap cleanup EXIT
+trap 'write_report; cleanup' EXIT
 
 kubectl config use-context "kind-${KWOK_CLUSTER_NAME}"
 kubectl taint nodes "${KWOK_CLUSTER_NAME}-control-plane" CriticalAddonsOnly:NoSchedule --overwrite
