@@ -1,0 +1,37 @@
+name: Bug report / 缺陷报告
+description: Report a reproducible provider or deployment failure.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and expected behavior
+      description: Describe the actual result, expected result, and impact.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Provider/chart, Karpenter core, Kubernetes/ACK, and Go versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps and minimal NodePool/ECSNodeClass manifests. Remove credentials and account identifiers.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs and evidence
+      description: Sanitized controller logs, events, region, instance types, and capacity type.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable behavior and regression coverage that demonstrate the fix.
+

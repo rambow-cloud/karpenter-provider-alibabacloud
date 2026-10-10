@@ -1,0 +1,39 @@
+name: Karpenter compatibility / 版本兼容升级
+description: Track a pinned upstream stable release and its migration evidence.
+title: "[Compatibility]: Support Karpenter "
+labels: ["compatibility", "needs-triage"]
+body:
+  - type: input
+    id: target
+    attributes:
+      label: Target upstream version and release URL
+      description: Pin an exact stable version; do not use a floating latest dependency.
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: Compatibility changes
+      description: Go/toolchain, dependencies, CloudProvider contracts, controllers, feature gates, CRDs, and RBAC.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] Dependencies and container toolchain match the target release.
+        - [ ] Provider and E2E harness compile with the target APIs.
+        - [ ] Vendored core CRDs match upstream in both locations.
+        - [ ] Helm permissions cover the enabled upstream controllers.
+        - [ ] Unit/contract checks pass; ACK E2E evidence or limitations are recorded.
+        - [ ] Upgrade and rollback instructions are documented.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation and rollout plan
+    validations:
+      required: true
+

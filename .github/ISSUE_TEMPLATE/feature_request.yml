@@ -1,0 +1,33 @@
+name: Feature request / 功能需求
+description: Propose a provider feature with concrete acceptance criteria.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user outcome
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Proposed scope
+      description: Include API, provider, Helm, documentation, and compatibility implications.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use a checklist of observable outcomes.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Unit/contract tests and any ACK E2E evidence needed.
+    validations:
+      required: true
+

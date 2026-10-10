@@ -1,0 +1,38 @@
+name: PR Policy
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  issues: read
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check issue, branch, title, and PR body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import json, os, re, urllib.request
+          with open(os.environ['GITHUB_EVENT_PATH']) as f:
+              event = json.load(f)
+          pr = event['pull_request']
+          branch = pr['head']['ref']
+          match = re.fullmatch(r'feat/([1-9][0-9]*)-[a-z0-9]+(?:-[a-z0-9]+)*', branch)
+          assert match, 'Branch must be feat/<issue-number>-<short-description>'
+          assert re.match(r'^(feat|fix|chore|docs|test|ci|refactor|perf)(\([^)]+\))?!?: .+', pr['title']), 'Use a conventional PR title'
+          body = pr.get('body') or ''
+          issue = match.group(1)
+          assert re.search(r'\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#' + issue + r'\b', body, re.I), 'Add Closes #<branch issue number>'
+          for section in ('Problem and result', 'Linked issues', 'Validation', 'Compatibility and rollout', 'Checklist'):
+              assert '## ' + section in body, 'Missing PR template section: ' + section
+          repo = event['repository']['full_name']
+          request = urllib.request.Request(
+              os.environ['GITHUB_API_URL'] + '/repos/' + repo + '/issues/' + issue,
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          with urllib.request.urlopen(request) as response:
+              linked = json.load(response)
+          assert 'pull_request' not in linked, 'Primary reference must be an issue, not a PR'
+          assert linked['state'] == 'open', 'Primary issue must be open'
+          print('PR policy passed for issue #' + issue)
