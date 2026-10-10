@@ -37,7 +37,7 @@ cleanup() {
   kubectl delete nodepools --all --ignore-not-found=true >/dev/null 2>&1 || true
   kubectl delete kwoknodeclasses --all --ignore-not-found=true >/dev/null 2>&1 || true
   (cd "${KARPENTER_CORE_DIR}" && helm uninstall karpenter --namespace kube-system >/dev/null 2>&1) || true
-  (cd "${KARPENTER_CORE_DIR}" && UNINSTALL=true ./hack/install-kwok.sh >/dev/null 2>&1) || true
+  (cd "${KARPENTER_CORE_DIR}" && UNINSTALL=true bash ./hack/install-kwok.sh >/dev/null 2>&1) || true
   kind delete cluster --name "${KWOK_CLUSTER_NAME}" >/dev/null 2>&1 || true
 }
 
@@ -120,6 +120,13 @@ require kubectl
 require helm
 require ko
 
+# Module archives are read-only and omit executable bits. Use a writable copy
+# for upstream builds/tests without modifying the shared Go module cache.
+core_work_dir="$(mktemp -d "${TMPDIR:-/tmp}/karpenter-kwok.XXXXXX")"
+cp -R "${KARPENTER_CORE_DIR}/." "${core_work_dir}/"
+chmod -R u+w "${core_work_dir}"
+KARPENTER_CORE_DIR="${core_work_dir}"
+
 if ! kind get clusters | grep -qx "${KWOK_CLUSTER_NAME}"; then
   kind create cluster --name "${KWOK_CLUSTER_NAME}"
 fi
@@ -130,7 +137,7 @@ kubectl config use-context "kind-${KWOK_CLUSTER_NAME}"
 kubectl taint nodes "${KWOK_CLUSTER_NAME}-control-plane" CriticalAddonsOnly:NoSchedule --overwrite
 
 cd "${KARPENTER_CORE_DIR}"
-./hack/install-kwok.sh
+bash ./hack/install-kwok.sh
 
 export KWOK_REPO=kind.local
 export KIND_CLUSTER_NAME="${KWOK_CLUSTER_NAME}"
