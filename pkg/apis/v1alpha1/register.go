@@ -82,6 +82,6 @@ func (in *ECSNodeClass) SetConditions(conditions []status.Condition) {
 }
 
 // StatusConditions returns the condition set for the ECSNodeClass
-func (in *ECSNodeClass) StatusConditions() status.ConditionSet {
-	return ECSNodeClassConditions.For(in)
+func (in *ECSNodeClass) StatusConditions(opts ...status.ForOption) status.ConditionSet {
+	return ECSNodeClassConditions.For(in, opts...)
 }

@@ -84,8 +84,8 @@ func TestBuildCapacityReservationRequestUsesOnDemandInstanceTypeAndOwnershipTags
 	require.Equal(t, int32(1), tea.Int32Value(req.InstanceAmount))
 	require.Equal(t, "Limited", tea.StringValue(req.EndTimeType))
 	require.NotEmpty(t, tea.StringValue(req.EndTime))
-	require.Contains(t, tea.StringValue(req.ClientToken), "ecs-c9i-large")
-	require.Contains(t, tea.StringValue(req.ClientToken), "cn-qingdao-c")
+	require.NotEmpty(t, tea.StringValue(req.ClientToken))
+	require.LessOrEqual(t, len(tea.StringValue(req.ClientToken)), 64)
 	require.Equal(t, "Target", tea.StringValue(req.PrivatePoolOptions.MatchCriteria))
 	require.Equal(t, "ack-e2e-capacity-reservation", tea.StringValue(req.PrivatePoolOptions.Name))
 	tags := map[string]string{}

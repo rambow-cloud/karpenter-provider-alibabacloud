@@ -17,8 +17,9 @@ controller:
     #   IfNotPresent - Pull only if not present locally (recommended for production)
     #   Never        - Never pull, use only local image (for air-gapped environments)
     pullPolicy: Always
-    # -- Image tag/version to deploy
-    tag: "v0.2.5-4a6a244"
+    # -- Image tag/version to deploy; defaults to Chart.appVersion.
+    # This development chart requires an image built from the matching commit.
+    tag: ""
 
   # -- Resource requests and limits for the controller pod
   # @description --
@@ -278,7 +279,12 @@ settings:
   #     Example: Pod prefers arm64 but requires amd64 -> provision amd64 only.
   preferencePolicy: "Respect"
 
-  # -- Comma-separated provider feature gates
+  # -- Comma-separated Karpenter core feature gates
+  # NodeRepair, ReservedCapacity, SpotToSpotConsolidation, NodeOverlay,
+  # StaticCapacity, CapacityBuffer. An empty value uses upstream defaults.
+  featureGates: ""
+
+  # -- Comma-separated Alibaba Cloud provider feature gates
   # @description --
   # Format: GateName1=true,GateName2=false,...
   # Enum values (available provider feature gates):
@@ -302,9 +308,9 @@ settings:
   #     Enable instance creation fallback to alternative instance types.
   #   PricingRefresh (default: true)
   #     Enable background ECS pricing refresh.
-  #   NodeOverlay=true / Drift=true (Karpenter core gates, also accepted)
   # Example: "TerwayPodDensity=true,InterruptionHandling=true"
-  featureGates: ""
+  # Migration: move provider gate entries from settings.featureGates to this value.
+  providerFeatureGates: ""
 
 # -- Image pull secrets for private registries
 # @description --

@@ -46,44 +46,44 @@ func TestZonesFromRequirements(t *testing.T) {
 		{
 			name: "zone In requirement returns zone values",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      corev1.LabelTopologyZone,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"cn-shanghai-n"},
-				}},
+				},
 			},
 			expected: []string{"cn-shanghai-n"},
 		},
 		{
 			name: "multiple zones in requirement",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      corev1.LabelTopologyZone,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"cn-shanghai-l", "cn-shanghai-n"},
-				}},
+				},
 			},
 			expected: []string{"cn-shanghai-l", "cn-shanghai-n"},
 		},
 		{
 			name: "non-zone requirement returns nil",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      "node.kubernetes.io/instance-type",
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"ecs.g7.xlarge"},
-				}},
+				},
 			},
 			expected: nil,
 		},
 		{
 			name: "NotIn zone operator is ignored, returns nil",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      corev1.LabelTopologyZone,
 					Operator: corev1.NodeSelectorOpNotIn,
 					Values:   []string{"cn-shanghai-l"},
-				}},
+				},
 			},
 			expected: nil,
 		},
@@ -184,11 +184,11 @@ func TestVSwitchZoneFilteringBug(t *testing.T) {
 
 	// NodePool restricts to cn-shanghai-n only.
 	requirements := []coreapis.NodeSelectorRequirementWithMinValues{
-		{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+		{
 			Key:      corev1.LabelTopologyZone,
 			Operator: corev1.NodeSelectorOpIn,
 			Values:   []string{"cn-shanghai-n"},
-		}},
+		},
 	}
 
 	zones := zonesFromRequirements(requirements)
@@ -651,44 +651,44 @@ func TestCapacityTypeFromRequirements(t *testing.T) {
 		{
 			name: "In spot returns spot",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      v1alpha1.LabelCapacityType,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"spot"},
-				}},
+				},
 			},
 			expected: "spot",
 		},
 		{
 			name: "In on-demand returns on-demand",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      v1alpha1.LabelCapacityType,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"on-demand"},
-				}},
+				},
 			},
 			expected: "on-demand",
 		},
 		{
 			name: "NotIn spot is ignored, returns on-demand",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      v1alpha1.LabelCapacityType,
 					Operator: corev1.NodeSelectorOpNotIn,
 					Values:   []string{"spot"},
-				}},
+				},
 			},
 			expected: "on-demand",
 		},
 		{
 			name: "no capacity-type requirement returns on-demand",
 			reqs: []coreapis.NodeSelectorRequirementWithMinValues{
-				{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+				{
 					Key:      corev1.LabelTopologyZone,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{"cn-shanghai-n"},
-				}},
+				},
 			},
 			expected: "on-demand",
 		},

@@ -37,25 +37,22 @@ var _ = Describe("Extended Resources", func() {
 		configureNodeClassAndPool("gpu")
 		nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      v1alpha1.LabelCapacityType,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{v1alpha1.CapacityTypeOnDemand},
-				},
+
+				Key:      v1alpha1.LabelCapacityType,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{v1alpha1.CapacityTypeOnDemand},
 			},
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      v1alpha1.LabelInstanceType,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   testGPUInstanceTypes(),
-				},
+
+				Key:      v1alpha1.LabelInstanceType,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   testGPUInstanceTypes(),
 			},
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      corev1.LabelTopologyZone,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   testGPUZones(),
-				},
+
+				Key:      corev1.LabelTopologyZone,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   testGPUZones(),
 			},
 		}
 

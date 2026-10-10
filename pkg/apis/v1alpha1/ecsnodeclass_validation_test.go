@@ -46,6 +46,23 @@ func TestECSNodeClassValidateRejectsRestrictedTags(t *testing.T) {
 	}
 }
 
+func TestWebhookUsesAdmissionObject(t *testing.T) {
+	handler := &ECSNodeClass{}
+	object := validValidationNodeClassForUnit()
+	object.Spec.SystemDisk = nil
+	require.NoError(t, handler.Default(context.Background(), object))
+	require.NotNil(t, object.Spec.SystemDisk)
+	require.Nil(t, handler.Spec.SystemDisk, "the registered handler must not be mutated")
+	_, err := handler.ValidateCreate(context.Background(), object)
+	require.NoError(t, err, "validation must inspect the admission object, not the empty handler")
+	invalid := object.DeepCopy()
+	invalid.Spec.Tags = map[string]string{TagManagedBy: "foreign"}
+	_, err = handler.ValidateCreate(context.Background(), invalid)
+	require.ErrorContains(t, err, "restricted key")
+	_, err = handler.ValidateUpdate(context.Background(), object, invalid)
+	require.ErrorContains(t, err, "restricted key")
+}
+
 func TestNormalizedLabelsIncludesAlibabaCloudDiskCSITopologyZone(t *testing.T) {
 	require.Equal(t, corev1.LabelTopologyZone, karpv1.NormalizedLabels["topology.diskplugin.csi.alibabacloud.com/zone"])
 }

@@ -88,7 +88,7 @@ jobs:
       group: e2e-${{ inputs.workflow_trigger || 'manual' }}-${{ inputs.suite }}-${{ inputs.region }}-${{ inputs.cluster_name || github.run_id }}
       cancel-in-progress: false
     env:
-      DEPLOY_CONFIG: ${{ runner.temp }}/deploy-config.yaml
+      DEPLOY_CONFIG: ${{ github.workspace }}/.e2e/deploy-config.yaml
       TEST_REGION: ${{ inputs.region }}
       ENABLE_METRICS: ${{ inputs.enable_metrics }}
     steps:
@@ -135,6 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          mkdir -p "$(dirname "${DEPLOY_CONFIG}")"
           printf '%s' "${ALIBABA_CLOUD_E2E_CONFIG}" > "${DEPLOY_CONFIG}.source"
           GOFLAGS="${GOFLAGS:--mod=mod}" go run ./test/hack/e2e/ackctl render-config \
             --config "${DEPLOY_CONFIG}.source" \

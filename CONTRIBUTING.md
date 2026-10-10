@@ -14,6 +14,8 @@ Use `feat/<issue-number>-<short-description>` for all implementation work, inclu
 
 PR policy checks validate the branch, title, closing reference, and required sections. Fork PRs run with read-only permissions. Squash merging keeps one logical change per PR; GitHub closes linked issues when the PR reaches the default branch.
 
+The main branch requires a pull request, linear history, and the `policy` check. The new `validation` job must also pass for compatibility changes; add it to required branch checks after the CI workflow reaches main. Stacked PRs may target their dependency branch until the preceding PR is merged.
+
 The project uses Todo, In Progress, and Done. Move an issue to In Progress when its feature branch is created. Keep it there while its PR is open. Move it to Done only after the PR is merged and required validation is complete. The exact upstream stable version is pinned in each compatibility milestone; later releases receive a separate issue and milestone.
 
 Run checks relevant to your change once. Local unit checks: `go test ./pkg/... ./test/hack/...`; controller suites additionally require Linux envtest assets. Run `go vet ./pkg/... ./cmd/...`, `go build ./cmd/controller`, `helm lint charts/karpenter`, and `make e2e-parity` when applicable. Cloud E2E is opt-in and requires an explicitly selected test ACK cluster. Record unavailable checks instead of claiming they passed.

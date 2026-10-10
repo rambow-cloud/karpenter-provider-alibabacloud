@@ -1,0 +1,70 @@
+name: CI
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v3.19.0
+      - name: Check GitHub workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          actionlint -shellcheck=""
+      - name: Set up Linux envtest
+        shell: bash
+        run: |
+          set -euo pipefail
+          make envtest-setup
+          echo "KUBEBUILDER_ASSETS=$(bin/setup-envtest use 1.35.0 -p path)" >> "$GITHUB_ENV"
+      - name: Unit and controller contract tests
+        run: go test -p 2 ./pkg/... ./test/hack/... ./test/pkg/...
+      - name: Vet and build controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet -p 2 ./pkg/... ./cmd/...
+          CGO_ENABLED=0 go build -p 2 -o bin/controller ./cmd/controller
+      - name: Compile cloud E2E harness without running it
+        run: go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
+      - name: Check Helm and pinned deployment artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          helm lint charts/karpenter
+          make compatibility
+          make manifests
+          git diff --exit-code -- charts/karpenter/crds pkg/apis/crds
+      - name: Check formatting and dependency files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git diff --name-only --diff-filter=ACM "$BASE_SHA" "$HEAD_SHA" -- '*.go')
+          if (( ${#files[@]} )); then
+            test -z "$(gofmt -l "${files[@]}")"
+          fi
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum

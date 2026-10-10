@@ -6,6 +6,8 @@
 
 本文档将指导您如何快速部署和使用 Alibaba Cloud Karpenter Provider。
 
+当前开发 chart 为 `0.3.0-dev`，对应 Karpenter core `v1.14.1`。部署时需显式设置 `controller.image.repository` 和 `controller.image.tag`，使用从当前提交构建的镜像。升级已有集群前请阅读 [UPGRADING.md](UPGRADING.md)。
+
 ## 前置条件
 
 1. 一个运行中的 Kubernetes 集群 (推荐使用阿里云 ACK)
@@ -50,18 +52,14 @@ kubectl apply -f charts/karpenter/crds/
 ### 4. 部署 Karpenter Controller
 
 ```bash
-# 创建命名空间
-kubectl create namespace karpenter
-
-# 部署控制器
-kubectl apply -f charts/karpenter/templates/deployment.yaml -n karpenter
+helm upgrade --install karpenter ./charts/karpenter \
+  -n karpenter --create-namespace -f your-values.yaml \
+  --set-string settings.clusterID=YOUR_ACK_CLUSTER_ID \
+  --set controller.image.repository=YOUR_REGISTRY/YOUR_PROVIDER \
+  --set controller.image.tag=YOUR_COMMIT_TAG
 ```
 
-或者使用 Helm 部署：
-
-```bash
-helm install karpenter charts/karpenter -n karpenter --create-namespace
-```
+在 `your-values.yaml` 中配置集群地域和控制器的凭证（RRSA 或 `controller.credentialsSecretName`）。本机环境变量或 CLI 凭证不会自动传入控制器 Pod。
 
 ## 配置 ECSNodeClass
 
@@ -233,6 +231,8 @@ kubectl delete namespace karpenter
 
 This guide explains how to quickly deploy and use Alibaba Cloud Karpenter Provider.
 
+The development chart is `0.3.0-dev` with Karpenter core `v1.14.1`. Use an image built from the matching commit and read [UPGRADING.md](UPGRADING.md) before upgrading an existing cluster.
+
 ### Prerequisites
 
 1. A running Kubernetes cluster (Alibaba Cloud ACK is recommended)
@@ -277,18 +277,14 @@ kubectl apply -f charts/karpenter/crds/
 #### 4. Deploy the Karpenter Controller
 
 ```bash
-# Create the namespace
-kubectl create namespace karpenter
-
-# Deploy the controller
-kubectl apply -f charts/karpenter/templates/deployment.yaml -n karpenter
+helm upgrade --install karpenter ./charts/karpenter \
+  -n karpenter --create-namespace -f your-values.yaml \
+  --set-string settings.clusterID=YOUR_ACK_CLUSTER_ID \
+  --set controller.image.repository=YOUR_REGISTRY/YOUR_PROVIDER \
+  --set controller.image.tag=YOUR_COMMIT_TAG
 ```
 
-Alternatively, deploy with Helm:
-
-```bash
-helm install karpenter charts/karpenter -n karpenter --create-namespace
-```
+Configure the cluster region and controller credentials in `your-values.yaml` using RRSA or `controller.credentialsSecretName`. Local environment variables and CLI credentials are not automatically passed into the controller Pod.
 
 ### Configure ECSNodeClass
 

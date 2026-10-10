@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"sort"
@@ -156,8 +157,11 @@ func BuildCapacityReservationRequests(cfg *Config, manifest *Manifest, resources
 	requests := make([]*ecs.CreateCapacityReservationRequest, 0, len(zones)*len(instanceTypes))
 	for _, zone := range zones {
 		for _, instanceType := range instanceTypes {
-			tokenSeed := fmt.Sprintf("%s-%s-%s-%d", name, zone, instanceType, time.Now().UTC().UnixNano())
-			clientToken := strings.NewReplacer(".", "-", "_", "-", "/", "-").Replace(tokenSeed)
+			var token [16]byte
+			if _, err := rand.Read(token[:]); err != nil {
+				return nil, fmt.Errorf("generate capacity reservation client token: %w", err)
+			}
+			clientToken := fmt.Sprintf("%x", token)
 			requests = append(requests, &ecs.CreateCapacityReservationRequest{
 				RegionId:       tea.String(cfg.AlibabaCloud.RegionID),
 				ZoneId:         []*string{tea.String(zone)},

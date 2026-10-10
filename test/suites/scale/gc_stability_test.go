@@ -86,18 +86,16 @@ var _ = Describe("GCStability", Label("gc-stability"), func() {
 		}
 		nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      v1alpha1.LabelCapacityType,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{v1alpha1.CapacityTypeOnDemand},
-				},
+
+				Key:      v1alpha1.LabelCapacityType,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{v1alpha1.CapacityTypeOnDemand},
 			},
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      corev1.LabelInstanceTypeStable,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{"ecs.c6.xlarge", "ecs.c7.xlarge"},
-				},
+
+				Key:      corev1.LabelInstanceTypeStable,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"ecs.c6.xlarge", "ecs.c7.xlarge"},
 			},
 		}
 
@@ -153,19 +151,17 @@ var _ = Describe("GCStability", Label("gc-stability"), func() {
 		}
 		nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      v1alpha1.LabelCapacityType,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{v1alpha1.CapacityTypeOnDemand},
-				},
+
+				Key:      v1alpha1.LabelCapacityType,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{v1alpha1.CapacityTypeOnDemand},
 			},
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      corev1.LabelInstanceTypeStable,
-					Operator: corev1.NodeSelectorOpIn,
-					// 4-vCPU instance types so a single node saturates the 4-CPU limit.
-					Values: []string{"ecs.c6.xlarge", "ecs.c7.xlarge"},
-				},
+
+				Key:      corev1.LabelInstanceTypeStable,
+				Operator: corev1.NodeSelectorOpIn,
+				// 4-vCPU instance types so a single node saturates the 4-CPU limit.
+				Values: []string{"ecs.c6.xlarge", "ecs.c7.xlarge"},
 			},
 		}
 		// Hard cap: at most 4 CPU cores across all nodes in this NodePool.

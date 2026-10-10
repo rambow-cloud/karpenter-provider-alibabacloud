@@ -20,24 +20,24 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // SetupWebhookWithManager sets up the webhook with the Manager
 func (nc *ECSNodeClass) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(nc).
+	return ctrl.NewWebhookManagedBy(mgr, nc).
+		WithDefaulter(nc).
+		WithValidator(nc).
 		Complete()
 }
 
 // +kubebuilder:webhook:path=/mutate-karpenter-alibabacloud-com-v1alpha1-ecsnodeclass,mutating=true,failurePolicy=fail,sideEffects=None,groups=karpenter.alibabacloud.com,resources=ecsnodeclasses,verbs=create;update,versions=v1alpha1,name=mecsnodeclass.kb.io,admissionReviewVersions=v1
 
-var _ admission.CustomDefaulter = &ECSNodeClass{}
+var _ admission.Defaulter[*ECSNodeClass] = &ECSNodeClass{}
 
 // Default implements admission.CustomDefaulter so a webhook will be registered for the type
-func (nc *ECSNodeClass) Default(ctx context.Context, obj runtime.Object) error {
+func (_ *ECSNodeClass) Default(_ context.Context, nc *ECSNodeClass) error {
 	normalizedDisks, err := NormalizeDisks(nc.Spec)
 	if err != nil {
 		return err
@@ -93,10 +93,10 @@ func (nc *ECSNodeClass) Default(ctx context.Context, obj runtime.Object) error {
 
 // +kubebuilder:webhook:path=/validate-karpenter-alibabacloud-com-v1alpha1-ecsnodeclass,mutating=false,failurePolicy=fail,sideEffects=None,groups=karpenter.alibabacloud.com,resources=ecsnodeclasses,verbs=create;update,versions=v1alpha1,name=vecsnodeclass.kb.io,admissionReviewVersions=v1
 
-var _ admission.CustomValidator = &ECSNodeClass{}
+var _ admission.Validator[*ECSNodeClass] = &ECSNodeClass{}
 
 // ValidateCreate implements admission.CustomValidator so a webhook will be registered for the type
-func (nc *ECSNodeClass) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (_ *ECSNodeClass) ValidateCreate(_ context.Context, nc *ECSNodeClass) (admission.Warnings, error) {
 	if err := nc.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
@@ -104,15 +104,9 @@ func (nc *ECSNodeClass) ValidateCreate(ctx context.Context, obj runtime.Object) 
 }
 
 // ValidateUpdate implements admission.CustomValidator so a webhook will be registered for the type
-func (nc *ECSNodeClass) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (_ *ECSNodeClass) ValidateUpdate(_ context.Context, oldNC, nc *ECSNodeClass) (admission.Warnings, error) {
 	if err := nc.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
-	}
-
-	// Additional validation for updates
-	oldNC, ok := oldObj.(*ECSNodeClass)
-	if !ok {
-		return nil, fmt.Errorf("old object is not an ECSNodeClass")
 	}
 
 	// Check if immutable fields are changed
@@ -124,7 +118,7 @@ func (nc *ECSNodeClass) ValidateUpdate(ctx context.Context, oldObj, newObj runti
 }
 
 // ValidateDelete implements admission.CustomValidator so a webhook will be registered for the type
-func (nc *ECSNodeClass) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (_ *ECSNodeClass) ValidateDelete(_ context.Context, _ *ECSNodeClass) (admission.Warnings, error) {
 	// No special validation needed for deletion
 	return nil, nil
 }
