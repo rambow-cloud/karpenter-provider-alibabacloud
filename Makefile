@@ -184,7 +184,7 @@ e2e-discover-gpu: ## Discover Alibaba Cloud GPU regions/zones for production e2e
 	GOFLAGS="$(E2E_GOFLAGS)" go run ./test/hack/e2e/ackctl discover-gpu --config "$(DEPLOY_CONFIG)" --format text
 
 .PHONY: upstream-e2etests
-upstream-e2etests: ## Run upstream Karpenter contract suites with AlibabaCloud default fixtures.
+upstream-e2etests: core-module ## Run upstream Karpenter contract suites with AlibabaCloud default fixtures.
 	cd $(KARPENTER_CORE_DIR) && \
 		suite="$$(echo "$(UPSTREAM_TEST_SUITE)" | tr A-Z a-z)"; \
 		focus="$(FOCUS)"; \
@@ -206,7 +206,7 @@ upstream-e2etests: ## Run upstream Karpenter contract suites with AlibabaCloud d
 		--default-nodepool="$(DEFAULT_NODEPOOL)"
 
 .PHONY: kwok-core-e2e
-kwok-core-e2e: ## Run upstream regression/performance contracts on kind + KWOK.
+kwok-core-e2e: core-module ## Run upstream regression/performance contracts on kind + KWOK.
 	KARPENTER_CORE_DIR="$(KARPENTER_CORE_DIR)" \
 	KWOK_CLUSTER_NAME="$(KWOK_CLUSTER_NAME)" \
 	KWOK_NODECLASS="$(KWOK_NODECLASS)" \
@@ -219,3 +219,7 @@ kwok-core-e2e: ## Run upstream regression/performance contracts on kind + KWOK.
 	KWOK_SCALE_REPLICAS="$(KWOK_SCALE_REPLICAS)" \
 	KWOK_REPORT_DIR="$(KWOK_REPORT_DIR)" \
 	./test/hack/kwok/run.sh
+
+.PHONY: core-module
+core-module: ## Download the pinned core before resolving its module directory.
+	go mod download sigs.k8s.io/karpenter
