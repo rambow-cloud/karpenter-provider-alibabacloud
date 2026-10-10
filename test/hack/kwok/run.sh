@@ -45,12 +45,7 @@ write_report() {
   if [[ -z "${KWOK_REPORT_DIR}" ]]; then
     return
   fi
-  mkdir -p "${KWOK_REPORT_DIR}"
-  kubectl get nodes -o wide >"${KWOK_REPORT_DIR}/nodes.txt" 2>&1 || true
-  kubectl get nodeclaims -A -o wide >"${KWOK_REPORT_DIR}/nodeclaims.txt" 2>&1 || true
-  kubectl get pods -A -o wide >"${KWOK_REPORT_DIR}/pods.txt" 2>&1 || true
-  kubectl get events -A --sort-by=.lastTimestamp >"${KWOK_REPORT_DIR}/events.txt" 2>&1 || true
-  kubectl logs -n kube-system deployment/karpenter --all-containers --tail=-1 >"${KWOK_REPORT_DIR}/karpenter.log" 2>&1 || true
+  KWOK_REPORT_DIR="${KWOK_REPORT_DIR}" KWOK_CLUSTER_NAME="${KWOK_CLUSTER_NAME}" bash "${script_dir}/report.sh"
 }
 
 run_large_scale_check() {
@@ -175,7 +170,16 @@ helm upgrade --install karpenter kwok/charts --namespace kube-system --skip-crds
 kubectl rollout status deployment/karpenter -n kube-system --timeout=5m
 
 cd test
-GOFLAGS="${E2E_GOFLAGS}" go test \
+ginkgo_report_args=()
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  ginkgo_report_args=(
+    "--ginkgo.json-report=${KWOK_REPORT_DIR}/ginkgo-report.json"
+    "--ginkgo.junit-report=${KWOK_REPORT_DIR}/junit.xml"
+  )
+fi
+
+run_suite() {
+  GOFLAGS="${E2E_GOFLAGS}" go test \
   -count 1 \
   -timeout 12h \
   -v \
@@ -184,8 +188,19 @@ GOFLAGS="${E2E_GOFLAGS}" go test \
   --ginkgo.skip="${SKIP}" \
   --ginkgo.timeout=3h \
   --ginkgo.grace-period=5m \
+  --ginkgo.fail-fast \
+  --ginkgo.poll-progress-after=2m \
+  --ginkgo.poll-progress-interval=2m \
   --ginkgo.vv \
+  "${ginkgo_report_args[@]}" \
   --default-nodeclass="${KWOK_NODECLASS}" \
   --default-nodepool="${KWOK_NODEPOOL}"
+}
+
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  run_suite 2>&1 | tee "${KWOK_REPORT_DIR}/test.log"
+else
+  run_suite
+fi
 
 run_large_scale_check

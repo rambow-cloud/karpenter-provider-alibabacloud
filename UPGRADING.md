@@ -20,6 +20,8 @@ go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
 
 The KWOK regression harness uses `test/hack/kwok/values.yaml` to enable StaticCapacity, CapacityBuffer and NodeRepair. Core v1.14.1's KWOK chart references CapacityBuffer without a default value, so the harness supplies explicit booleans. Compatibility checks render that chart and parse its `FEATURE_GATES` with the pinned core parser before runtime setup.
 
+KWOK runs the complete upstream regression suite and a 1000-pod scale check. Some upstream cases deliberately wait for long lifecycle deadlines, including a 17-minute registration timeout. Ginkgo prints progress and goroutine stacks every two minutes during long cases, stops on the first failure, and retains raw test logs plus JSON/JUnit reports. An independent `always()` workflow step captures cluster diagnostics before kind cleanup, including when cancellation bypasses the shell's exit trap. All diagnostic API requests are bounded to ten seconds.
+
 ## Migrate configuration
 
 Core and provider gates have separate flags and environment variables:

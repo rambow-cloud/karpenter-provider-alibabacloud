@@ -55,6 +55,13 @@ jobs:
         run: |
           set -euo pipefail
           make kwok-core-e2e
+      - name: Collect KWOK diagnostics
+        if: always()
+        shell: bash
+        env:
+          KWOK_REPORT_DIR: .e2e/kwok
+          KWOK_REPORT_PRESERVE: "true"
+        run: bash test/hack/kwok/report.sh
       - name: Upload KWOK report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
