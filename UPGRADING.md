@@ -6,7 +6,7 @@ Upstream references: [release](https://github.com/kubernetes-sigs/karpenter/rele
 
 ## Build and offline validation
 
-Use Go 1.26.6 or newer and Helm 3. The container builder is pinned to Go 1.26.6 with local toolchain selection. Kubernetes client libraries use stable 0.35.x versions; controller-runtime is 0.23.1.
+Use Go 1.26.9 or a newer security-patched toolchain and Helm 3. The container builder and CI are pinned to Go 1.26.9 with local toolchain selection. Kubernetes client libraries use stable 0.35.x versions; controller-runtime is 0.23.1. Production controller builds and the default Makefile/CI checks use `CGO_ENABLED=0`; explicitly enable CGO when using tools that require it, such as `-race`.
 
 ```sh
 go mod download

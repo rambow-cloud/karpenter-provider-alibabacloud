@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/aws/karpenter-provider-aws/test/pkg/debug"
 	"k8s.io/apimachinery/pkg/types"

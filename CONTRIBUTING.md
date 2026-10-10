@@ -24,6 +24,8 @@ Run checks relevant to your change once. Local unit checks: `go test ./pkg/... .
 
 Do not commit credentials, kubeconfigs, account identifiers, or unsanitized cluster logs.
 
+Build and test with the security-patched toolchain pinned in `go.mod`; CGO defaults to disabled. Dependency changes must pass `go run ./hack/security` and the CI vulnerability scans. The checker reads effective replacement versions and allows a module to be removed. See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for audit scope, reproduction commands and remaining unused-package advisories. CGO-enabled race tests require an explicit override and a C compiler.
+
 ## Project website
 
 Website source lives in `website/` and uses Zensical with locked Python dependencies. Follow the same issue, feature-branch, and PR workflow for website changes. Read [website/README.md](website/README.md) for the website toolchain, strict build command, GitHub Pages publication, and rollback. Keep Chinese and English copy consistent and distinguish project goals from completed implementation and cloud acceptance evidence.
