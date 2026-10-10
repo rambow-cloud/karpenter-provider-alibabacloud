@@ -159,6 +159,8 @@ img_repository="$(echo "${controller_img}" | cut -d ":" -f 1)"
 img_tag="$(echo "${controller_img}" | cut -d ":" -f 2 -s)"
 
 kubectl apply -f kwok/charts/crds
+kubectl apply -f kwok/apis/crds
+kubectl wait --for=condition=Established --timeout=60s -f kwok/apis/crds
 helm upgrade --install karpenter kwok/charts --namespace kube-system --skip-crds \
   --values "${kwok_values_file}" \
   --set logLevel=debug \
