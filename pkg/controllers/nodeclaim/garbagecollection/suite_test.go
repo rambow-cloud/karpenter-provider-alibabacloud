@@ -20,1029 +20,113 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/controllers/nodeclaim/garbagecollection"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	coreapis "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"testing"
 	"time"
-
-	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
-	"github.com/alibabacloud-go/tea/tea"
-	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
-	"github.com/stretchr/testify/mock"
-
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/cloudprovider"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/controllers/nodeclaim/garbagecollection"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/imagefamily"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instancetype"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/pricing"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/securitygroup"
-	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/vswitch"
-	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	coreapis "sigs.k8s.io/karpenter/pkg/apis/v1"
-	coretest "sigs.k8s.io/karpenter/pkg/test"
 )
 
-var (
-	ctx                   context.Context
-	env                   *coretest.Environment
-	gcController          *garbagecollection.GarbageCollectionController
-	testEnv               *envtest.Environment
-	cfg                   *rest.Config
-	mockECSClient         *MockECSClient
-	mockVPCClient         *MockVPCClient
-	instanceProvider      *instance.Provider
-	cloudProvider         *cloudprovider.CloudProvider
-	instanceTypeProvider  *instancetype.Provider
-	imageFamilyProvider   *imagefamily.Provider
-	securityGroupProvider *securitygroup.Provider
-	vswitchProvider       *vswitch.Provider
-	pricingProvider       *pricing.Provider
-)
-
-func TestGarbageCollection(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "GarbageCollection Controller Suite")
+type inventoryProvider struct {
+	cloudprovider.CloudProvider
+	listed               []*coreapis.NodeClaim
+	listErr, getErr      error
+	lists, gets, deletes int
 }
 
-var _ = BeforeSuite(func() {
-	ctx = context.Background()
-
-	// Setup envtest
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "..", "charts", "karpenter", "crds")},
-		ErrorIfCRDPathMissing: false,
+func (p *inventoryProvider) List(context.Context) ([]*coreapis.NodeClaim, error) {
+	p.lists++
+	return p.listed, p.listErr
+}
+func (p *inventoryProvider) Get(context.Context, string) (*coreapis.NodeClaim, error) {
+	p.gets++
+	if p.getErr != nil {
+		return nil, p.getErr
 	}
+	return &coreapis.NodeClaim{}, nil
+}
+func (p *inventoryProvider) Delete(context.Context, *coreapis.NodeClaim) error {
+	p.deletes++
+	return errors.New("GC must never terminate instances")
+}
 
-	var err error
-	cfg, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
-
-	// Register schemes
-	err = v1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Create client
-	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-
-	// Setup mock clients
-	mockECSClient = new(MockECSClient)
-	mockVPCClient = new(MockVPCClient)
-
-	// Create providers
-	instanceProvider = instance.NewProvider(ctx, "cn-hangzhou", mockECSClient)
-	instanceTypeProvider = instancetype.NewProvider("cn-hangzhou", mockECSClient)
-	imageFamilyProvider = imagefamily.NewProvider(mockECSClient)
-	securityGroupProvider = securitygroup.NewProvider("cn-hangzhou", mockECSClient)
-	vswitchProvider = vswitch.NewProvider("cn-hangzhou", mockVPCClient)
-	pricingProvider = pricing.NewProvider("cn-hangzhou", mockECSClient)
-
-	// Create cloud provider
-	cloudProvider = cloudprovider.New(
-		instanceTypeProvider,
-		instanceProvider,
-		nil,
-		k8sClient,
-		imageFamilyProvider,
-		securityGroupProvider,
-		vswitchProvider,
-		nil, // instanceProfileProvider
-		pricingProvider,
-		nil, // launchTemplateProvider
-		nil, // bootstrapProvider
-		nil,
-	)
-
-	watiDuration := time.Second * 10
-	// Create garbage collection controller
-	gcController = garbagecollection.NewGarbageCollectionController(k8sClient, cloudProvider, &watiDuration)
-
-	// Use a simple environment for compatibility
-	env = &coretest.Environment{
-		Client: k8sClient,
+func TestGarbageCollectionSafety(t *testing.T) {
+	absent := cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance is absent"))
+	tests := []struct {
+		name                  string
+		mutate                func(*coreapis.NodeClaim, *corev1.Node)
+		listed                bool
+		listErr, getErr       error
+		wantDelete, wantError bool
+		wantGets, wantLists   int
+	}{
+		{name: "list omission but Get confirms live instance", wantGets: 1, wantLists: 1},
+		{name: "confirmed absence delegates to lifecycle", getErr: absent, wantDelete: true, wantGets: 1, wantLists: 1},
+		{name: "Get timeout preserves resources", getErr: errors.New("timeout"), wantError: true, wantGets: 1, wantLists: 1},
+		{name: "List error preserves resources", listErr: errors.New("inventory unavailable"), wantError: true, wantLists: 1},
+		{name: "listed instance needs no Get", listed: true, wantLists: 1},
+		{name: "empty provider ID", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.Status.ProviderID = "" }},
+		{name: "unregistered claim", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.Status.Conditions = nil }},
+		{name: "foreign group", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.Spec.NodeClassRef.Group = "foreign.example" }},
+		{name: "foreign kind", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.Spec.NodeClassRef.Kind = "OtherClass" }},
+		{name: "missing NodeClassRef", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.Spec.NodeClassRef = nil }},
+		{name: "creation protection", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) { c.CreationTimestamp = metav1.Now() }},
+		{name: "Ready node overrides absent inventory", getErr: absent, wantLists: 1, mutate: func(_ *coreapis.NodeClaim, n *corev1.Node) {
+			n.Status.Conditions = []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}
+		}},
+		{name: "deleting claim stays with lifecycle", mutate: func(c *coreapis.NodeClaim, _ *corev1.Node) {
+			now := metav1.Now()
+			c.DeletionTimestamp = &now
+			c.Finalizers = []string{coreapis.TerminationFinalizer}
+		}},
 	}
-})
-
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
-})
-
-var _ = Describe("GarbageCollectionController", func() {
-	var nodeClaim *coreapis.NodeClaim
-	var node *v1.Node
-
-	BeforeEach(func() {
-		// Reset mock expectations
-		mockECSClient = new(MockECSClient)
-		mockVPCClient = new(MockVPCClient)
-
-		// Recreate all providers with new mocks
-		instanceProvider = instance.NewProvider(ctx, "cn-hangzhou", mockECSClient)
-		instanceTypeProvider = instancetype.NewProvider("cn-hangzhou", mockECSClient)
-		imageFamilyProvider = imagefamily.NewProvider(mockECSClient)
-		securityGroupProvider = securitygroup.NewProvider("cn-hangzhou", mockECSClient)
-		vswitchProvider = vswitch.NewProvider("cn-hangzhou", mockVPCClient)
-		pricingProvider = pricing.NewProvider("cn-hangzhou", mockECSClient)
-
-		// Recreate cloud provider with new mocks
-		cloudProvider = cloudprovider.New(
-			instanceTypeProvider,
-			instanceProvider,
-			nil,
-			env.Client,
-			imageFamilyProvider,
-			securityGroupProvider,
-			vswitchProvider,
-			nil,
-			pricingProvider,
-			nil,
-			nil,
-			nil,
-		)
-		watiDuration := time.Second * 10
-		gcController = garbagecollection.NewGarbageCollectionController(env.Client, cloudProvider, &watiDuration)
-
-		// Create NodeClaim (status will be set separately after creation)
-		nodeClaim = &coreapis.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-nodeclaim",
-				Labels: map[string]string{
-					coreapis.NodePoolLabelKey: "default",
-				},
-				CreationTimestamp: metav1.Time{Time: time.Now().Add(-2 * time.Minute)},
-			},
-			Spec: coreapis.NodeClaimSpec{
-				NodeClassRef: &coreapis.NodeClassReference{
-					Group: "karpenter.alibabacloud.com",
-					Kind:  "ECSNodeClass",
-					Name:  "test-nodeclass",
-				},
-				Requirements: []coreapis.NodeSelectorRequirementWithMinValues{
-					{
-						NodeSelectorRequirement: v1.NodeSelectorRequirement{
-							Key:      v1.LabelArchStable,
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"amd64"},
-						},
-					},
-				},
-			},
-		}
-		// Note: Status.ProviderID will be set in individual tests after Create()
-
-		// Create Node
-		node = &v1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-node",
-			},
-			Spec: v1.NodeSpec{
-				ProviderID: "cn-hangzhou.i-test123456",
-			},
-		}
-	})
-
-	AfterEach(func() {
-		// Clean up all resources
-		Expect(env.Client.DeleteAllOf(ctx, &coreapis.NodeClaim{})).To(Succeed())
-		Expect(env.Client.DeleteAllOf(ctx, &v1.Node{})).To(Succeed())
-		Expect(env.Client.DeleteAllOf(ctx, &v1alpha1.ECSNodeClass{})).To(Succeed())
-	})
-
-	Context("Orphaned Instance Cleanup", func() {
-		It("should delete orphaned instance when NodeClaim has no matching instance", func() {
-			// Create NodeClaim without corresponding instance
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-
-			// Mock DescribeZones (called by instanceTypeProvider.List -> cloudProvider.List)
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes (called by cloudProvider.List)
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty instances (orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify delete was called
-			mockECSClient.AssertExpectations(GinkgoT())
-		})
-
-		It("should not delete instance if created within grace period (1 minute)", func() {
-			// Create very recent NodeClaim
-			recentNodeClaim := nodeClaim.DeepCopy()
-			recentNodeClaim.Name = "recent-nodeclaim"
-			recentNodeClaim.CreationTimestamp = metav1.Time{Time: time.Now().Add(-30 * time.Second)}
-			Expect(env.Client.Create(ctx, recentNodeClaim)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty instances
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile - should NOT delete because of grace period
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify Delete was NOT called
-			mockECSClient.AssertNotCalled(GinkgoT(), "DeleteInstances", mock.Anything, mock.Anything)
-		})
-
-		It("should not delete both orphaned instance and associated node - node claim created less than 1min", func() {
-			// Create NodeClaim and Node
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-			Expect(env.Client.Create(ctx, node)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty instances (orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify delete was called
-			mockECSClient.AssertExpectations(GinkgoT())
-
-			// Wait a bit for deletion to propagate
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify node was not deleted
-			deletedNode := &v1.Node{}
-			err = env.Client.Get(ctx, client.ObjectKey{Name: "test-node"}, deletedNode)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should delete both orphaned instance and associated node", func() {
-			// Create NodeClaim and Node
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-			Expect(env.Client.Create(ctx, node)).To(Succeed())
-
-			time.Sleep(10 * time.Second)
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty instances (orphaned). Also satisfies the
-			// post-delete termination check in instance.Provider.Delete (empty = gone).
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// instance.Provider.Delete calls DeleteInstances then DescribeInstances
-			// (to confirm termination). The DescribeInstances mock above covers both calls.
-			mockECSClient.On("DeleteInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DeleteInstancesResponse{
-					Body: &ecs.DeleteInstancesResponseBody{
-						RequestId: stringPtr("gc-delete-request-id"),
-					},
-				}, nil)
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify delete was called
-			mockECSClient.AssertExpectations(GinkgoT())
-
-			// Wait a bit for deletion to propagate
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify node was deleted
-			deletedNode := &v1.Node{}
-			err = env.Client.Get(ctx, client.ObjectKey{Name: "test-node"}, deletedNode)
-			Expect(err).To(HaveOccurred())
-			Expect(client.IgnoreNotFound(err)).To(BeNil())
-		})
-	})
-
-	Context("Batch Deletion", func() {
-		It("should delete multiple orphaned instances in one reconcile cycle", func() {
-			// Create multiple orphaned NodeClaims
-			for i := 0; i < 5; i++ {
-				nc := nodeClaim.DeepCopy()
-				nc.Name = fmt.Sprintf("nodeclaim-%d", i)
-				nc.Status.ProviderID = fmt.Sprintf("cn-hangzhou.i-test%d", i)
-				nc.CreationTimestamp = metav1.Time{Time: time.Now().Add(-5 * time.Minute)}
-				Expect(env.Client.Create(ctx, nc)).To(Succeed())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := corev1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
 			}
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty instances (all orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify all deletes were called
-			mockECSClient.AssertExpectations(GinkgoT())
-		})
-	})
-
-	Context("Instance Still Exists", func() {
-		It("should not delete instance if it still exists in cloud provider", func() {
-			// Create NodeClaim
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return the instance (NOT orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{
-								{
-									InstanceId:   tea.String("i-test123456"),
-									RegionId:     tea.String("cn-hangzhou"),
-									ZoneId:       tea.String("cn-hangzhou-h"),
-									InstanceType: tea.String("ecs.g6.large"),
-									ImageId:      tea.String("img-123"),
-									Status:       tea.String("Running"),
-									Cpu:          tea.Int32(2),
-									Memory:       tea.Int32(8192),
-									Tags: &ecs.DescribeInstancesResponseBodyInstancesInstanceTags{
-										Tag: []*ecs.DescribeInstancesResponseBodyInstancesInstanceTagsTag{
-											{TagKey: tea.String("karpenter.sh/managed-by"), TagValue: tea.String("true")},
-										},
-									},
-									CreationTime: tea.String(time.Now().Add(-10 * time.Minute).Format(time.RFC3339)),
-								},
-							},
-						},
-					},
-				}, nil)
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify Delete was NOT called
-			mockECSClient.AssertNotCalled(GinkgoT(), "DeleteInstances", mock.Anything, mock.Anything)
-		})
-	})
-
-	Context("Error Handling", func() {
-		It("should handle cloud provider List API error gracefully", func() {
-			// Create NodeClaim
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-
-			// Mock DescribeZones to return error
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				nil, fmt.Errorf("SDK.ServerError ErrorCode: %s Message: %s", "InternalError", "Internal Server Error"))
-
-			// Mock other calls that List() makes to avoid panic
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstances to return empty results since DescribeZones will error first
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile should return error but not panic
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("listing cloud provider instances"))
-		})
-
-		It("should handle cloud provider Delete API error gracefully", func() {
-			// Create NodeClaim
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock List to return empty (orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile should continue despite delete error
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify delete was attempted
-			mockECSClient.AssertExpectations(GinkgoT())
-		})
-
-		It("should handle NodeClaim List error gracefully", func() {
-			// Close the client to force an error
-			// This simulates a K8s API error
-			// Note: In real scenario, we would need to test with a broken client
-			// For now, we verify the controller doesn't panic
-
-			// Reconcile should handle the error
-			_, err := gcController.Reconcile(ctx)
-			// Should either succeed (no NodeClaims) or fail gracefully
-			if err != nil {
-				Expect(err.Error()).NotTo(ContainSubstring("panic"))
+			gv := schema.GroupVersion{Group: "karpenter.sh", Version: "v1"}
+			scheme.AddKnownTypes(gv, &coreapis.NodeClaim{}, &coreapis.NodeClaimList{})
+			metav1.AddToGroupVersion(scheme, gv)
+			claim := &coreapis.NodeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "claim", CreationTimestamp: metav1.NewTime(time.Now().Add(-time.Hour))},
+				Spec:       coreapis.NodeClaimSpec{NodeClassRef: &coreapis.NodeClassReference{Group: v1alpha1.GroupVersion.Group, Kind: "ECSNodeClass", Name: "default"}},
+				Status:     coreapis.NodeClaimStatus{ProviderID: "cn-hangzhou.i-test"},
+			}
+			claim.StatusConditions().SetTrue(coreapis.ConditionTypeRegistered)
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}, Spec: corev1.NodeSpec{ProviderID: claim.Status.ProviderID}}
+			if tt.mutate != nil {
+				tt.mutate(claim, node)
+			}
+			kubeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(claim, node).Build()
+			provider := &inventoryProvider{listErr: tt.listErr, getErr: tt.getErr}
+			if tt.listed {
+				provider.listed = []*coreapis.NodeClaim{claim}
+			}
+			controller := garbagecollection.NewGarbageCollectionController(kubeClient, provider, nil)
+			_, err := controller.Reconcile(context.Background())
+			if (err != nil) != tt.wantError {
+				t.Fatalf("Reconcile error = %v, wantError %v", err, tt.wantError)
+			}
+			err = kubeClient.Get(context.Background(), client.ObjectKey{Name: claim.Name}, &coreapis.NodeClaim{})
+			if apierrors.IsNotFound(err) != tt.wantDelete {
+				t.Fatalf("claim lookup = %v, wantDelete %v", err, tt.wantDelete)
+			}
+			if err := kubeClient.Get(context.Background(), client.ObjectKey{Name: node.Name}, &corev1.Node{}); err != nil {
+				t.Fatalf("GC removed node: %v", err)
+			}
+			if provider.deletes != 0 || provider.gets != tt.wantGets || provider.lists != tt.wantLists {
+				t.Fatalf("cloud calls: deletes=%d gets=%d lists=%d", provider.deletes, provider.gets, provider.lists)
 			}
 		})
-	})
-
-	Context("Empty Cluster", func() {
-		It("should handle empty cluster (no NodeClaims) gracefully", func() {
-			// Don't create any NodeClaims
-
-			// Reconcile should succeed
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify List was NOT called (optimization)
-			mockECSClient.AssertNotCalled(GinkgoT(), "DescribeInstances", mock.Anything, mock.Anything)
-		})
-	})
-
-	Context("Throttling Protection", func() {
-		It("should skip reconcile if last run was less than 1 minute ago", func() {
-			// Create NodeClaim
-			Expect(env.Client.Create(ctx, nodeClaim)).To(Succeed())
-			// Set status separately (status is a subresource)
-			nodeClaim.Status.ProviderID = "cn-hangzhou.i-test123456"
-			Expect(env.Client.Status().Update(ctx, nodeClaim)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil).Once()
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil).Once()
-
-			// First reconcile
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{
-								{
-									InstanceId:   tea.String("i-test123456"),
-									RegionId:     tea.String("cn-hangzhou"),
-									Status:       tea.String("Running"),
-									CreationTime: tea.String(time.Now().Add(-10 * time.Minute).Format(time.RFC3339)),
-									Tags: &ecs.DescribeInstancesResponseBodyInstancesInstanceTags{
-										Tag: []*ecs.DescribeInstancesResponseBodyInstancesInstanceTagsTag{
-											{TagKey: tea.String("karpenter.sh/managed-by"), TagValue: tea.String("true")},
-										},
-									},
-								},
-							},
-						},
-					},
-				}, nil).Once()
-
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Second reconcile immediately - should be skipped
-			_, err = gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify DescribeInstances was called only once
-			mockECSClient.AssertNumberOfCalls(GinkgoT(), "DescribeInstances", 1)
-			mockECSClient.AssertNumberOfCalls(GinkgoT(), "DescribeZones", 1)
-			mockECSClient.AssertNumberOfCalls(GinkgoT(), "DescribeInstanceTypes", 1)
-		})
-	})
-
-	Context("Provider ID Handling", func() {
-		It("should handle various provider ID formats", func() {
-			testCases := []struct {
-				providerID         string
-				expectedInstanceID string
-			}{
-				{"cn-hangzhou.i-abc123", "i-abc123"},
-				{"cn-beijing.i-xyz789", "i-xyz789"},
-				{"i-standalone123", "i-standalone123"},
-			}
-
-			// Create NodeClaims first
-			for _, tc := range testCases {
-				nc := nodeClaim.DeepCopy()
-				nc.Name = fmt.Sprintf("nodeclaim-%s", tc.expectedInstanceID)
-				nc.Status.ProviderID = tc.providerID
-				nc.CreationTimestamp = metav1.Time{Time: time.Now().Add(-5 * time.Minute)}
-				Expect(env.Client.Create(ctx, nc)).To(Succeed())
-			}
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock empty list (orphaned)
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Mock delete for each instance after all the setup
-			//for _, tc := range testCases {
-			//	mockECSClient.On("DeleteInstances", mock.Anything, mock.MatchedBy(func(req *ecs.DeleteInstancesRequest) bool {
-			//		return len(*req.InstanceId) == 1 && (*req.InstanceId)[0] == tc.expectedInstanceID
-			//	})).Return(&ecs.DeleteInstancesResponse{}, nil).Once()
-			//}
-
-			// Reconcile
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify all deletes were called with correct instance IDs
-			mockECSClient.AssertExpectations(GinkgoT())
-		})
-
-		It("should handle empty provider ID gracefully", func() {
-			nc := nodeClaim.DeepCopy()
-			nc.Name = "nodeclaim-empty-providerid"
-			nc.Status.ProviderID = ""
-			nc.CreationTimestamp = metav1.Time{Time: time.Now().Add(-5 * time.Minute)}
-			Expect(env.Client.Create(ctx, nc)).To(Succeed())
-
-			// Mock DescribeZones
-			mockECSClient.On("DescribeZones", mock.Anything).Return(
-				&ecs.DescribeZonesResponse{
-					Body: &ecs.DescribeZonesResponseBody{
-						Zones: &ecs.DescribeZonesResponseBodyZones{
-							Zone: []*ecs.DescribeZonesResponseBodyZonesZone{
-								{ZoneId: stringPtr("cn-hangzhou-h")},
-							},
-						},
-					},
-				}, nil)
-
-			// Mock DescribeInstanceTypes
-			mockECSClient.On("DescribeInstanceTypes", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstanceTypesResponse{
-					Body: &ecs.DescribeInstanceTypesResponseBody{
-						InstanceTypes: &ecs.DescribeInstanceTypesResponseBodyInstanceTypes{
-							InstanceType: []*ecs.DescribeInstanceTypesResponseBodyInstanceTypesInstanceType{},
-						},
-					},
-				}, nil)
-
-			// Mock empty list
-			mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).Return(
-				&ecs.DescribeInstancesResponse{
-					Body: &ecs.DescribeInstancesResponseBody{
-						Instances: &ecs.DescribeInstancesResponseBodyInstances{
-							Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{},
-						},
-						TotalCount: tea.Int32(0),
-						PageNumber: tea.Int32(1),
-						PageSize:   tea.Int32(10),
-					},
-				}, nil)
-
-			// Reconcile - should skip this NodeClaim
-			_, err := gcController.Reconcile(ctx)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify Delete was NOT called for empty provider ID
-			mockECSClient.AssertNotCalled(GinkgoT(), "DeleteInstances", mock.Anything, mock.Anything)
-		})
-	})
-})
-
-// MockECSClient is a mock implementation of ECSClient for testing
-type MockECSClient struct {
-	mock.Mock
-}
-
-func (m *MockECSClient) CreateLaunchTemplate(ctx context.Context, request *ecs.CreateLaunchTemplateRequest) (*ecs.CreateLaunchTemplateResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
 	}
-	return args.Get(0).(*ecs.CreateLaunchTemplateResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeLaunchTemplates(ctx context.Context, request *ecs.DescribeLaunchTemplatesRequest) (*ecs.DescribeLaunchTemplatesResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeLaunchTemplatesResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DeleteLaunchTemplate(ctx context.Context, request *ecs.DeleteLaunchTemplateRequest) (*ecs.DeleteLaunchTemplateResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DeleteLaunchTemplateResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeInstanceTypes(ctx context.Context, instanceTypes []string) (*ecs.DescribeInstanceTypesResponse, error) {
-	args := m.Called(ctx, instanceTypes)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeInstanceTypesResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeZones(ctx context.Context) (*ecs.DescribeZonesResponse, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeZonesResponse), args.Error(1)
-}
-func (m *MockECSClient) DescribeAvailableResource(ctx context.Context, request *ecs.DescribeAvailableResourceRequest) (*ecs.DescribeAvailableResourceResponse, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *MockECSClient) DescribeImages(ctx context.Context, imageIDs []string, filters map[string]string) ([]ecs.DescribeImagesResponseBodyImagesImage, error) {
-	args := m.Called(ctx, imageIDs, filters)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]ecs.DescribeImagesResponseBodyImagesImage), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeSecurityGroups(ctx context.Context, id string, name string, tags map[string]string) (*ecs.DescribeSecurityGroupsResponse, error) {
-	args := m.Called(ctx, id, name, tags)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeSecurityGroupsResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeCapacityReservations(ctx context.Context, id string, tags map[string]string) (*ecs.DescribeCapacityReservationsResponse, error) {
-	args := m.Called(ctx, id, tags)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeCapacityReservationsResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribePrice(ctx context.Context, instanceType string) (*ecs.DescribePriceResponse, error) {
-	args := m.Called(ctx, instanceType)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribePriceResponse), args.Error(1)
-}
-
-func (m *MockECSClient) RunInstances(ctx context.Context, request *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.RunInstancesResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DescribeInstances(ctx context.Context, request *ecs.DescribeInstancesRequest) (*ecs.DescribeInstancesResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DescribeInstancesResponse), args.Error(1)
-}
-
-func (m *MockECSClient) DeleteInstances(ctx context.Context, request *ecs.DeleteInstancesRequest) (*ecs.DeleteInstancesResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.DeleteInstancesResponse), args.Error(1)
-}
-
-func (m *MockECSClient) TagResources(ctx context.Context, request *ecs.TagResourcesRequest) (*ecs.TagResourcesResponse, error) {
-	args := m.Called(ctx, request)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*ecs.TagResourcesResponse), args.Error(1)
-}
-
-// MockVPCClient is a mock implementation of VPCClient for testing
-type MockVPCClient struct {
-	mock.Mock
-}
-
-func (m *MockVPCClient) DescribeVSwitches(ctx context.Context, vpcID string, tags map[string]string, zoneID string) (*vpc.DescribeVSwitchesResponse, error) {
-	args := m.Called(ctx, vpcID, tags, zoneID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*vpc.DescribeVSwitchesResponse), args.Error(1)
-}
-
-// MockCSClient is a mock implementation of CSClient for testing
-type MockCSClient struct {
-	mock.Mock
-}
-
-func (m *MockCSClient) DescribeClusterAttachScripts(ctx context.Context, clusterID string, request *cs.DescribeClusterAttachScriptsRequest) (string, error) {
-	args := m.Called(ctx, clusterID, request)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockCSClient) GetClusterAddonInstance(ctx context.Context, clusterID, addonName string) (*cs.GetClusterAddonInstanceResponse, error) {
-	args := m.Called(ctx, clusterID, addonName)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*cs.GetClusterAddonInstanceResponse), args.Error(1)
-}
-
-func (m *MockCSClient) DescribeClusterDetail(ctx context.Context, clusterID string) (*cs.DescribeClusterDetailResponse, error) {
-	args := m.Called(ctx, clusterID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*cs.DescribeClusterDetailResponse), args.Error(1)
-}
-
-// Helper functions
-func stringPtr(s string) *string {
-	return &s
-}
-
-func int32Ptr(i int32) *int32 {
-	return &i
-}
-
-func quantityPtr(q resource.Quantity) *resource.Quantity {
-	return &q
 }

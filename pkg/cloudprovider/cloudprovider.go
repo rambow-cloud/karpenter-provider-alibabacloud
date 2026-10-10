@@ -142,6 +142,10 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}, nodeClass); err != nil {
 		return nil, fmt.Errorf("failed to get nodeclass %s: %w", nodeClaim.Spec.NodeClassRef.Name, err)
 	}
+	tags, err := clusterScopedInstanceTags(ctx, nodeClaim, nodeClass)
+	if err != nil {
+		return nil, cloudprovider.NewCreateError(err, "ClusterOwnershipInvalid", err.Error())
+	}
 
 	// 2. Verify NodeClass is ready
 	nodeClassReady := nodeClass.StatusConditions().Get(status.ConditionReady)
@@ -200,9 +204,6 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		return nil, fmt.Errorf("failed to generate user data: %w", err)
 	}
 
-	// 8. Build tags for the instance
-	tags := BuildInstanceTags(nodeClaim, nodeClass)
-
 	// 9. Create instance using instance provider
 	instanceID, err := c.createInstanceWithRetry(ctx, nodeClaim, nodeClass, filteredTypes, images, vswitches, securityGroups, userData, tags)
 	if err != nil {
@@ -241,9 +242,7 @@ func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *coreapis.NodeClai
 	// ProviderID 格式: cn-hangzhou.i-xxxxx
 	instanceID := fromProviderID(nodeClaim.Status.ProviderID)
 	if instanceID == "" {
-		// 如果无法从ProviderID提取instanceID，记录警告日志并返回nil（视为成功删除）
-		log.FromContext(ctx).Info("Invalid providerID, treating as successful deletion", "providerID", nodeClaim.Status.ProviderID)
-		return nil
+		return fmt.Errorf("invalid providerID %q: expected region.i-instance-id", nodeClaim.Status.ProviderID)
 	}
 
 	log.FromContext(ctx).Info("Extracted instanceID from providerID", "instanceID", instanceID, "providerID", nodeClaim.Status.ProviderID)
@@ -315,14 +314,22 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*coreapis.N
 
 // List retrieves all instances managed by Karpenter
 func (c *CloudProvider) List(ctx context.Context) ([]*coreapis.NodeClaim, error) {
-	// List all Karpenter-managed instances
+	clusterID := options.FromContext(ctx).ClusterID
+	if clusterID == "" {
+		return nil, fmt.Errorf("cluster-id is required for cluster-scoped instance discovery")
+	}
+	// Shared accounts and regions can contain instances from several clusters.
 	tags := map[string]string{
 		v1alpha1.TagManagedBy: v1alpha1.TagManagedByValue,
+		v1alpha1.TagClusterID: clusterID,
 	}
 
 	instances, err := c.instanceProvider.List(ctx, tags)
 	if err != nil {
 		return nil, err
+	}
+	if len(instances) == 0 {
+		return []*coreapis.NodeClaim{}, nil
 	}
 
 	// Pre-load instance types for capacity lookup
@@ -424,7 +431,6 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 	if nodeClassReady.IsUnknown() {
 		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving nodeclass readiness, nodeclass is in Ready=Unknown: %s", nodeClassReady.Message), "NodeClassReadinessUnknown", "NodeClass is in Ready=Unknown")
 	}
-
 
 	// 3. DEFENSIVE CHECK: Verify VSwitches are populated
 	// This catches the race condition where NodeClass is marked Ready but status has not been fully populated.
@@ -701,21 +707,17 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 // Provider ID format: region.instance-id
 // Example: cn-hangzhou.i-bp1abc123
 func fromProviderID(providerID string) string {
-	if providerID == "" {
+	region, instanceID, ok := strings.Cut(providerID, ".")
+	if !ok || region == "" || !strings.HasPrefix(instanceID, "i-") || len(instanceID) <= 2 {
 		return ""
 	}
-
-	// Split by '.'
-	parts := strings.Split(providerID, ".")
-
-	// Check if we have enough parts
-	// Expected format: region.instance-id, at lease 2 parts
-	if len(parts) < 2 {
-		return ""
+	for _, part := range []string{region, instanceID} {
+		for _, ch := range part {
+			if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-') {
+				return ""
+			}
+		}
 	}
-
-	// Return the last part which is the instance ID
-	instanceID := parts[len(parts)-1]
 	return instanceID
 }
 
@@ -743,6 +745,21 @@ func getCustomUserData(nodeClass *v1alpha1.ECSNodeClass) string {
 // ECS returns "X86" for x86_64 and "ARM" or "ARM64" for AArch64.
 func ecsArchToKubernetesArch(ecsArch string) string {
 	return ecsutil.KubeArchitecture(ecsArch)
+}
+
+// clusterScopedInstanceTags keeps Create and List on the same ownership boundary.
+func clusterScopedInstanceTags(ctx context.Context, nodeClaim *coreapis.NodeClaim, nodeClass *v1alpha1.ECSNodeClass) (map[string]string, error) {
+	clusterID := options.FromContext(ctx).ClusterID
+	if clusterID == "" {
+		return nil, fmt.Errorf("cluster-id is required for instance ownership")
+	}
+	if nodeClass.Spec.ClusterID != "" && nodeClass.Spec.ClusterID != clusterID {
+		return nil, fmt.Errorf("nodeclass clusterID %q differs from controller cluster-id %q", nodeClass.Spec.ClusterID, clusterID)
+	}
+	tags := BuildInstanceTags(nodeClaim, nodeClass)
+	tags[v1alpha1.TagManagedBy] = v1alpha1.TagManagedByValue
+	tags[v1alpha1.TagClusterID] = clusterID
+	return tags, nil
 }
 
 func BuildInstanceTags(nodeClaim *coreapis.NodeClaim, nodeClass *v1alpha1.ECSNodeClass) map[string]string {
