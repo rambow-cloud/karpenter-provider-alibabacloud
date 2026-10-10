@@ -1,8 +1,4 @@
----
-title: Why we maintain this fork
-description: Continuing the Alibaba Cloud provider with an AWS Karpenter-like experience as the goal.
-weight: 10
----
+# Why we maintain this fork
 
 ## The motivation
 
@@ -19,7 +15,7 @@ We retain upstream attribution and licensing, and continue through public code r
 3. **ECSNodeClass describes cloud resources.** Users select images, vSwitches, security groups, and disks; the provider connects that configuration to ECS APIs.
 4. **Nodes join the cluster.** An ECS instance completes bootstrap, registration, and initialization before hosting workloads. Discovery and deletion respect cluster ownership.
 
-This is the intended workflow. Each stage needs implementation, regression coverage, and real cloud evidence. See the [project status](../status/) for the current boundaries.
+This is the intended workflow. Each stage needs implementation, regression coverage, and real cloud evidence. See the [project status](../status/index.md) for the current boundaries.
 
 ## Why look to the AWS provider
 
@@ -29,4 +25,4 @@ Alibaba Cloud has its own ECS, ACK, networking, image, and permission APIs. Shar
 
 ## Origins and license
 
-The provider continues AliyunContainerService's open-source implementation under the [Apache License 2.0](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE). This site is built with [Pigsty OINK](https://github.com/pgsty/oink) and [Hugo](https://gohugo.io/).
+The provider continues AliyunContainerService's open-source implementation under the [Apache License 2.0](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE). This site is built with [Zensical](https://zensical.org/).

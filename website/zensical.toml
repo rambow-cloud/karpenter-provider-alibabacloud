@@ -1,0 +1,56 @@
+[project]
+site_name = "Alibaba Cloud Karpenter"
+site_description = "Community-maintained Karpenter provider for Alibaba Cloud, inspired by the AWS Karpenter experience."
+site_url = "https://rambow-cloud.github.io/karpenter-provider-alibabacloud/"
+repo_url = "https://github.com/rambow-cloud/karpenter-provider-alibabacloud"
+repo_name = "rambow-cloud/karpenter-provider-alibabacloud"
+docs_dir = ".generated/zh"
+site_dir = "site"
+copyright = "Rambow Cloud & project contributors · Apache-2.0"
+extra_css = ["assets/brand.css"]
+nav = [
+  { "首页" = "index.md" },
+  { "项目指南" = [
+    { "概览" = "docs/index.md" },
+    { "为什么继续维护" = "docs/motivation/index.md" },
+    { "状态与路线图" = "docs/status/index.md" },
+    { "上手与参与" = "docs/participate/index.md" },
+  ] },
+]
+
+[project.theme]
+variant = "modern"
+language = "zh"
+font = false
+logo = "assets/rambow-karpenter.png"
+favicon = "assets/rambow-karpenter.png"
+features = ["navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "content.code.copy"]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "blue"
+accent = "cyan"
+toggle.icon = "lucide/sun"
+toggle.name = "切换至深色模式"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "blue"
+accent = "cyan"
+toggle.icon = "lucide/moon"
+toggle.name = "切换至浅色模式"
+
+[project.extra]
+alternate = [
+  { name = "简体中文", link = "/karpenter-provider-alibabacloud/", lang = "zh" },
+  { name = "English", link = "/karpenter-provider-alibabacloud/en/", lang = "en" },
+]
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+md_in_html = {}
+toc = { permalink = true }
+"pymdownx.superfences" = {}

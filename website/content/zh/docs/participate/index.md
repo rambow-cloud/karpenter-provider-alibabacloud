@@ -1,12 +1,8 @@
----
-title: 上手与参与
-description: 部署前先检查条件，用 issue、分支和 PR 贡献可验证的改进。
-weight: 30
----
+# 上手与参与
 
 ## 准备试用
 
-先阅读[当前状态](../status/)、[快速开始](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md)与[升级说明](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。快速开始文档中的历史版本示例需结合升级说明使用，不能把旧镜像与当前开发 chart 混用。
+先阅读[当前状态](../status/index.md)、[快速开始](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md)与[升级说明](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。快速开始文档中的历史版本示例需结合升级说明使用，不能把旧镜像与当前开发 chart 混用。
 
 试用前需要明确 ACK 集群、区域、VPC/交换机、安全组、可用镜像与 RAM 权限，并使用隔离测试环境。当前候选版本必须从对应代码构建 controller 镜像；构建条件和 feature gates 迁移以升级说明为准。
 

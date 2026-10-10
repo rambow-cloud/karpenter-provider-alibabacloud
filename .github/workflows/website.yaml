@@ -19,12 +19,6 @@ concurrency:
   group: website-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  HUGO_VERSION: 0.167.0
-  GOWORK: off
-  HUGO_MODULE_WORKSPACE: off
-  HUGO_CACHEDIR: ${{ github.workspace }}/website/.hugo_cache
-
 jobs:
   build:
     name: Build website
@@ -40,50 +34,31 @@ jobs:
       - name: Check out source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - name: Set up website Go toolchain
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+      - name: Set up pinned uv and Python
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
         with:
-          go-version: 1.27.1
-          cache-dependency-path: website/go.sum
+          version: 0.12.21
+          python-version: '3.14.2'
+          enable-cache: true
+          cache-dependency-glob: website/uv.lock
 
       - name: Configure production Pages URL
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
 
-      - name: Install verified Hugo Extended
-        env:
-          TOOLS_DIR: ${{ runner.temp }}/hugo-tools
+      - name: Build pinned Zensical site in both languages
         run: |
           set -euo pipefail
-          mkdir -p "$TOOLS_DIR"
-          cd "$TOOLS_DIR"
-          archive="hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
-          release="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
-          curl --fail --location --silent --show-error --output "$archive" "$release/$archive"
-          curl --fail --location --silent --show-error --output checksums.txt "$release/hugo_${HUGO_VERSION}_checksums.txt"
-          grep -F "  $archive" checksums.txt | sha256sum --check --strict
-          tar -xzf "$archive" hugo
-          echo "$TOOLS_DIR" >> "$GITHUB_PATH"
-
-      - name: Build pinned OINK site
-        env:
-          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
-        run: |
-          set -euo pipefail
-          go mod download
-          args=(--cleanDestinationDir --gc --minify --environment production --printPathWarnings --panicOnWarning)
-          if [[ -n "$PAGES_BASE_URL" ]]; then
-            args+=(--baseURL "${PAGES_BASE_URL}/")
-          fi
-          hugo "${args[@]}"
-          git diff --exit-code -- go.mod go.sum
+          uv sync --frozen
+          uv run --frozen python build.py
+          git diff --exit-code -- pyproject.toml uv.lock
 
       - name: Upload production artifact
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
-          path: website/public
+          path: website/site
 
   deploy:
     name: Deploy website
