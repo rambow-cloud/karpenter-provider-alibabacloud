@@ -1,11 +1,12 @@
 ## Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.26.6 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.9 AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG TARGETARCH
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOTOOLCHAIN=local
+ENV CGO_ENABLED=0
 
 WORKDIR /workspace
 
@@ -21,7 +22,7 @@ COPY pkg/ pkg/
 COPY hack/ hack/
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -a -o bin/controller cmd/controller/main.go
+RUN GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o bin/controller ./cmd/controller
 
 FROM registry-cn-hangzhou.ack.aliyuncs.com/dev/debian:12-slim-update
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* /var/cache/apt/*

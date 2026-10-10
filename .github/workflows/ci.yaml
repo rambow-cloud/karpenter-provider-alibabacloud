@@ -9,6 +9,8 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+env:
+  CGO_ENABLED: '0'
 jobs:
   validation:
     runs-on: ubuntu-latest
@@ -38,13 +40,25 @@ jobs:
           make envtest-setup
           echo "KUBEBUILDER_ASSETS=$(bin/setup-envtest use 1.35.0 -p path)" >> "$GITHUB_ENV"
       - name: Unit and controller contract tests
-        run: go test -p 2 ./pkg/... ./test/hack/... ./test/pkg/...
+        run: go test -p 2 ./pkg/... ./hack/... ./test/hack/... ./test/pkg/...
       - name: Vet and build controller
         shell: bash
         run: |
           set -euo pipefail
           go vet -p 2 ./pkg/... ./cmd/...
-          CGO_ENABLED=0 go build -p 2 -o bin/controller ./cmd/controller
+          go build -p 2 -trimpath -o bin/controller ./cmd/controller
+          GOARCH=arm64 go build -p 2 -trimpath -o bin/controller-arm64 ./cmd/controller
+          for binary in bin/controller bin/controller-arm64; do
+            go version -m "$binary" | grep -F 'CGO_ENABLED=0'
+            if readelf --program-headers "$binary" | grep -q INTERP; then
+              echo "Unexpected dynamic interpreter: $binary" >&2
+              exit 1
+            fi
+            if readelf --dynamic "$binary" | grep -q NEEDED; then
+              echo "Unexpected shared library dependency: $binary" >&2
+              exit 1
+            fi
+          done
       - name: Compile cloud E2E harness without running it
         run: go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
       - name: Check Helm and pinned deployment artifacts
@@ -68,3 +82,25 @@ jobs:
           fi
           go mod tidy
           git diff --exit-code -- go.mod go.sum
+      - name: Check Go vulnerabilities in source and Linux binaries
+        shell: bash
+        env:
+          GOMEMLIMIT: 2GiB
+          GOFLAGS: -p=2
+        run: |
+          set -euo pipefail
+          mkdir -p .e2e/security
+          go run ./hack/security
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck -version | tee .e2e/security/tool-version.txt
+          govulncheck -scan=package -test -tags=integration ./... 2>&1 | tee .e2e/security/source.txt
+          for binary in bin/controller bin/controller-arm64; do
+            govulncheck -mode=binary "$binary" 2>&1 | tee ".e2e/security/$(basename "$binary").txt"
+          done
+      - name: Upload Go security scan reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-security-reports
+          path: .e2e/security
+          if-no-files-found: ignore

@@ -16,7 +16,7 @@ import (
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
 	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func SetupACKCluster(ctx context.Context, cfg *Config, clusterName, gitRef string) (clusterID, kubeconfigPath, endpoint string, err error) {

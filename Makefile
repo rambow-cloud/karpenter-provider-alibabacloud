@@ -74,8 +74,9 @@ test-batcher: ## Run batcher tests only.
 
 ##@ Build
 
-# CGO configuration to avoid linker issues on macOS
+# Default builds and tests use pure Go. Opt in to CGO for tools such as -race.
 CGO_ENABLED ?= 0
+export CGO_ENABLED
 
 .PHONY: build
 build: fmt vet ## Build manager binary.
