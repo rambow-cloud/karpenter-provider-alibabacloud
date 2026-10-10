@@ -18,6 +18,8 @@ go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
 
 `make compatibility` checks exact core/harness versions, compares every upstream core CRD byte-for-byte in both vendored directories, renders Helm, and checks its permissions against the matching upstream core ClusterRole. It also verifies that core/provider feature gates render independently. `make sync-core-crds` copies CRDs from the pinned module. `make manifests` regenerates the provider CRD and synchronizes both locations. CI runs provider unit/controller tests with Linux envtest 1.35.0, vet, build, E2E compilation, Helm and dependency consistency. Envtest verifies API/controller behavior, not ACK or ECS runtime compatibility.
 
+The KWOK regression harness uses `test/hack/kwok/values.yaml` to enable StaticCapacity, CapacityBuffer and NodeRepair. Core v1.14.1's KWOK chart references CapacityBuffer without a default value, so the harness supplies explicit booleans. Compatibility checks render that chart and parse its `FEATURE_GATES` with the pinned core parser before runtime setup.
+
 ## Migrate configuration
 
 Core and provider gates have separate flags and environment variables:

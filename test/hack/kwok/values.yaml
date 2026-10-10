@@ -1,0 +1,9 @@
+# The v1.14.1 KWOK chart references StaticCapacity and CapacityBuffer but omits
+# their defaults. Pin every gate rendered by that chart; the regression suite
+# exercises static NodePools and CapacityBuffers.
+settings:
+  featureGates:
+    staticCapacity: true
+    capacityBuffer: true
+    nodeRepair: true
+    spotToSpotConsolidation: false

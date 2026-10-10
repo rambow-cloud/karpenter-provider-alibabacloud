@@ -120,6 +120,14 @@ require kubectl
 require helm
 require ko
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd "${script_dir}/../../.." && pwd)"
+kwok_values_file="${script_dir}/values.yaml"
+(
+  cd "${repo_dir}"
+  go run ./hack/compatibility --kwok-only
+)
+
 if [[ -n "${KWOK_REPORT_DIR}" ]]; then
   mkdir -p "${KWOK_REPORT_DIR}"
   KWOK_REPORT_DIR="$(cd "${KWOK_REPORT_DIR}" && pwd)"
@@ -152,13 +160,12 @@ img_tag="$(echo "${controller_img}" | cut -d ":" -f 2 -s)"
 
 kubectl apply -f kwok/charts/crds
 helm upgrade --install karpenter kwok/charts --namespace kube-system --skip-crds \
+  --values "${kwok_values_file}" \
   --set logLevel=debug \
   --set controller.resources.requests.cpu=1 \
   --set controller.resources.requests.memory=1Gi \
   --set controller.resources.limits.cpu=1 \
   --set controller.resources.limits.memory=1Gi \
-  --set settings.featureGates.nodeRepair=true \
-  --set settings.featureGates.staticCapacity=true \
   --set controller.image.repository="${img_repository}" \
   --set controller.image.tag="${img_tag}" \
   --set serviceMonitor.enabled=false

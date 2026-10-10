@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 )
 
 type module struct{ Path, Version, Dir string }
@@ -32,6 +33,10 @@ type manifest struct {
 			Spec struct {
 				Containers []struct {
 					Args []string `yaml:"args"`
+					Env  []struct {
+						Name  string `yaml:"name"`
+						Value string `yaml:"value"`
+					} `yaml:"env"`
 				} `yaml:"containers"`
 			} `yaml:"spec"`
 		} `yaml:"template"`
@@ -90,10 +95,49 @@ func permissions(rules []rule) map[string]bool {
 	}
 	return result
 }
-func check(sync bool) error {
+func checkKWOKChart(core module) error {
+	data, err := run("helm", "template", "karpenter", filepath.Join(core.Dir, "kwok", "charts"),
+		"--namespace", "kube-system", "--values", "test/hack/kwok/values.yaml")
+	if err != nil {
+		return err
+	}
+	items, err := manifests(data)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if item.Kind != "Deployment" {
+			continue
+		}
+		for _, container := range item.Spec.Template.Spec.Containers {
+			for _, env := range container.Env {
+				if env.Name != "FEATURE_GATES" {
+					continue
+				}
+				gates, err := coreoptions.ParseFeatureGates(env.Value)
+				if err != nil {
+					return fmt.Errorf("KWOK chart FEATURE_GATES %q: %w", env.Value, err)
+				}
+				if !gates.StaticCapacity || !gates.CapacityBuffer || !gates.NodeRepair {
+					return fmt.Errorf("KWOK regression requires StaticCapacity, CapacityBuffer and NodeRepair")
+				}
+				fmt.Printf("KWOK chart gates passed core %s parsing: %s\n", core.Version, env.Value)
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("KWOK chart has no deployment FEATURE_GATES")
+}
+func check(sync, kwokOnly bool) error {
 	core, err := loadModule("sigs.k8s.io/karpenter")
 	if err != nil {
 		return err
+	}
+	if core.Version != "v1.14.1" {
+		return fmt.Errorf("expected stable core v1.14.1, got %s", core.Version)
+	}
+	if kwokOnly {
+		return checkKWOKChart(core)
 	}
 	aws, err := loadModule("github.com/aws/karpenter-provider-aws")
 	if err != nil {
@@ -189,13 +233,17 @@ func check(sync bool) error {
 	if !separateGates {
 		return fmt.Errorf("Helm must render independent core and provider feature-gate flags")
 	}
+	if err := checkKWOKChart(core); err != nil {
+		return err
+	}
 	fmt.Printf("Compatibility passed: core/harness %s, %d synchronized CRDs, upstream core RBAC, separate feature gates\n", core.Version, len(files))
 	return nil
 }
 func main() {
 	sync := flag.Bool("sync", false, "copy pinned upstream CRDs without rendering Helm charts")
+	kwokOnly := flag.Bool("kwok-only", false, "validate KWOK Helm feature gates with the pinned core parser")
 	flag.Parse()
-	if err := check(*sync); err != nil {
+	if err := check(*sync, *kwokOnly); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
