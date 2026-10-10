@@ -43,12 +43,21 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate CRD manifests
-	$(CONTROLLER_GEN) crd:allowDangerousTypes=true paths="./pkg/apis/..." output:crd:artifacts:config=charts/karpenter/crds
+manifests: controller-gen sync-core-crds ## Generate provider CRDs and synchronize pinned upstream core CRDs.
+	$(CONTROLLER_GEN) crd:allowDangerousTypes=true paths="./pkg/apis/v1alpha1" output:crd:artifacts:config=charts/karpenter/crds
+	cp charts/karpenter/crds/karpenter.alibabacloud.com_ecsnodeclasses.yaml pkg/apis/crds/
+
+.PHONY: sync-core-crds
+sync-core-crds: ## Synchronize CRDs from the pinned core module.
+	go run ./hack/compatibility --sync
+
+.PHONY: compatibility
+compatibility: ## Check core/harness versions, copied CRDs, Helm RBAC and feature gates.
+	go run ./hack/compatibility
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./pkg/apis/..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./pkg/apis/v1alpha1"
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -113,7 +122,7 @@ $(LOCALBIN):
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.14.0
+CONTROLLER_TOOLS_VERSION ?= v0.20.1
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -123,17 +132,17 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 ## Tool Binaries
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 
-ENVTEST_VERSION ?= latest
+ENVTEST_VERSION ?= v0.0.0-20260405152528-6210f847b2c1
 
 # 安装/下载 envtest
 envtest-setup: $(ENVTEST)
 $(ENVTEST):
 	mkdir -p $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
 	@echo "envtest installed"
 
 # 获取 envtest 环境变量
-ENVTEST_K8S_VERSION ?= 1.28.0
+ENVTEST_K8S_VERSION ?= 1.35.0
 
 .PHONY: test
 test: generate manifests envtest-setup fmt vet
@@ -175,7 +184,7 @@ e2e-discover-gpu: ## Discover Alibaba Cloud GPU regions/zones for production e2e
 	GOFLAGS="$(E2E_GOFLAGS)" go run ./test/hack/e2e/ackctl discover-gpu --config "$(DEPLOY_CONFIG)" --format text
 
 .PHONY: upstream-e2etests
-upstream-e2etests: ## Run upstream Karpenter contract suites with AlibabaCloud default fixtures.
+upstream-e2etests: core-module ## Run upstream Karpenter contract suites with AlibabaCloud default fixtures.
 	cd $(KARPENTER_CORE_DIR) && \
 		suite="$$(echo "$(UPSTREAM_TEST_SUITE)" | tr A-Z a-z)"; \
 		focus="$(FOCUS)"; \
@@ -197,7 +206,7 @@ upstream-e2etests: ## Run upstream Karpenter contract suites with AlibabaCloud d
 		--default-nodepool="$(DEFAULT_NODEPOOL)"
 
 .PHONY: kwok-core-e2e
-kwok-core-e2e: ## Run upstream regression/performance contracts on kind + KWOK.
+kwok-core-e2e: core-module ## Run upstream regression/performance contracts on kind + KWOK.
 	KARPENTER_CORE_DIR="$(KARPENTER_CORE_DIR)" \
 	KWOK_CLUSTER_NAME="$(KWOK_CLUSTER_NAME)" \
 	KWOK_NODECLASS="$(KWOK_NODECLASS)" \
@@ -210,3 +219,7 @@ kwok-core-e2e: ## Run upstream regression/performance contracts on kind + KWOK.
 	KWOK_SCALE_REPLICAS="$(KWOK_SCALE_REPLICAS)" \
 	KWOK_REPORT_DIR="$(KWOK_REPORT_DIR)" \
 	./test/hack/kwok/run.sh
+
+.PHONY: core-module
+core-module: ## Download the pinned core before resolving its module directory.
+	go mod download sigs.k8s.io/karpenter

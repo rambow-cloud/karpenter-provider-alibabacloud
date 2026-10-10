@@ -34,7 +34,7 @@ spec:
       {{- end }}
       containers:
       - name: controller
-        image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag }}"
+        image: "{{ .Values.controller.image.repository }}:{{ .Values.controller.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
         args:
           - --cluster-name={{ .Values.settings.clusterName | default .Values.settings.clusterID }}
@@ -80,9 +80,16 @@ spec:
           {{- if .Values.settings.featureGates }}
           - --feature-gates={{ .Values.settings.featureGates }}
           {{- end }}
+          {{- if .Values.settings.providerFeatureGates }}
+          - --provider-feature-gates={{ .Values.settings.providerFeatureGates }}
+          {{- end }}
         env:
           {{- with .Values.settings.featureGates }}
           - name: FEATURE_GATES
+            value: {{ . | quote }}
+          {{- end }}
+          {{- with .Values.settings.providerFeatureGates }}
+          - name: PROVIDER_FEATURE_GATES
             value: {{ . | quote }}
           {{- end }}
           {{- range .Values.controller.env }}

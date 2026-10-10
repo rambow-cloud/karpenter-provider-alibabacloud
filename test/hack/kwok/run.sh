@@ -37,7 +37,7 @@ cleanup() {
   kubectl delete nodepools --all --ignore-not-found=true >/dev/null 2>&1 || true
   kubectl delete kwoknodeclasses --all --ignore-not-found=true >/dev/null 2>&1 || true
   (cd "${KARPENTER_CORE_DIR}" && helm uninstall karpenter --namespace kube-system >/dev/null 2>&1) || true
-  (cd "${KARPENTER_CORE_DIR}" && UNINSTALL=true ./hack/install-kwok.sh >/dev/null 2>&1) || true
+  (cd "${KARPENTER_CORE_DIR}" && UNINSTALL=true bash ./hack/install-kwok.sh >/dev/null 2>&1) || true
   kind delete cluster --name "${KWOK_CLUSTER_NAME}" >/dev/null 2>&1 || true
 }
 
@@ -45,12 +45,7 @@ write_report() {
   if [[ -z "${KWOK_REPORT_DIR}" ]]; then
     return
   fi
-  mkdir -p "${KWOK_REPORT_DIR}"
-  kubectl get nodes -o wide >"${KWOK_REPORT_DIR}/nodes.txt" 2>&1 || true
-  kubectl get nodeclaims -A -o wide >"${KWOK_REPORT_DIR}/nodeclaims.txt" 2>&1 || true
-  kubectl get pods -A -o wide >"${KWOK_REPORT_DIR}/pods.txt" 2>&1 || true
-  kubectl get events -A --sort-by=.lastTimestamp >"${KWOK_REPORT_DIR}/events.txt" 2>&1 || true
-  kubectl logs -n kube-system deployment/karpenter --all-containers --tail=-1 >"${KWOK_REPORT_DIR}/karpenter.log" 2>&1 || true
+  KWOK_REPORT_DIR="${KWOK_REPORT_DIR}" KWOK_CLUSTER_NAME="${KWOK_CLUSTER_NAME}" bash "${script_dir}/report.sh"
 }
 
 run_large_scale_check() {
@@ -120,17 +115,37 @@ require kubectl
 require helm
 require ko
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd "${script_dir}/../../.." && pwd)"
+kwok_values_file="${script_dir}/values.yaml"
+(
+  cd "${repo_dir}"
+  go run ./hack/compatibility --kwok-only
+)
+
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  mkdir -p "${KWOK_REPORT_DIR}"
+  KWOK_REPORT_DIR="$(cd "${KWOK_REPORT_DIR}" && pwd)"
+fi
+
+# Module archives are read-only and omit executable bits. Use a writable copy
+# for upstream builds/tests without modifying the shared Go module cache.
+core_work_dir="$(mktemp -d "${TMPDIR:-/tmp}/karpenter-kwok.XXXXXX")"
+cp -R "${KARPENTER_CORE_DIR}/." "${core_work_dir}/"
+chmod -R u+w "${core_work_dir}"
+KARPENTER_CORE_DIR="${core_work_dir}"
+
 if ! kind get clusters | grep -qx "${KWOK_CLUSTER_NAME}"; then
   kind create cluster --name "${KWOK_CLUSTER_NAME}"
 fi
 
-trap cleanup EXIT
+trap 'write_report; cleanup' EXIT
 
 kubectl config use-context "kind-${KWOK_CLUSTER_NAME}"
 kubectl taint nodes "${KWOK_CLUSTER_NAME}-control-plane" CriticalAddonsOnly:NoSchedule --overwrite
 
 cd "${KARPENTER_CORE_DIR}"
-./hack/install-kwok.sh
+bash ./hack/install-kwok.sh
 
 export KWOK_REPO=kind.local
 export KIND_CLUSTER_NAME="${KWOK_CLUSTER_NAME}"
@@ -139,14 +154,15 @@ img_repository="$(echo "${controller_img}" | cut -d ":" -f 1)"
 img_tag="$(echo "${controller_img}" | cut -d ":" -f 2 -s)"
 
 kubectl apply -f kwok/charts/crds
+kubectl apply -f kwok/apis/crds
+kubectl wait --for=condition=Established --timeout=60s -f kwok/apis/crds
 helm upgrade --install karpenter kwok/charts --namespace kube-system --skip-crds \
+  --values "${kwok_values_file}" \
   --set logLevel=debug \
   --set controller.resources.requests.cpu=1 \
   --set controller.resources.requests.memory=1Gi \
   --set controller.resources.limits.cpu=1 \
   --set controller.resources.limits.memory=1Gi \
-  --set settings.featureGates.nodeRepair=true \
-  --set settings.featureGates.staticCapacity=true \
   --set controller.image.repository="${img_repository}" \
   --set controller.image.tag="${img_tag}" \
   --set serviceMonitor.enabled=false
@@ -154,7 +170,16 @@ helm upgrade --install karpenter kwok/charts --namespace kube-system --skip-crds
 kubectl rollout status deployment/karpenter -n kube-system --timeout=5m
 
 cd test
-GOFLAGS="${E2E_GOFLAGS}" go test \
+ginkgo_report_args=()
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  ginkgo_report_args=(
+    "--ginkgo.json-report=${KWOK_REPORT_DIR}/ginkgo-report.json"
+    "--ginkgo.junit-report=${KWOK_REPORT_DIR}/junit.xml"
+  )
+fi
+
+run_suite() {
+  GOFLAGS="${E2E_GOFLAGS}" go test \
   -count 1 \
   -timeout 12h \
   -v \
@@ -163,8 +188,19 @@ GOFLAGS="${E2E_GOFLAGS}" go test \
   --ginkgo.skip="${SKIP}" \
   --ginkgo.timeout=3h \
   --ginkgo.grace-period=5m \
+  --ginkgo.fail-fast \
+  --ginkgo.poll-progress-after=2m \
+  --ginkgo.poll-progress-interval=2m \
   --ginkgo.vv \
+  "${ginkgo_report_args[@]}" \
   --default-nodeclass="${KWOK_NODECLASS}" \
   --default-nodepool="${KWOK_NODEPOOL}"
+}
+
+if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+  run_suite 2>&1 | tee "${KWOK_REPORT_DIR}/test.log"
+else
+  run_suite
+fi
 
 run_large_scale_check

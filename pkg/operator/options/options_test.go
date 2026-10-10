@@ -81,7 +81,7 @@ func TestOptionsParseValidFlags(t *testing.T) {
 		"--terway-reserved-enis=2",
 		"--terway-reserved-ips-per-eni=3",
 		"--terway-max-pods-cap=110",
-		"--feature-gates=TerwayPodDensity=true,PricingRefresh=false",
+		"--provider-feature-gates=TerwayPodDensity=true,PricingRefresh=false",
 	)
 	require.NoError(t, err)
 
@@ -100,7 +100,7 @@ func TestOptionsParseValidFlags(t *testing.T) {
 	require.False(t, opts.GatesParsed.Enabled(FeatureGatePricingRefresh))
 }
 
-func TestOptionsFeatureGatesReusesCoreFlagWhenPresent(t *testing.T) {
+func TestOptionsFeatureGatesAreIndependentFromCore(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "access-key-id")
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "access-key-secret")
 
@@ -116,9 +116,13 @@ func TestOptionsFeatureGatesReusesCoreFlagWhenPresent(t *testing.T) {
 		"--cluster-name=test-cluster",
 		"--cluster-id=test-cluster-id",
 		"--cluster-endpoint=https://example.com",
-		"--feature-gates=DeploymentSet=true",
+		"--feature-gates=NodeOverlay=true,CapacityBuffer=true",
+		"--provider-feature-gates=DeploymentSet=true",
 	)
 	require.NoError(t, err)
+	require.NoError(t, coreOpts.Parse(fs))
+	require.True(t, coreOpts.FeatureGates.NodeOverlay)
+	require.True(t, coreOpts.FeatureGates.CapacityBuffer)
 	require.Equal(t, "DeploymentSet=true", opts.FeatureGates)
 	require.True(t, opts.GatesParsed.Enabled(FeatureGateDeploymentSet))
 }
@@ -199,7 +203,7 @@ func TestOptionsTerwayValuesRequireGateAndNonKubeletMode(t *testing.T) {
 		},
 		{
 			name: "non default ips with gate and kubelet mode",
-			args: []string{"--feature-gates=TerwayPodDensity=true", "--terway-reserved-ips-per-eni=2"},
+			args: []string{"--provider-feature-gates=TerwayPodDensity=true", "--terway-reserved-ips-per-eni=2"},
 			want: "pod-density-mode",
 		},
 		{
@@ -225,7 +229,7 @@ func TestOptionsTerwayValuesRequireGateAndNonKubeletMode(t *testing.T) {
 	_, err := parseOptions(t,
 		"--cluster-name=test-cluster",
 		"--cluster-endpoint=https://example.com",
-		"--feature-gates=TerwayPodDensity=true",
+		"--provider-feature-gates=TerwayPodDensity=true",
 		"--pod-density-mode=terway-eni-multi-ip",
 		"--terway-reserved-enis=2",
 		"--terway-reserved-ips-per-eni=2",
@@ -246,7 +250,7 @@ func TestOptionsInterruptionQueueRequiresGate(t *testing.T) {
 		"--cluster-name=test-cluster",
 		"--cluster-endpoint=https://example.com",
 		"--interruption-queue=queue-name",
-		"--feature-gates=InterruptionHandling=true",
+		"--provider-feature-gates=InterruptionHandling=true",
 	)
 	require.NoError(t, err)
 	require.Equal(t, "queue-name", opts.InterruptionQueue)

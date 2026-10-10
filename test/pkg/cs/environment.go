@@ -503,18 +503,16 @@ func (env *Environment) DefaultNodePool(nodeClass *v1alpha1.ECSNodeClass) *karpv
 					},
 					Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 						{
-							NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-								Key:      v1alpha1.LabelCapacityType,
-								Operator: corev1.NodeSelectorOpIn,
-								Values:   []string{v1alpha1.CapacityTypeOnDemand},
-							},
+
+							Key:      v1alpha1.LabelCapacityType,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{v1alpha1.CapacityTypeOnDemand},
 						},
 						{
-							NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-								Key:      corev1.LabelInstanceTypeStable,
-								Operator: corev1.NodeSelectorOpIn,
-								Values:   []string{"ecs.g7.xlarge"},
-							},
+
+							Key:      corev1.LabelInstanceTypeStable,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{"ecs.g7.xlarge"},
 						},
 					},
 				},

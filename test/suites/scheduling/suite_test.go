@@ -193,11 +193,11 @@ var _ = Describe("Scheduling", func() {
 		configureNodePool("zone")
 		selectedZone := zones[0]
 		nodePool.Spec.Template.Spec.Requirements = append(withInstanceTypeRequirements(testInstanceTypes()...),
-			karpv1.NodeSelectorRequirementWithMinValues{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+			karpv1.NodeSelectorRequirementWithMinValues{
 				Key:      corev1.LabelTopologyZone,
 				Operator: corev1.NodeSelectorOpIn,
 				Values:   []string{selectedZone},
-			}},
+			},
 		)
 		pod := schedulingPod("zone", map[string]string{
 			karpv1.NodePoolLabelKey:    nodePool.Name,
@@ -273,11 +273,11 @@ var _ = Describe("Scheduling", func() {
 		configureNodeClass("gpu", "gpu")
 		configureNodePool("gpu")
 		nodePool.Spec.Template.Spec.Requirements = append(withInstanceTypeRequirements(gpuTypes...),
-			karpv1.NodeSelectorRequirementWithMinValues{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+			karpv1.NodeSelectorRequirementWithMinValues{
 				Key:      corev1.LabelTopologyZone,
 				Operator: corev1.NodeSelectorOpIn,
 				Values:   gpuZones,
-			}},
+			},
 		)
 		pod := schedulingPod("gpu", map[string]string{
 			karpv1.NodePoolLabelKey:        nodePool.Name,
@@ -331,7 +331,7 @@ var _ = Describe("Scheduling", func() {
 		nodeOverlay := &karpv1alpha1.NodeOverlay{
 			ObjectMeta: metav1.ObjectMeta{Name: "scheduling-test-hugepages"},
 			Spec: karpv1alpha1.NodeOverlaySpec{
-				Requirements: []corev1.NodeSelectorRequirement{{
+				Requirements: []karpv1alpha1.NodeSelectorRequirement{{
 					Key:      corev1.LabelInstanceTypeStable,
 					Operator: corev1.NodeSelectorOpIn,
 					Values:   []string{instanceType},
@@ -372,18 +372,16 @@ func configureNodePool(name string) {
 	}
 	nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelCapacityType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{v1alpha1.CapacityTypeOnDemand},
-			},
+
+			Key:      v1alpha1.LabelCapacityType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{v1alpha1.CapacityTypeOnDemand},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelInstanceType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   testInstanceTypes(),
-			},
+
+			Key:      v1alpha1.LabelInstanceType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   testInstanceTypes(),
 		},
 	}
 }
@@ -487,18 +485,16 @@ func capacityReservationInstanceTypes() []string {
 func withInstanceTypeRequirements(instanceTypes ...string) []karpv1.NodeSelectorRequirementWithMinValues {
 	return []karpv1.NodeSelectorRequirementWithMinValues{
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelCapacityType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{v1alpha1.CapacityTypeOnDemand},
-			},
+
+			Key:      v1alpha1.LabelCapacityType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{v1alpha1.CapacityTypeOnDemand},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelInstanceType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   instanceTypes,
-			},
+
+			Key:      v1alpha1.LabelInstanceType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   instanceTypes,
 		},
 	}
 }

@@ -145,18 +145,16 @@ func configureNodePool(name string) {
 	}
 	nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelCapacityType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{v1alpha1.CapacityTypeOnDemand},
-			},
+
+			Key:      v1alpha1.LabelCapacityType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{v1alpha1.CapacityTypeOnDemand},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelInstanceType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   testInstanceTypes(),
-			},
+
+			Key:      v1alpha1.LabelInstanceType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   testInstanceTypes(),
 		},
 	}
 }

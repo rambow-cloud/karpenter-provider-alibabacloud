@@ -88,6 +88,7 @@ func TestWriteEnvFileEscapesShellValues(t *testing.T) {
 func TestLoadConfigExpandsHomeDirectoryInKubeconfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	path := filepath.Join(t.TempDir(), "deploy-config.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(`
 kubeconfig: ~/.kube/ack-e2e

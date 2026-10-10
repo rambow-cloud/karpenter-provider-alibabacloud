@@ -141,17 +141,17 @@ var _ = Describe("ZoneFiltering", Label("zone-filtering"), func() {
 							Name:  nodeClass.Name,
 						},
 						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-							{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+							{
 								Key:      v1alpha1.LabelCapacityType,
 								Operator: corev1.NodeSelectorOpIn,
 								Values:   []string{v1alpha1.CapacityTypeOnDemand},
-							}},
+							},
 							// Restrict to zone A only — zone B vswitch must NOT be selected.
-							{NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+							{
 								Key:      corev1.LabelTopologyZone,
 								Operator: corev1.NodeSelectorOpIn,
 								Values:   []string{zoneA},
-							}},
+							},
 						},
 					},
 				},

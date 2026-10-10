@@ -51,18 +51,16 @@ var _ = Describe("Deprovisioning", func() {
 			}
 			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelCapacityType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{v1alpha1.CapacityTypeOnDemand},
-					},
+
+					Key:      v1alpha1.LabelCapacityType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{v1alpha1.CapacityTypeOnDemand},
 				},
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelInstanceType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   testInstanceTypes(),
-					},
+
+					Key:      v1alpha1.LabelInstanceType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   testInstanceTypes(),
 				},
 			}
 			// Enable consolidation with immediate trigger
@@ -159,18 +157,16 @@ var _ = Describe("Deprovisioning", func() {
 			}
 			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelCapacityType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{v1alpha1.CapacityTypeOnDemand},
-					},
+
+					Key:      v1alpha1.LabelCapacityType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{v1alpha1.CapacityTypeOnDemand},
 				},
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelInstanceType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   testInstanceTypes(),
-					},
+
+					Key:      v1alpha1.LabelInstanceType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   testInstanceTypes(),
 				}}
 			nodePool.Spec.Disruption.ConsolidationPolicy = karpv1.ConsolidationPolicyWhenEmptyOrUnderutilized
 			nodePool.Spec.Disruption.ConsolidateAfter = karpv1.MustParseNillableDuration("0s")
@@ -271,18 +267,16 @@ var _ = Describe("Deprovisioning", func() {
 			}
 			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelCapacityType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{v1alpha1.CapacityTypeOnDemand},
-					},
+
+					Key:      v1alpha1.LabelCapacityType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{v1alpha1.CapacityTypeOnDemand},
 				},
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelInstanceType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   testInstanceTypes(),
-					},
+
+					Key:      v1alpha1.LabelInstanceType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   testInstanceTypes(),
 				}}
 			// Set TTLSecondsAfterEmpty to 0 for immediate deletion
 			nodePool.Spec.Disruption.ConsolidationPolicy = karpv1.ConsolidationPolicyWhenEmpty
@@ -366,18 +360,16 @@ var _ = Describe("Deprovisioning", func() {
 			}
 			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelCapacityType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{v1alpha1.CapacityTypeOnDemand},
-					},
+
+					Key:      v1alpha1.LabelCapacityType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{v1alpha1.CapacityTypeOnDemand},
 				},
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelInstanceType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   testInstanceTypes(),
-					},
+
+					Key:      v1alpha1.LabelInstanceType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   testInstanceTypes(),
 				}}
 			// Set expiration to 5 minutes for testing
 			nodePool.Spec.Template.Spec.ExpireAfter = karpv1.MustParseNillableDuration("5m")
@@ -479,18 +471,16 @@ var _ = Describe("Deprovisioning", func() {
 			}
 			nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelCapacityType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   []string{v1alpha1.CapacityTypeOnDemand},
-					},
+
+					Key:      v1alpha1.LabelCapacityType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{v1alpha1.CapacityTypeOnDemand},
 				},
 				{
-					NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-						Key:      v1alpha1.LabelInstanceType,
-						Operator: corev1.NodeSelectorOpIn,
-						Values:   testInstanceTypes(),
-					},
+
+					Key:      v1alpha1.LabelInstanceType,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   testInstanceTypes(),
 				}}
 
 			// Create workload

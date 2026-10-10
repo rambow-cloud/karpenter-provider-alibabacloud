@@ -204,11 +204,10 @@ var _ = Describe("TaggingController", func() {
 				},
 				Requirements: []coreapis.NodeSelectorRequirementWithMinValues{
 					{
-						NodeSelectorRequirement: v1.NodeSelectorRequirement{
-							Key:      v1.LabelArchStable,
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"amd64"},
-						},
+
+						Key:      v1.LabelArchStable,
+						Operator: v1.NodeSelectorOpIn,
+						Values:   []string{"amd64"},
 					},
 				},
 			},

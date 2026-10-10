@@ -63,29 +63,26 @@ func configureContainerOSImages() {
 func configureContainerOSPool() {
 	nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelCapacityType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{v1alpha1.CapacityTypeOnDemand},
-			},
+
+			Key:      v1alpha1.LabelCapacityType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{v1alpha1.CapacityTypeOnDemand},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      corev1.LabelArchStable,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{v1alpha1.ArchitectureAmd64},
-			},
+
+			Key:      corev1.LabelArchStable,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{v1alpha1.ArchitectureAmd64},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      corev1.LabelInstanceTypeStable,
-				Operator: corev1.NodeSelectorOpIn,
-				// Use common x86_64 instance types available in cn-hangzhou
-				Values: []string{
-					"ecs.g7.large", "ecs.g7.xlarge",
-					"ecs.c7.large", "ecs.c7.xlarge",
-					"ecs.g6.large", "ecs.g6.xlarge",
-				},
+
+			Key:      corev1.LabelInstanceTypeStable,
+			Operator: corev1.NodeSelectorOpIn,
+			// Use common x86_64 instance types available in cn-hangzhou
+			Values: []string{
+				"ecs.g7.large", "ecs.g7.xlarge",
+				"ecs.c7.large", "ecs.c7.xlarge",
+				"ecs.g6.large", "ecs.g6.xlarge",
 			},
 		},
 	}

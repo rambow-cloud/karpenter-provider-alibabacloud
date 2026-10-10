@@ -148,9 +148,10 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.IntVar(&o.TerwayReservedENIs, "terway-reserved-enis", o.TerwayReservedENIs, "Reserved ENIs for host/system networking")
 	fs.IntVar(&o.TerwayReservedIPsPerENI, "terway-reserved-ips-per-eni", o.TerwayReservedIPsPerENI, "Reserved IPs per ENI")
 	fs.IntVar(&o.TerwayMaxPodsCap, "terway-max-pods-cap", o.TerwayMaxPodsCap, "Optional upper bound for Terway calculated maxPods; 0 disables")
-	if fs.Lookup("feature-gates") == nil {
-		fs.StringVar(&o.FeatureGates, "feature-gates", o.FeatureGates, "Comma-separated provider feature gates")
+	if value := os.Getenv("PROVIDER_FEATURE_GATES"); value != "" {
+		o.FeatureGates = value
 	}
+	fs.StringVar(&o.FeatureGates, "provider-feature-gates", o.FeatureGates, "Comma-separated Alibaba Cloud provider feature gates (core gates use --feature-gates)")
 }
 
 // RRSA environment variable names
@@ -172,9 +173,6 @@ func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {
 			os.Exit(0)
 		}
 		return fmt.Errorf("parsing flags, %w", err)
-	}
-	if featureGatesFlag := fs.Lookup("feature-gates"); featureGatesFlag != nil && wasFlagSet(fs, "feature-gates") {
-		o.FeatureGates = featureGatesFlag.Value.String()
 	}
 
 	gates, err := ParseFeatureGates(o.FeatureGates)
@@ -216,16 +214,6 @@ func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {
 	}
 
 	return nil
-}
-
-func wasFlagSet(fs *coreoptions.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
 }
 
 func (o *Options) validateProviderOptions() error {

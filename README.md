@@ -9,6 +9,8 @@
 
 Alibaba Cloud Karpenter Provider 是一个为 [Karpenter](https://github.com/aws/karpenter) 项目提供的阿里云实现，用于在阿里云上自动管理 Kubernetes 节点。
 
+开发分支已将 Karpenter core 和 AWS 测试依赖固定为 **v1.14.1**，构建需要 **Go 1.26.6+**。Chart 为 **0.3.0-dev**，部署时必须指定从当前提交构建的镜像。升级方法、feature gates 参数迁移和待完成的 ACK 发布验收见 [UPGRADING.md](UPGRADING.md)。
+
 ## 功能特性
 
 - **自动扩缩容**: 根据工作负载需求自动创建和删除节点
@@ -232,6 +234,8 @@ make run
 
 欢迎提交 Issue 和 Pull Request 来改进 Alibaba Cloud Karpenter Provider。
 
+请遵循 [贡献流程](CONTRIBUTING.md)：Issue → `feat/<issue编号>-<说明>` → 填写 PR 模板并关联 Issue。任务见 [Project](https://github.com/orgs/rambow-cloud/projects/4)，版本验收见 [v1.14.1 milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1)。
+
 ## 许可证
 
 本项目采用 Apache-2.0 许可证。详情请见 [LICENSE](LICENSE) 文件。
@@ -243,6 +247,8 @@ make run
 ## English
 
 Alibaba Cloud Karpenter Provider is an Alibaba Cloud implementation of the [Karpenter](https://github.com/aws/karpenter) project. It automatically manages Kubernetes nodes on Alibaba Cloud.
+
+The development branch pins Karpenter core and the AWS test harness to **v1.14.1** and requires **Go 1.26.6+**. The chart is **0.3.0-dev**; deploy an image built from the matching commit. See [UPGRADING.md](UPGRADING.md) for migration and the pending ACK release gate.
 
 ### Features
 
@@ -464,6 +470,8 @@ make run
 ### Contributing
 
 Issues and pull requests that improve Alibaba Cloud Karpenter Provider are welcome.
+
+Follow [CONTRIBUTING.md](CONTRIBUTING.md): issue → `feat/<issue-number>-<description>` → PR template with a closing reference. Track work in the [project](https://github.com/orgs/rambow-cloud/projects/4) and [compatibility milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1).
 
 ### License
 

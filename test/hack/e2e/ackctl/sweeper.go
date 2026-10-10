@@ -84,11 +84,11 @@ func sweepTagSelectors(manifest *Manifest) []map[string]string {
 	}
 	selectors = append(selectors, map[string]string{
 		"testing/cluster":         cluster,
-		"karpenter.sh/managed-by": v1alpha1.TagManagedByValue,
+		"karpenter.sh/managed-by": "true",
 	})
 	selectors = append(selectors, map[string]string{
 		"testing/cluster":         cluster,
-		"karpenter.sh/managed-by": "karpenter",
+		"karpenter.sh/managed-by": v1alpha1.TagManagedByValue,
 	})
 	return selectors
 }

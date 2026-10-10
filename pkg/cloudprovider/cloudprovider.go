@@ -57,8 +57,9 @@ import (
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 )
 
-// CloudProvider implements the Karpenter CloudProvider interface for Alibaba Cloud
-// This is the main integration point between Karpenter Core and Alibaba Cloud
+var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
+
+// CloudProvider implements the Karpenter CloudProvider interface for Alibaba Cloud.
 type CloudProvider struct {
 	// Kubernetes client for accessing cluster resources
 	kubeClient client.Client

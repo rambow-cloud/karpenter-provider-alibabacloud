@@ -1,10 +1,11 @@
 ## Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.24 as builder
+FROM --platform=$BUILDPLATFORM golang:1.26.6 AS builder
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG TARGETARCH
 ENV GOPROXY=https://goproxy.cn,direct
+ENV GOTOOLCHAIN=local
 
 WORKDIR /workspace
 

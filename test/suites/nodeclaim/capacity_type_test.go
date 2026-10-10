@@ -49,18 +49,16 @@ import (
 func configureCapacityPool(capacityType string, instanceTypes []string) {
 	nodePool.Spec.Template.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      v1alpha1.LabelCapacityType,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{capacityType},
-			},
+
+			Key:      v1alpha1.LabelCapacityType,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{capacityType},
 		},
 		{
-			NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-				Key:      corev1.LabelInstanceTypeStable,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   instanceTypes,
-			},
+
+			Key:      corev1.LabelInstanceTypeStable,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   instanceTypes,
 		},
 	}
 }
