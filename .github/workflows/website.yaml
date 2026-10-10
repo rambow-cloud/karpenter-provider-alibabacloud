@@ -1,0 +1,103 @@
+name: Project website
+
+on:
+  pull_request:
+    paths:
+      - website/**
+      - .github/workflows/website.yaml
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - .github/workflows/website.yaml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  HUGO_VERSION: 0.167.0
+  GOWORK: off
+  HUGO_MODULE_WORKSPACE: off
+  HUGO_CACHEDIR: ${{ github.workspace }}/website/.hugo_cache
+
+jobs:
+  build:
+    name: Build website
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: read
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up website Go toolchain
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version: 1.27.1
+          cache-dependency-path: website/go.sum
+
+      - name: Configure production Pages URL
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+
+      - name: Install verified Hugo Extended
+        env:
+          TOOLS_DIR: ${{ runner.temp }}/hugo-tools
+        run: |
+          set -euo pipefail
+          mkdir -p "$TOOLS_DIR"
+          cd "$TOOLS_DIR"
+          archive="hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
+          release="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$release/$archive"
+          curl --fail --location --silent --show-error --output checksums.txt "$release/hugo_${HUGO_VERSION}_checksums.txt"
+          grep -F "  $archive" checksums.txt | sha256sum --check --strict
+          tar -xzf "$archive" hugo
+          echo "$TOOLS_DIR" >> "$GITHUB_PATH"
+
+      - name: Build pinned OINK site
+        env:
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          go mod download
+          args=(--cleanDestinationDir --gc --minify --environment production --printPathWarnings --panicOnWarning)
+          if [[ -n "$PAGES_BASE_URL" ]]; then
+            args+=(--baseURL "${PAGES_BASE_URL}/")
+          fi
+          hugo "${args[@]}"
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Upload production artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: website/public
+
+  deploy:
+    name: Deploy website
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346

@@ -24,3 +24,7 @@ Run checks relevant to your change once. Local unit checks: `go test ./pkg/... .
 
 Do not commit credentials, kubeconfigs, account identifiers, or unsanitized cluster logs.
 
+## Project website
+
+Website source lives in `website/` and uses a separate pinned OINK/Hugo module. Follow the same issue, feature-branch, and PR workflow for website changes. Read [website/README.md](website/README.md) for the website toolchain, strict build command, GitHub Pages publication, and rollback. Keep Chinese and English copy consistent and distinguish project goals from completed implementation and cloud acceptance evidence.
+
