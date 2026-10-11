@@ -12,9 +12,8 @@ import (
 	"time"
 
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
+	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	slb "github.com/aliyun/alibaba-cloud-sdk-go/services/slb"
 )
 
 func main() {
@@ -179,7 +178,7 @@ func runEnsureAPIAccess(args []string) error {
 			}
 			fmt.Printf("%s\t%s\t%s\t%s\n", tea.StringValue(resource.ResourceType), tea.StringValue(resource.InstanceId), tea.StringValue(resource.State), tea.StringValue(resource.ResourceInfo))
 			if strings.Contains(tea.StringValue(resource.ResourceType), "SLB") && tea.StringValue(resource.InstanceId) != "" {
-				if err := ensureAPISLBListenerAccess(slbClient, tea.StringValue(resource.InstanceId), cidrs); err != nil {
+				if err := ensureAPISLBListenerAccess(slbClient, cfg.AlibabaCloud.RegionID, tea.StringValue(resource.InstanceId), cidrs); err != nil {
 					return err
 				}
 			}
@@ -188,49 +187,56 @@ func runEnsureAPIAccess(args []string) error {
 	return nil
 }
 
-func ensureAPISLBListenerAccess(client *slb.Client, loadBalancerID string, cidrs []string) error {
-	describe := slb.CreateDescribeLoadBalancerTCPListenerAttributeRequest()
-	describe.LoadBalancerId = loadBalancerID
-	describe.ListenerPort = requests.NewInteger(6443)
+func ensureAPISLBListenerAccess(client slbListenerClient, region, loadBalancerID string, cidrs []string) error {
+	describe := &slb.DescribeLoadBalancerTCPListenerAttributeRequest{}
+	describe.RegionId = tea.String(region)
+	describe.LoadBalancerId = tea.String(loadBalancerID)
+	describe.ListenerPort = tea.Int32(6443)
 	attr, err := client.DescribeLoadBalancerTCPListenerAttribute(describe)
 	if err != nil {
 		return fmt.Errorf("describe SLB TCP listener %s: %w", loadBalancerID, err)
 	}
-	fmt.Printf("SLB-TCP\t%s\tport=6443\tstatus=%s\taclStatus=%s\taclType=%s\taclId=%s\n", loadBalancerID, attr.Status, attr.AclStatus, attr.AclType, attr.AclId)
+	if attr == nil || attr.Body == nil {
+		return fmt.Errorf("describe SLB TCP listener %s returned empty body", loadBalancerID)
+	}
+	fmt.Printf("SLB-TCP\t%s\tport=6443\tstatus=%s\taclStatus=%s\taclType=%s\taclId=%s\n", loadBalancerID, tea.StringValue(attr.Body.Status), tea.StringValue(attr.Body.AclStatus), tea.StringValue(attr.Body.AclType), tea.StringValue(attr.Body.AclId))
 	if allowsAllIPv4(cidrs) {
-		if strings.EqualFold(attr.AclStatus, "on") {
-			update := slb.CreateSetLoadBalancerTCPListenerAttributeRequest()
-			update.LoadBalancerId = loadBalancerID
-			update.ListenerPort = requests.NewInteger(6443)
-			update.AclStatus = "off"
+		if strings.EqualFold(tea.StringValue(attr.Body.AclStatus), "on") {
+			update := &slb.SetLoadBalancerTCPListenerAttributeRequest{}
+			update.RegionId = tea.String(region)
+			update.LoadBalancerId = tea.String(loadBalancerID)
+			update.ListenerPort = tea.Int32(6443)
+			update.AclStatus = tea.String("off")
 			if _, err := client.SetLoadBalancerTCPListenerAttribute(update); err != nil {
 				return fmt.Errorf("disable SLB TCP listener ACL %s: %w", loadBalancerID, err)
 			}
 		}
-		return startAPISLBListener(client, loadBalancerID)
+		return startAPISLBListener(client, region, loadBalancerID)
 	}
-	if strings.EqualFold(attr.AclStatus, "on") && attr.AclId != "" {
-		if err := addSLBACLAllowlists(client, attr.AclId, cidrs); err != nil {
+	if strings.EqualFold(tea.StringValue(attr.Body.AclStatus), "on") && tea.StringValue(attr.Body.AclId) != "" {
+		if err := addSLBACLAllowlists(client, region, tea.StringValue(attr.Body.AclId), cidrs); err != nil {
 			return err
 		}
-	} else if strings.EqualFold(attr.AclStatus, "on") {
-		acl := slb.CreateSetListenerAccessControlStatusRequest()
-		acl.LoadBalancerId = loadBalancerID
-		acl.ListenerPort = requests.NewInteger(6443)
-		acl.ListenerProtocol = "tcp"
-		acl.AccessControlStatus = "close"
+	} else if strings.EqualFold(tea.StringValue(attr.Body.AclStatus), "on") {
+		acl := &slb.SetListenerAccessControlStatusRequest{}
+		acl.RegionId = tea.String(region)
+		acl.LoadBalancerId = tea.String(loadBalancerID)
+		acl.ListenerPort = tea.Int32(6443)
+		acl.ListenerProtocol = tea.String("tcp")
+		acl.AccessControlStatus = tea.String("close")
 		if _, err := client.SetListenerAccessControlStatus(acl); err != nil {
 			return fmt.Errorf("disable SLB TCP listener ACL %s: %w", loadBalancerID, err)
 		}
 	}
-	return startAPISLBListener(client, loadBalancerID)
+	return startAPISLBListener(client, region, loadBalancerID)
 }
 
-func startAPISLBListener(client *slb.Client, loadBalancerID string) error {
-	start := slb.CreateStartLoadBalancerListenerRequest()
-	start.LoadBalancerId = loadBalancerID
-	start.ListenerPort = requests.NewInteger(6443)
-	start.ListenerProtocol = "tcp"
+func startAPISLBListener(client slbListenerClient, region, loadBalancerID string) error {
+	start := &slb.StartLoadBalancerListenerRequest{}
+	start.RegionId = tea.String(region)
+	start.LoadBalancerId = tea.String(loadBalancerID)
+	start.ListenerPort = tea.Int32(6443)
+	start.ListenerProtocol = tea.String("tcp")
 	if _, err := client.StartLoadBalancerListener(start); err != nil && !isNotFoundOrDependencyError(err) {
 		return fmt.Errorf("start SLB TCP listener %s: %w", loadBalancerID, err)
 	}
@@ -246,7 +252,7 @@ func allowsAllIPv4(cidrs []string) bool {
 	return false
 }
 
-func addSLBACLAllowlists(client *slb.Client, aclID string, cidrs []string) error {
+func addSLBACLAllowlists(client slbListenerClient, region, aclID string, cidrs []string) error {
 	entries := make([]map[string]string, 0, len(cidrs))
 	for _, cidr := range cidrs {
 		entries = append(entries, map[string]string{"entry": cidr, "comment": "karpenter-e2e"})
@@ -255,20 +261,25 @@ func addSLBACLAllowlists(client *slb.Client, aclID string, cidrs []string) error
 	if err != nil {
 		return err
 	}
-	req := slb.CreateAddAccessControlListEntryRequest()
-	req.AclId = aclID
-	req.AclEntrys = string(data)
+	req := &slb.AddAccessControlListEntryRequest{}
+	req.RegionId = tea.String(region)
+	req.AclId = tea.String(aclID)
+	req.AclEntrys = tea.String(string(data))
 	if _, err := client.AddAccessControlListEntry(req); err != nil && !strings.Contains(err.Error(), "AclEntry") {
 		return fmt.Errorf("add SLB ACL entries %s: %w", aclID, err)
 	}
-	describe := slb.CreateDescribeAccessControlListAttributeRequest()
-	describe.AclId = aclID
-	describe.PageSize = requests.NewInteger(100)
+	describe := &slb.DescribeAccessControlListAttributeRequest{}
+	describe.RegionId = tea.String(region)
+	describe.AclId = tea.String(aclID)
+	describe.PageSize = tea.Int32(100)
 	resp, err := client.DescribeAccessControlListAttribute(describe)
 	if err != nil {
 		return fmt.Errorf("describe SLB ACL %s: %w", aclID, err)
 	}
-	fmt.Printf("SLB-ACL\t%s\tentries=%d\n", aclID, resp.TotalAclEntry)
+	if resp == nil || resp.Body == nil {
+		return fmt.Errorf("describe SLB ACL %s returned empty body", aclID)
+	}
+	fmt.Printf("SLB-ACL\t%s\tentries=%d\n", aclID, tea.Int32Value(resp.Body.TotalAclEntry))
 	return nil
 }
 

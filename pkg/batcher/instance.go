@@ -19,13 +19,14 @@ package batcher
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/securitygroups"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/samber/lo"
+	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 // RunInstancesRequest represents a request to create an instance
@@ -45,7 +46,7 @@ type RunInstancesResult struct {
 
 // ECSClientInterface defines the minimal interface needed for ECS operations
 type ECSClientInterface interface {
-	RunInstances(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error)
+	RunInstances(ctx context.Context, req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error)
 }
 
 // RunInstancesExecutor executes batch instance creation
@@ -74,12 +75,18 @@ func (e *RunInstancesExecutor) Execute(ctx context.Context, items []*BatchItem) 
 	firstRequest := items[0].Request.(*RunInstancesRequest)
 
 	// Build batch request
-	req := e.cloneRequest(firstRequest.Request)
-	req.Amount = requests.NewInteger(len(items))
+	req, err := e.cloneRequest(firstRequest.Request)
+	if err != nil {
+		for _, item := range items {
+			item.ResultCh <- &BatchResult{Error: err}
+		}
+		return err
+	}
+	req.Amount = tea.Int32(int32(len(items)))
 
 	// Execute batch creation
 	startTime := time.Now()
-	resp, err := e.ecsClient.RunInstances(req)
+	resp, err := e.ecsClient.RunInstances(ctx, req)
 
 	if err != nil {
 		// Batch failed, notify all waiters
@@ -92,7 +99,14 @@ func (e *RunInstancesExecutor) Execute(ctx context.Context, items []*BatchItem) 
 	}
 
 	// Check if we got enough instances
-	instanceIDs := resp.InstanceIdSets.InstanceIdSet
+	var instanceIDs []string
+	if resp != nil && resp.Body != nil && resp.Body.InstanceIdSets != nil {
+		for _, id := range resp.Body.InstanceIdSets.InstanceIdSet {
+			if value := tea.StringValue(id); value != "" {
+				instanceIDs = append(instanceIDs, value)
+			}
+		}
+	}
 	if len(instanceIDs) < len(items) {
 		err := fmt.Errorf("insufficient instances returned: requested %d, got %d", len(items), len(instanceIDs))
 
@@ -128,106 +142,79 @@ func (e *RunInstancesExecutor) Execute(ctx context.Context, items []*BatchItem) 
 }
 
 // cloneRequest creates a copy of the RunInstances request
-func (e *RunInstancesExecutor) cloneRequest(req *ecs.RunInstancesRequest) *ecs.RunInstancesRequest {
-	clone := ecs.CreateRunInstancesRequest()
-
-	// Copy all fields from original request
-	clone.RegionId = req.RegionId
-	clone.InstanceType = req.InstanceType
-	clone.ImageId = req.ImageId
-	clone.VSwitchId = req.VSwitchId
-	clone.SecurityGroupId = req.SecurityGroupId
-	clone.SecurityGroupIds = req.SecurityGroupIds
-	clone.InstanceName = req.InstanceName
-	clone.InternetMaxBandwidthOut = req.InternetMaxBandwidthOut
-	clone.UserData = req.UserData
-	clone.ClientToken = req.ClientToken
-	clone.SpotStrategy = req.SpotStrategy
-	clone.SpotPriceLimit = req.SpotPriceLimit
-	clone.RamRoleName = req.RamRoleName
-	clone.Tag = req.Tag
-	clone.SystemDisk = req.SystemDisk
-	clone.SystemDiskCategory = req.SystemDiskCategory
-	clone.SystemDiskSize = req.SystemDiskSize
-	clone.SystemDiskPerformanceLevel = req.SystemDiskPerformanceLevel
-	clone.DataDisk = req.DataDisk
-
-	// Note: Amount will be set by the caller
-
-	return clone
+func (e *RunInstancesExecutor) cloneRequest(req *ecs.RunInstancesRequest) (*ecs.RunInstancesRequest, error) {
+	if req == nil {
+		return nil, fmt.Errorf("RunInstances request is required")
+	}
+	// Preserve every SDK field and isolate nested pointers/slices from callers.
+	clone := &ecs.RunInstancesRequest{}
+	if err := tea.Convert(req, clone); err != nil {
+		return nil, fmt.Errorf("clone RunInstances request: %w", err)
+	}
+	if tea.StringValue(clone.RegionId) == "" {
+		clone.RegionId = tea.String(e.region)
+	}
+	return clone, nil
 }
 
 // ComputeRunInstancesBatchKey computes a batch key for RunInstances request
 // Requests with the same key can be batched together
 func ComputeRunInstancesBatchKey(req *ecs.RunInstancesRequest) string {
-	// Create a deterministic key from request parameters that affect batching
-	// Only requests with identical configurations can be batched
-
-	h := sha256.New()
-	write := func(value string) {
-		h.Write([]byte(value))
-		h.Write([]byte{0})
+	if req == nil {
+		return ""
 	}
-
-	// Core instance configuration
-	write(req.RegionId)
-	write(req.InstanceType)
-	write(req.ImageId)
-	write(req.VSwitchId)
-	write(req.SecurityGroupId)
-
-	// Security groups (if multiple)
-	if req.SecurityGroupIds != nil {
-		for _, sg := range securitygroups.NormalizeIDs(*req.SecurityGroupIds) {
-			write(sg)
+	// Hash the complete V2 request so fields newly exposed by the SDK cannot
+	// accidentally share a batch. Amount is assigned by the batch executor.
+	canonical := *req
+	canonical.Amount = nil
+	canonical.SecurityGroupIds = tea.StringSlice(securitygroups.NormalizeIDs(tea.StringSliceValue(req.SecurityGroupIds)))
+	if tea.Float32Value(canonical.SpotPriceLimit) == 0 {
+		canonical.SpotPriceLimit = nil
+	}
+	if req.SystemDisk != nil {
+		disk := *req.SystemDisk
+		disk.PerformanceLevel = optionalBatchString(normalizeBatchPerformanceLevel(tea.StringValue(disk.Category), tea.StringValue(disk.PerformanceLevel)))
+		disk.Encrypted = optionalBatchString(normalizeBatchBool(tea.StringValue(disk.Encrypted), false))
+		canonical.SystemDisk = &disk
+	}
+	canonical.DataDisk = make([]*ecs.RunInstancesRequestDataDisk, 0, len(req.DataDisk))
+	for _, original := range req.DataDisk {
+		if original == nil {
+			continue
+		}
+		disk := *original
+		disk.PerformanceLevel = optionalBatchString(normalizeBatchPerformanceLevel(tea.StringValue(disk.Category), tea.StringValue(disk.PerformanceLevel)))
+		disk.Encrypted = optionalBatchString(normalizeBatchBool(tea.StringValue(disk.Encrypted), false))
+		if disk.DeleteWithInstance == nil {
+			disk.DeleteWithInstance = tea.Bool(true)
+		}
+		canonical.DataDisk = append(canonical.DataDisk, &disk)
+	}
+	canonical.Tag = make([]*ecs.RunInstancesRequestTag, 0, len(req.Tag))
+	for _, tag := range req.Tag {
+		if tag != nil {
+			canonical.Tag = append(canonical.Tag, tag)
 		}
 	}
-
-	// Spot configuration
-	write(req.SpotStrategy)
-	write(string(req.SpotPriceLimit))
-
-	// RAM role
-	write(req.RamRoleName)
-
-	// System disk
-	systemDiskCategory := req.SystemDiskCategory
-	systemDiskPerformanceLevel := req.SystemDiskPerformanceLevel
-	write(systemDiskCategory)
-	write(req.SystemDiskSize)
-	write(normalizeBatchPerformanceLevel(systemDiskCategory, systemDiskPerformanceLevel))
-	write(normalizeBatchBool(req.SystemDisk.Encrypted, false))
-	write(req.SystemDisk.KMSKeyId)
-
-	// Data disks (hash the configuration)
-	if req.DataDisk != nil {
-		for _, disk := range *req.DataDisk {
-			write(disk.Category)
-			write(disk.Size)
-			write(disk.Device)
-			write(normalizeBatchPerformanceLevel(disk.Category, disk.PerformanceLevel))
-			write(normalizeBatchBool(disk.Encrypted, false))
-			write(disk.KMSKeyId)
-			write(disk.SnapshotId)
-			write(normalizeBatchBool(disk.DeleteWithInstance, true))
+	sort.Slice(canonical.Tag, func(i, j int) bool {
+		left, right := canonical.Tag[i], canonical.Tag[j]
+		if tea.StringValue(left.Key) != tea.StringValue(right.Key) {
+			return tea.StringValue(left.Key) < tea.StringValue(right.Key)
 		}
+		return tea.StringValue(left.Value) < tea.StringValue(right.Value)
+	})
+	data, err := json.Marshal(&canonical)
+	if err != nil {
+		return ""
 	}
+	return fmt.Sprintf("run-instances-%x", sha256.Sum256(data))
+}
 
-	// UserData
-	write(req.UserData)
-
-	// Tags (sorted for consistency)
-	if req.Tag != nil {
-		tags := *req.Tag
-		sortedTags := lo.Map(tags, func(t ecs.RunInstancesTag, _ int) string {
-			return t.Key + "=" + t.Value
-		})
-		for _, tag := range sortedTags {
-			write(tag)
-		}
+func optionalBatchString(value string) *string {
+	if value == "" {
+		return nil
 	}
-
-	return fmt.Sprintf("run-instances-%x", h.Sum(nil))
+	return tea.String(value)
 }
 
 func normalizeBatchPerformanceLevel(category, performanceLevel string) string {
@@ -288,8 +275,14 @@ func (b *InstanceBatcher) CreateInstance(
 	ctx context.Context,
 	req *ecs.RunInstancesRequest,
 ) (*RunInstancesResult, error) {
+	if req == nil {
+		return nil, fmt.Errorf("RunInstances request is required")
+	}
 	// Compute batch key
 	batchKey := ComputeRunInstancesBatchKey(req)
+	if batchKey == "" {
+		return nil, fmt.Errorf("RunInstances request cannot be encoded")
+	}
 
 	// Create result channel
 	resultCh := make(chan *BatchResult, 1)

@@ -13,7 +13,8 @@ Karpenter core 和 AWS 测试 harness 固定为 **v1.14.1**，chart 为 **0.3.0-
 | Karpenter v1.14.1 | 迁移已合并；真实 ACK 版本验收待完成 | [版本 milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
 | Kubernetes 1.34+ | 支持策略目标；版本边界检查尚在推进 | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
 | Provider 生命周期与调度 | 集群所有权修复已合并；资源计算、失败恢复、镜像等问题继续修复 | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
-| 依赖安全 | Go CVE 升级与复扫完成；两条未导入包公告已记录，容器 OS 扫描待完成 | [安全审计](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SECURITY_AUDIT.md) |
+| 依赖安全 | Go CVE 复扫通过；旧 SDK/PDF 链已移除，剩余未导入的 OpenPGP 公告；容器 OS 扫描待完成 | [SDK 迁移与审计](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
+| 阿里云 SDK V2.0 | 剩余 ECS batcher 和负载均衡 helpers 已迁移，选中模块数 314 → 294；真实云验收待完成 | [SDK 迁移 milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/8) |
 | 最小 ACK/ECS E2E | 一个 NodePool、一个 Pod、目标一台 ECS 的验收入口正在规划 | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
 | Spot 中断处理 | 独立规划的功能；不能将 Spot 创建等同于完整中断处理 | [Spot milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/5) |
 

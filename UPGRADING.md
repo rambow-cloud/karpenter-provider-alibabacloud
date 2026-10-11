@@ -8,6 +8,8 @@ Upstream references: [release](https://github.com/kubernetes-sigs/karpenter/rele
 
 Use Go 1.26.9 or a newer security-patched toolchain and Helm 3. The container builder and CI are pinned to Go 1.26.9 with local toolchain selection. Kubernetes client libraries use stable 0.35.x versions; controller-runtime is 0.23.1. Production controller builds and the default Makefile/CI checks use `CGO_ENABLED=0`; explicitly enable CGO when using tools that require it, such as `-race`.
 
+Remaining legacy Alibaba Cloud clients have migrated to the SDK V2.0 family. Product module major versions are independent of that family version. See [SDK_MIGRATION.md](SDK_MIGRATION.md) for pinned SDK versions, dependency removal and Go batcher API changes. Build a new controller image from matching source; real ACK acceptance remains pending.
+
 ```sh
 go mod download
 make compatibility

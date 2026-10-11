@@ -1,5 +1,7 @@
 # Go dependency security remediation — 2026-10-11
 
+This report records the pre-SDK-migration snapshot. The subsequent [SDK V2.0 migration](SDK_MIGRATION.md) removes the legacy SDK/PDF chain and reduces selected modules from 314 to 294; only the unused OpenPGP advisory remains in that later graph.
+
 Tracks [issues #8–#14](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/3) and [build/dependency hygiene #34](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/34).
 
 The October 10 audit found 46 distinct CVEs in the effective selected module graph and Go 1.26.6 toolchain; nine CVEs also had affected symbols in the Linux amd64 controller. Version or symbol presence alone is not an exploitability assessment. The remediation scan found **zero active CVE records affecting the effective selected versions**, zero affected imported packages, and zero affected symbols in freshly built Linux amd64 and arm64 controllers.
