@@ -93,7 +93,7 @@ func (e *recoverECS) TagResources(context.Context, *ecs.TagResourcesRequest) (*e
 
 func launchFixture(t *testing.T, e *recoverECS) (context.Context, *CloudProvider, *coreapis.NodeClaim, instance.CreateOptions, string) {
 	t.Helper()
-	ctx, cancel := context.WithCancel((&options.Options{ClusterID: "cluster-test"}).ToContext(context.Background()))
+	ctx, cancel := context.WithCancel((&options.Options{ClusterID: "cluster-test", Region: "cn-hangzhou"}).ToContext(context.Background()))
 	t.Cleanup(cancel)
 	scheme := runtime.NewScheme()
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
@@ -154,6 +154,9 @@ func TestPendingLaunchReusesTokenAndRejectsChangedParameters(t *testing.T) {
 	changed := opts
 	changed.VSwitchID = "vsw-other"
 	_, err = p.launchInstance(ctx, claim, changed, hash)
+	require.ErrorContains(t, err, "parameters changed")
+	otherRegion := (&options.Options{ClusterID: "cluster-test", Region: "cn-beijing"}).ToContext(ctx)
+	_, err = p.launchInstance(otherRegion, claim, opts, hash)
 	require.ErrorContains(t, err, "parameters changed")
 	// Restore the exact intent, including tags. Indexed Tag.N ordering must agree.
 	for n := 0; n < 30; n++ {

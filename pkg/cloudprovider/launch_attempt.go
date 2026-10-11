@@ -9,6 +9,7 @@ import (
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/errors"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/operator/options"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	coreapis "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -78,7 +79,10 @@ func (c *CloudProvider) launchInstance(ctx context.Context, claim *coreapis.Node
 		return attempt.InstanceID, nil
 	}
 	opts.ClientToken = ""
-	data, err := json.Marshal(opts)
+	data, err := json.Marshal(struct {
+		Region  string
+		Options instance.CreateOptions
+	}{options.FromContext(ctx).Region, opts})
 	if err != nil {
 		return "", err
 	}
