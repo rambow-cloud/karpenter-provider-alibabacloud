@@ -55,6 +55,9 @@ func checkModules(data []byte) error {
 			return fmt.Errorf("decode module list: %w", err)
 		}
 		found++
+		if selected.Path == "github.com/aliyun/alibaba-cloud-sdk-go" || selected.Path == "rsc.io/pdf" {
+			return fmt.Errorf("%s: removed legacy SDK/PDF dependency must not be reintroduced", selected.Path)
+		}
 		floor, tracked := minimumVersions[selected.Path]
 		if !tracked {
 			continue

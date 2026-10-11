@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 // mockECSClient is a mock ECS client for testing
@@ -35,7 +35,7 @@ type mockECSClient struct {
 	callCount        int32
 }
 
-func (m *mockECSClient) RunInstances(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
+func (m *mockECSClient) RunInstances(ctx context.Context, req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	if m.runInstancesFunc != nil {
 		return m.runInstancesFunc(req)
@@ -48,7 +48,7 @@ func TestRunInstancesExecutor(t *testing.T) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
 			// Parse amount
-			amount, _ := req.Amount.GetValue()
+			amount := int(tea.Int32Value(req.Amount))
 
 			// Generate instance IDs
 			instanceIDs := make([]string, amount)
@@ -57,9 +57,7 @@ func TestRunInstancesExecutor(t *testing.T) {
 			}
 
 			resp := &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: instanceIDs,
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice(instanceIDs)}},
 			}
 			return resp, nil
 		},
@@ -76,12 +74,12 @@ func TestRunInstancesExecutor(t *testing.T) {
 	resultChs := make([]chan *BatchResult, batchSize)
 
 	for i := 0; i < batchSize; i++ {
-		req := ecs.CreateRunInstancesRequest()
-		req.RegionId = "cn-hangzhou"
-		req.InstanceType = "ecs.g6.large"
-		req.ImageId = "m-test"
-		req.VSwitchId = "vsw-test"
-		req.Amount = requests.NewInteger(1)
+		req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+		req.RegionId = tea.String("cn-hangzhou")
+		req.InstanceType = tea.String("ecs.g6.large")
+		req.ImageId = tea.String("m-test")
+		req.VSwitchId = tea.String("vsw-test")
+		req.Amount = tea.Int32(1)
 
 		resultCh := make(chan *BatchResult, 1)
 		resultChs[i] = resultCh
@@ -144,7 +142,7 @@ func TestRunInstancesExecutorError(t *testing.T) {
 	resultChs := make([]chan *BatchResult, batchSize)
 
 	for i := 0; i < batchSize; i++ {
-		req := ecs.CreateRunInstancesRequest()
+		req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
 		resultCh := make(chan *BatchResult, 1)
 		resultChs[i] = resultCh
 
@@ -179,17 +177,17 @@ func TestRunInstancesExecutorError(t *testing.T) {
 
 // TestComputeRunInstancesBatchKey tests batch key computation
 func TestComputeRunInstancesBatchKey(t *testing.T) {
-	req1 := ecs.CreateRunInstancesRequest()
-	req1.RegionId = "cn-hangzhou"
-	req1.InstanceType = "ecs.g6.large"
-	req1.ImageId = "m-test"
-	req1.VSwitchId = "vsw-test"
+	req1 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req1.RegionId = tea.String("cn-hangzhou")
+	req1.InstanceType = tea.String("ecs.g6.large")
+	req1.ImageId = tea.String("m-test")
+	req1.VSwitchId = tea.String("vsw-test")
 
-	req2 := ecs.CreateRunInstancesRequest()
-	req2.RegionId = "cn-hangzhou"
-	req2.InstanceType = "ecs.g6.large"
-	req2.ImageId = "m-test"
-	req2.VSwitchId = "vsw-test"
+	req2 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req2.RegionId = tea.String("cn-hangzhou")
+	req2.InstanceType = tea.String("ecs.g6.large")
+	req2.ImageId = tea.String("m-test")
+	req2.VSwitchId = tea.String("vsw-test")
 
 	// Same configuration should produce same key
 	key1 := ComputeRunInstancesBatchKey(req1)
@@ -200,11 +198,11 @@ func TestComputeRunInstancesBatchKey(t *testing.T) {
 	}
 
 	// Different configuration should produce different key
-	req3 := ecs.CreateRunInstancesRequest()
-	req3.RegionId = "cn-hangzhou"
-	req3.InstanceType = "ecs.g6.xlarge" // Different instance type
-	req3.ImageId = "m-test"
-	req3.VSwitchId = "vsw-test"
+	req3 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req3.RegionId = tea.String("cn-hangzhou")
+	req3.InstanceType = tea.String("ecs.g6.xlarge") // Different instance type
+	req3.ImageId = tea.String("m-test")
+	req3.VSwitchId = tea.String("vsw-test")
 
 	key3 := ComputeRunInstancesBatchKey(req3)
 	if key1 == key3 {
@@ -212,11 +210,11 @@ func TestComputeRunInstancesBatchKey(t *testing.T) {
 	}
 
 	// Different VSwitch should produce different key
-	req4 := ecs.CreateRunInstancesRequest()
-	req4.RegionId = "cn-hangzhou"
-	req4.InstanceType = "ecs.g6.large"
-	req4.ImageId = "m-test"
-	req4.VSwitchId = "vsw-different" // Different VSwitch
+	req4 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req4.RegionId = tea.String("cn-hangzhou")
+	req4.InstanceType = tea.String("ecs.g6.large")
+	req4.ImageId = tea.String("m-test")
+	req4.VSwitchId = tea.String("vsw-different") // Different VSwitch
 
 	key4 := ComputeRunInstancesBatchKey(req4)
 	if key1 == key4 {
@@ -225,30 +223,30 @@ func TestComputeRunInstancesBatchKey(t *testing.T) {
 }
 
 func TestComputeRunInstancesBatchKeySecurityGroupIDs(t *testing.T) {
-	req1 := ecs.CreateRunInstancesRequest()
-	req1.RegionId = "cn-hangzhou"
-	req1.InstanceType = "ecs.g6.large"
-	req1.ImageId = "m-test"
-	req1.VSwitchId = "vsw-test"
-	req1.SecurityGroupIds = &[]string{"sg-2", "sg-1", "sg-2"}
+	req1 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req1.RegionId = tea.String("cn-hangzhou")
+	req1.InstanceType = tea.String("ecs.g6.large")
+	req1.ImageId = tea.String("m-test")
+	req1.VSwitchId = tea.String("vsw-test")
+	req1.SecurityGroupIds = tea.StringSlice([]string{"sg-2", "sg-1", "sg-2"})
 
-	req2 := ecs.CreateRunInstancesRequest()
-	req2.RegionId = "cn-hangzhou"
-	req2.InstanceType = "ecs.g6.large"
-	req2.ImageId = "m-test"
-	req2.VSwitchId = "vsw-test"
-	req2.SecurityGroupIds = &[]string{"sg-1", "sg-2"}
+	req2 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req2.RegionId = tea.String("cn-hangzhou")
+	req2.InstanceType = tea.String("ecs.g6.large")
+	req2.ImageId = tea.String("m-test")
+	req2.VSwitchId = tea.String("vsw-test")
+	req2.SecurityGroupIds = tea.StringSlice([]string{"sg-1", "sg-2"})
 
 	if key1, key2 := ComputeRunInstancesBatchKey(req1), ComputeRunInstancesBatchKey(req2); key1 != key2 {
 		t.Fatalf("expected same batch key for duplicate/order differences, got %s != %s", key1, key2)
 	}
 
-	req3 := ecs.CreateRunInstancesRequest()
-	req3.RegionId = "cn-hangzhou"
-	req3.InstanceType = "ecs.g6.large"
-	req3.ImageId = "m-test"
-	req3.VSwitchId = "vsw-test"
-	req3.SecurityGroupIds = &[]string{"sg-1"}
+	req3 := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req3.RegionId = tea.String("cn-hangzhou")
+	req3.InstanceType = tea.String("ecs.g6.large")
+	req3.ImageId = tea.String("m-test")
+	req3.VSwitchId = tea.String("vsw-test")
+	req3.SecurityGroupIds = tea.StringSlice([]string{"sg-1"})
 
 	if key1, key3 := ComputeRunInstancesBatchKey(req1), ComputeRunInstancesBatchKey(req3); key1 == key3 {
 		t.Fatal("expected different batch key when security group set differs")
@@ -256,39 +254,39 @@ func TestComputeRunInstancesBatchKeySecurityGroupIDs(t *testing.T) {
 }
 
 func TestComputeRunInstancesBatchKeyDiskOptions(t *testing.T) {
-	base := ecs.CreateRunInstancesRequest()
-	base.RegionId = "cn-hangzhou"
-	base.InstanceType = "ecs.g6.large"
-	base.ImageId = "m-test"
-	base.VSwitchId = "vsw-test"
-	base.SystemDiskCategory = "cloud_essd"
-	base.SystemDiskSize = "40"
-	base.SystemDiskPerformanceLevel = "PL0"
-	base.DataDisk = &[]ecs.RunInstancesDataDisk{
+	base := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	base.RegionId = tea.String("cn-hangzhou")
+	base.InstanceType = tea.String("ecs.g6.large")
+	base.ImageId = tea.String("m-test")
+	base.VSwitchId = tea.String("vsw-test")
+	base.SystemDisk.Category = tea.String("cloud_essd")
+	base.SystemDisk.Size = tea.String("40")
+	base.SystemDisk.PerformanceLevel = tea.String("PL0")
+	base.DataDisk = []*ecs.RunInstancesRequestDataDisk{
 		{
-			Category:           "cloud_essd",
-			Size:               "120",
-			PerformanceLevel:   "PL1",
-			Encrypted:          "true",
-			KMSKeyId:           "kms-1",
-			SnapshotId:         "s-1",
-			Device:             "/dev/xvdb",
-			DeleteWithInstance: "false",
+			Category:           tea.String("cloud_essd"),
+			Size:               tea.Int32(120),
+			PerformanceLevel:   tea.String("PL1"),
+			Encrypted:          tea.String("true"),
+			KMSKeyId:           tea.String("kms-1"),
+			SnapshotId:         tea.String("s-1"),
+			Device:             tea.String("/dev/xvdb"),
+			DeleteWithInstance: tea.Bool(false),
 		},
 	}
 
-	changed := ecs.CreateRunInstancesRequest()
+	changed := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
 	*changed = *base
-	changed.DataDisk = &[]ecs.RunInstancesDataDisk{
+	changed.DataDisk = []*ecs.RunInstancesRequestDataDisk{
 		{
-			Category:           "cloud_essd",
-			Size:               "120",
-			PerformanceLevel:   "PL1",
-			Encrypted:          "true",
-			KMSKeyId:           "kms-2",
-			SnapshotId:         "s-1",
-			Device:             "/dev/xvdb",
-			DeleteWithInstance: "false",
+			Category:           tea.String("cloud_essd"),
+			Size:               tea.Int32(120),
+			PerformanceLevel:   tea.String("PL1"),
+			Encrypted:          tea.String("true"),
+			KMSKeyId:           tea.String("kms-2"),
+			SnapshotId:         tea.String("s-1"),
+			Device:             tea.String("/dev/xvdb"),
+			DeleteWithInstance: tea.Bool(false),
 		},
 	}
 
@@ -298,17 +296,19 @@ func TestComputeRunInstancesBatchKeyDiskOptions(t *testing.T) {
 }
 
 func TestComputeRunInstancesBatchKeyESSDPL0DefaultEquivalence(t *testing.T) {
-	implicit := ecs.CreateRunInstancesRequest()
-	implicit.RegionId = "cn-hangzhou"
-	implicit.InstanceType = "ecs.g6.large"
-	implicit.ImageId = "m-test"
-	implicit.VSwitchId = "vsw-test"
-	implicit.SystemDiskCategory = "cloud_essd"
-	implicit.SystemDiskSize = "40"
+	implicit := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	implicit.RegionId = tea.String("cn-hangzhou")
+	implicit.InstanceType = tea.String("ecs.g6.large")
+	implicit.ImageId = tea.String("m-test")
+	implicit.VSwitchId = tea.String("vsw-test")
+	implicit.SystemDisk.Category = tea.String("cloud_essd")
+	implicit.SystemDisk.Size = tea.String("40")
 
-	explicit := ecs.CreateRunInstancesRequest()
+	explicit := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
 	*explicit = *implicit
-	explicit.SystemDiskPerformanceLevel = "PL0"
+	disk := *implicit.SystemDisk
+	explicit.SystemDisk = &disk
+	explicit.SystemDisk.PerformanceLevel = tea.String("PL0")
 
 	if ComputeRunInstancesBatchKey(implicit) != ComputeRunInstancesBatchKey(explicit) {
 		t.Fatal("expected implicit and explicit ESSD PL0 to produce the same batch key")
@@ -319,19 +319,14 @@ func TestComputeRunInstancesBatchKeyESSDPL0DefaultEquivalence(t *testing.T) {
 func TestInstanceBatcherCreateInstance(t *testing.T) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
-			amount, err := req.Amount.GetValue()
-			if err != nil {
-				return nil, err
-			}
+			amount := int(tea.Int32Value(req.Amount))
 			instanceIDs := make([]string, amount)
 			for i := 0; i < amount; i++ {
 				instanceIDs[i] = fmt.Sprintf("i-batch-%d", i)
 			}
 
 			return &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: instanceIDs,
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice(instanceIDs)}},
 			}, nil
 		},
 	}
@@ -340,12 +335,12 @@ func TestInstanceBatcherCreateInstance(t *testing.T) {
 	defer batcher.Close()
 
 	// Create a single instance
-	req := ecs.CreateRunInstancesRequest()
-	req.RegionId = "cn-hangzhou"
-	req.InstanceType = "ecs.g6.large"
-	req.ImageId = "m-test"
-	req.VSwitchId = "vsw-test"
-	req.Amount = requests.NewInteger(1)
+	req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+	req.RegionId = tea.String("cn-hangzhou")
+	req.InstanceType = tea.String("ecs.g6.large")
+	req.ImageId = tea.String("m-test")
+	req.VSwitchId = tea.String("vsw-test")
+	req.Amount = tea.Int32(1)
 
 	ctx := context.Background()
 	result, err := batcher.CreateInstance(ctx, req)
@@ -367,19 +362,14 @@ func TestInstanceBatcherCreateInstance(t *testing.T) {
 func TestInstanceBatcherConcurrent(t *testing.T) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
-			amount, err := req.Amount.GetValue()
-			if err != nil {
-				return nil, err
-			}
+			amount := int(tea.Int32Value(req.Amount))
 			instanceIDs := make([]string, amount)
 			for i := 0; i < amount; i++ {
 				instanceIDs[i] = fmt.Sprintf("i-concurrent-%d-%d", time.Now().UnixNano(), i)
 			}
 
 			return &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: instanceIDs,
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice(instanceIDs)}},
 			}, nil
 		},
 	}
@@ -399,12 +389,12 @@ func TestInstanceBatcherConcurrent(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			req := ecs.CreateRunInstancesRequest()
-			req.RegionId = "cn-hangzhou"
-			req.InstanceType = "ecs.g6.large"
-			req.ImageId = "m-test"
-			req.VSwitchId = "vsw-test"
-			req.Amount = requests.NewInteger(1)
+			req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+			req.RegionId = tea.String("cn-hangzhou")
+			req.InstanceType = tea.String("ecs.g6.large")
+			req.ImageId = tea.String("m-test")
+			req.VSwitchId = tea.String("vsw-test")
+			req.Amount = tea.Int32(1)
 
 			ctx := context.Background()
 			result, err := batcher.CreateInstance(ctx, req)
@@ -448,9 +438,7 @@ func TestInstanceBatcherStats(t *testing.T) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
 			return &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: []string{"i-stats"},
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice([]string{"i-stats"})}},
 			}, nil
 		},
 	}
@@ -476,18 +464,13 @@ func TestInstanceBatcherStats(t *testing.T) {
 func BenchmarkInstanceBatcher(b *testing.B) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
-			amount, err := req.Amount.GetValue()
-			if err != nil {
-				return nil, err
-			}
+			amount := int(tea.Int32Value(req.Amount))
 			instanceIDs := make([]string, amount)
 			for i := 0; i < amount; i++ {
 				instanceIDs[i] = fmt.Sprintf("i-bench-%d", i)
 			}
 			return &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: instanceIDs,
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice(instanceIDs)}},
 			}, nil
 		},
 	}
@@ -498,12 +481,12 @@ func BenchmarkInstanceBatcher(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			req := ecs.CreateRunInstancesRequest()
-			req.RegionId = "cn-hangzhou"
-			req.InstanceType = "ecs.g6.large"
-			req.ImageId = "m-test"
-			req.VSwitchId = "vsw-test"
-			req.Amount = requests.NewInteger(1)
+			req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
+			req.RegionId = tea.String("cn-hangzhou")
+			req.InstanceType = tea.String("ecs.g6.large")
+			req.ImageId = tea.String("m-test")
+			req.VSwitchId = tea.String("vsw-test")
+			req.Amount = tea.Int32(1)
 
 			ctx := context.Background()
 			_, _ = batcher.CreateInstance(ctx, req)
@@ -516,10 +499,7 @@ func TestRunInstancesExecutorInsufficientInstances(t *testing.T) {
 	mockClient := &mockECSClient{
 		runInstancesFunc: func(req *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
 			// Return fewer instances than requested
-			amount, err := req.Amount.GetValue()
-			if err != nil {
-				return nil, err
-			}
+			amount := int(tea.Int32Value(req.Amount))
 			actualInstances := amount - 3 // Return 3 fewer instances
 			if actualInstances < 0 {
 				actualInstances = 0
@@ -531,9 +511,7 @@ func TestRunInstancesExecutorInsufficientInstances(t *testing.T) {
 			}
 
 			return &ecs.RunInstancesResponse{
-				InstanceIdSets: ecs.InstanceIdSets{
-					InstanceIdSet: instanceIDs,
-				},
+				Body: &ecs.RunInstancesResponseBody{InstanceIdSets: &ecs.RunInstancesResponseBodyInstanceIdSets{InstanceIdSet: tea.StringSlice(instanceIDs)}},
 			}, nil
 		},
 	}
@@ -549,7 +527,7 @@ func TestRunInstancesExecutorInsufficientInstances(t *testing.T) {
 	resultChs := make([]chan *BatchResult, batchSize)
 
 	for i := 0; i < batchSize; i++ {
-		req := ecs.CreateRunInstancesRequest()
+		req := &ecs.RunInstancesRequest{SystemDisk: &ecs.RunInstancesRequestSystemDisk{}}
 		resultCh := make(chan *BatchResult, 1)
 		resultChs[i] = resultCh
 

@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/builder"

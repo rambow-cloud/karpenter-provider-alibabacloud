@@ -3,13 +3,15 @@ module github.com/AliyunContainerService/karpenter-provider-alibabacloud
 go 1.26.9
 
 require (
+	github.com/alibabacloud-go/alb-20200616/v2 v2.3.2
 	github.com/alibabacloud-go/cs-20151215/v5 v5.9.8
-	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.14
+	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.1
 	github.com/alibabacloud-go/ecs-20140526/v5 v5.1.0
+	github.com/alibabacloud-go/nlb-20220430/v4 v4.1.3
 	github.com/alibabacloud-go/ram-20150501/v2 v2.2.0
-	github.com/alibabacloud-go/tea v1.3.13
+	github.com/alibabacloud-go/slb-20140515/v4 v4.0.14
+	github.com/alibabacloud-go/tea v1.5.0
 	github.com/alibabacloud-go/vpc-20160428/v7 v7.0.0
-	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
 	github.com/aliyun/credentials-go v1.4.5
 	github.com/aws/karpenter-provider-aws v1.14.1
 	github.com/awslabs/operatorpkg v0.0.0-20260708223819-4da4c353c5fa
@@ -39,7 +41,7 @@ require (
 	github.com/alibabacloud-go/debug v1.0.1 // indirect
 	github.com/alibabacloud-go/endpoint-util v1.1.0 // indirect
 	github.com/alibabacloud-go/openapi-util v0.1.1 // indirect
-	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.9 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/aws/amazon-vpc-resource-controller-k8s v1.7.23 // indirect
@@ -80,7 +82,6 @@ require (
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
@@ -89,7 +90,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
-	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -121,7 +121,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
 	k8s.io/apiserver v0.35.0 // indirect
@@ -152,7 +151,6 @@ replace (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.34.0 => go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0
 	go.opentelemetry.io/otel/sdk v1.36.0 => go.opentelemetry.io/otel/sdk v1.45.0
 	go.opentelemetry.io/otel/sdk v1.44.0 => go.opentelemetry.io/otel/sdk v1.45.0
-	golang.org/x/image v0.0.0-20190802002840-cff245a6509b => golang.org/x/image v0.45.0
 	google.golang.org/grpc v1.72.2 => google.golang.org/grpc v1.83.2
 	google.golang.org/grpc v1.79.3 => google.golang.org/grpc v1.83.2
 )

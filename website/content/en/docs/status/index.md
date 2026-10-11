@@ -13,7 +13,8 @@ Offline CI and KWOK regression have completed their relevant checks. **Real ACK 
 | Karpenter v1.14.1 | Migration merged; real ACK version acceptance pending | [Version milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
 | Kubernetes 1.34+ | Target support policy; version boundary enforcement is still planned | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
 | Provider lifecycle and scheduling | Ownership fixes merged; resource accounting, recovery, images, and other fixes remain | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
-| Dependency security | Go CVE upgrades and rescans complete; two unimported-package advisories documented; container OS scan pending | [Security audit](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SECURITY_AUDIT.md) |
+| Dependency security | Go CVE rescans pass; legacy SDK/PDF chain removed; unused OpenPGP advisory remains; container OS scan pending | [SDK migration and audit](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
+| Alibaba Cloud SDK V2.0 | Remaining ECS batcher and load-balancer helpers migrated; selected modules 314 → 294; real cloud acceptance pending | [SDK migration milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/8) |
 | Minimal ACK/ECS E2E | A one-NodePool, one-Pod, target-one-ECS acceptance entry is being planned | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
 | Spot interruption | A separately planned feature; Spot creation does not establish interruption handling | [Spot milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/5) |
 

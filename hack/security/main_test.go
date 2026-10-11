@@ -18,6 +18,8 @@ func TestSecurityFloorsUseEffectiveReplacement(t *testing.T) {
 		{"prerelease before fix rejected", `{"Path":"golang.org/x/net","Version":"v0.60.0-rc.1"}`, true},
 		{"newer fixed version accepted", `{"Path":"golang.org/x/net","Version":"v0.61.0"}`, false},
 		{"removed tracked modules allowed", `{"Path":"example.com/unrelated","Version":"v1.0.0"}`, false},
+		{"legacy SDK rejected", `{"Path":"github.com/aliyun/alibaba-cloud-sdk-go","Version":"v1.63.107"}`, true},
+		{"legacy PDF dependency rejected", `{"Path":"rsc.io/pdf","Version":"v0.1.1"}`, true},
 		{"empty list rejected", ``, true},
 		{"broken list rejected", `{`, true},
 	} {
