@@ -19,34 +19,52 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
+      - id: changes
+        name: Determine validation scope
+        run: python .github/scripts/ci_changes.py
+      - name: Check change routing
+        run: python -m unittest discover -s .github/scripts -p 'test_ci_changes.py'
+      - name: Check GitHub workflow syntax without Go
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="${RUNNER_TEMP}/actionlint"
+          mkdir -p "${tool_dir}"
+          archive="${tool_dir}/actionlint.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "${archive}"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  ${archive}" | sha256sum --check -
+          tar -xzf "${archive}" -C "${tool_dir}" actionlint
+          "${tool_dir}/actionlint" -shellcheck=""
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        if: steps.changes.outputs.run_go == 'true'
         with:
           go-version-file: go.mod
           cache: true
       - name: Install Helm
+        if: steps.changes.outputs.run_go == 'true'
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
         with:
           version: v3.19.0
-      - name: Check GitHub workflow syntax
-        shell: bash
-        run: |
-          set -euo pipefail
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          actionlint -shellcheck=""
       - name: Set up Linux envtest
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
           make envtest-setup
           echo "KUBEBUILDER_ASSETS=$(bin/setup-envtest use 1.35.0 -p path)" >> "$GITHUB_ENV"
       - name: Unit and controller contract tests
+        if: steps.changes.outputs.run_go == 'true'
         run: go test -p 2 ./pkg/... ./hack/... ./test/hack/... ./test/pkg/...
       - name: Controller contracts on minimum Kubernetes 1.34
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
           KUBEBUILDER_ASSETS="$(bin/setup-envtest use 1.34.0 -p path)" go test -p 2 ./pkg/controllers/...
       - name: Vet and build controller
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -65,8 +83,10 @@ jobs:
             fi
           done
       - name: Compile cloud E2E harness without running it
+        if: steps.changes.outputs.run_go == 'true'
         run: go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
       - name: Check Helm and pinned deployment artifacts
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -75,19 +95,24 @@ jobs:
           make manifests
           git diff --exit-code -- charts/karpenter/crds pkg/apis/crds
       - name: Check formatting and dependency files
+        if: steps.changes.outputs.run_go == 'true'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          COMPARE_RANGE: ${{ steps.changes.outputs.diff_range }}
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(git diff --name-only --diff-filter=ACM "$BASE_SHA" "$HEAD_SHA" -- '*.go')
+          if [[ -n "${COMPARE_RANGE}" ]]; then
+            mapfile -d '' -t files < <(git diff --name-only -z --no-renames --diff-filter=ACM "${COMPARE_RANGE}" -- '*.go')
+          else
+            mapfile -d '' -t files < <(git ls-files -z -- '*.go')
+          fi
           if (( ${#files[@]} )); then
             test -z "$(gofmt -l "${files[@]}")"
           fi
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - name: Check Go vulnerabilities in source and Linux binaries
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         env:
           GOMEMLIMIT: 2GiB
@@ -103,7 +128,7 @@ jobs:
             govulncheck -mode=binary "$binary" 2>&1 | tee ".e2e/security/$(basename "$binary").txt"
           done
       - name: Upload Go security scan reports
-        if: always()
+        if: always() && steps.changes.outputs.run_go == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: go-security-reports
