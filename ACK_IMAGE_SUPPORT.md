@@ -68,4 +68,4 @@ ACK bootstrap 在每次读取脚本缓存前查询当前集群上下文，按 cl
 
 ## 取证
 
-2026-10-11 本机 OAuth profile 的 cn-hangzhou 只读 API 查询显示，ACK 1.34.10-aliyun.1 的 Linux 3 容器优化镜像为 `20260720`，ECS family 则返回 `20260828`；Ubuntu 也存在类似差异。该证据证明需要 ACK 兼容清单，不能证明创建和加入节点已成功。Issue #47/#48/#49 记录修复；ShowExpired 的订阅/过期镜像调查仍留在 #29。
+2026-10-11 本机 OAuth profile 的 cn-hangzhou 只读 API 查询显示，ACK 1.34.10-aliyun.1 的 Linux 3 容器优化镜像为 `20260720`，ECS family 则返回 `20260828`；Ubuntu 也存在类似差异。该证据证明需要 ACK 兼容清单，不能证明创建和加入节点已成功。Issue #47/#48/#49 记录修复；ShowExpired 的查询策略及证据范围见 [镜像查询策略](PROVIDER_BEHAVIOR.md#镜像查询策略)。

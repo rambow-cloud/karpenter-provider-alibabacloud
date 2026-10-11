@@ -32,4 +32,14 @@ ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用�
 
 ackctl 按发现到的 worker **精确 ImageId** 查询，公有 `.vhd`/`.qcow2`、自定义 `m-*` 和共享镜像一律使用 ID。通过 worker 的实例规格查询实际架构，确认镜像架构一致，并要求 Linux 和 Available。缺少镜像、未知架构、架构不匹配或 API 错误时返回诊断，禁止静默切换名称或默认 x64 family。
 
-查询复用生产 ECS adapter 的分页、context 取消及 `ShowExpired=true` 策略，保留 #29 已验证的 Lifsea 精确 pin 查询行为。发现镜像不等于完成 ACK 启动兼容认证；生产 provider 仍执行 [ACK 镜像兼容校验](ACK_IMAGE_SUPPORT.md)。该发现路径供 #23 最小 smoke 入口使用；真实 ACK 生命周期验证仍按 #5/#23 保留为发布验收项。
+查询复用生产 ECS adapter 的分页、context 取消及精确 ID 的 `ShowExpired=true` 策略，保留 #29 已验证的 Lifsea 精确 pin 查询行为。发现镜像不等于完成 ACK 启动兼容认证；生产 provider 仍执行 [ACK 镜像兼容校验](ACK_IMAGE_SUPPORT.md)。该发现路径供 #23 最小 smoke 入口使用；真实 ACK 生命周期验证仍按 #5/#23 保留为发布验收项。
+
+## 镜像查询策略
+
+family、名称和标签查询使用 `ShowExpired=false`，避免自动发现扩展到过期订阅镜像。用户精确指定 ImageId 或 ACK 兼容清单指定 ID 时使用 `ShowExpired=true` 保留可见性；该开关只决定发现范围，不授权启动。所有请求都附带 `Status=Available`、`Usable=true`，并再次检查响应的状态和可用性；缺少这些字段的镜像不参与选择。marketplace 镜像还要求 `IsSubscribed=true`，否则不代替用户接受服务条款；私有和共享镜像不使用此项限制。`IsSubscribed` 表示条款接受状态，不等同于使用期限未过期或没有费用。
+
+SDK v5.1.0 的生成模型缺少 `Usable` 请求及响应字段。adapter 通过同一个 SDK 的签名 RPC transport 查询，并在本地扩展响应模型保留字段；没有引入另一套凭据或 HTTP 客户端。查询失败、缺少 TotalCount 或中途空页会返回错误，不能缓存为完整成功结果。原有分页、取消和 HTTP 超时保持有效。
+
+2026-10-11 的真实只读查询证据来自 cn-hangzhou 的一个 OAuth profile：`lifsea_3_x64_5G_alibase_20260519.qcow2` 在省略/false 时返回 0，true 时返回 1，且额外过滤 Available/Usable 仍返回 1；`aliyun_3_x64_20G_container_optimized_alibase_20260828.vhd` 三种设置均返回 1。Lifsea family `acs:lifsea_os_3_x64` 三种设置均返回 0，因此不能用 family 替代该精确 pin。成功 Lifsea Available/Usable 查询 RequestId 为 `01A129B7-C202-58FC-B7FC-1714ACCF8FFE`；完整脱敏记录见 [issue #29](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/29)。
+
+上述证据不代表所有 ContainerOS、区域或账号的行为。该 profile 未取得已订阅、已过期或 Usable=false 的真实镜像样本；这些过滤分支使用本地 SDK HTTP 响应测试，不能称为云端实测。真实订阅期限与运行权限仍须在目标账号核实，节点启动与加入 ACK 仍由 #5/#23 验收。官方字段定义见 [DescribeImages](https://www.alibabacloud.com/help/en/ecs/developer-reference/api-ecs-2014-05-26-describeimages)。
