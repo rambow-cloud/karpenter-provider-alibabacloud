@@ -72,6 +72,10 @@ Resolve CRD field ownership conflicts deliberately if server-side apply reports 
 
 ## Rollback
 
+Before applying the current provider CRD, check existing image selectors against [ECSNodeClass readiness and image selection](ECSNODECLASS_VALIDATION.md). Admission now rejects empty terms/tags, conflicting IDs, invalid aliases and unsupported owner combinations. Specify `imageOwnerAlias: others` with `imageOwnerID` only for shared images; remove owner filters from `self`, `system` or `marketplace` queries. Existing NodeClasses must reconcile their current generation before new provisioning resumes. Running nodes are unaffected by this readiness gate.
+
+升级前请检查镜像 selector：`imageOwnerID` 必须显式配合 `imageOwnerAlias: others`，空 term、空标签值和 ID 混用条件需修正。先应用对应 CRD，再部署控制器；旧 NodeClass 需解析当前 generation 后才能继续扩容。详细规则见上面的文档。
+
 Retain the previous controller image, chart, Helm values, and exported resource/CRD schemas. Before restoring the previous controller, disable new optional features and reconcile resources that use fields the old version cannot interpret. Rolling back the controller alone does not roll back CRD schemas. Revert the provider feature-gate configuration to the old flag/value layout when restoring 0.2.5.
 
 Do not delete CRDs to perform a rollback: deleting a CRD deletes its custom resources. Restore schemas only after checking stored objects for newly introduced fields and validating the downgrade against the upstream guide. Avoid enabling new APIs in the first rollout until the rollback path is confirmed.

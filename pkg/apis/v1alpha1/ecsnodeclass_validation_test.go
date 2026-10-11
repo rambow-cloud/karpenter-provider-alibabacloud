@@ -479,7 +479,7 @@ func TestECSNodeClassValidateSelectorSemantics(t *testing.T) {
 		{
 			name: "accepts image family with owner ID",
 			mut: func(nodeClass *ECSNodeClass) {
-				nodeClass.Spec.ImageSelectorTerms = []ImageSelectorTerm{{ImageFamily: ptrForUnit("aliyun_3"), ImageOwnerID: ptrForUnit("1234567890123456")}}
+				nodeClass.Spec.ImageSelectorTerms = []ImageSelectorTerm{{ImageFamily: ptrForUnit("aliyun_3"), ImageOwnerAlias: ptrForUnit("others"), ImageOwnerID: ptrForUnit("1234567890123456")}}
 			},
 		},
 	}

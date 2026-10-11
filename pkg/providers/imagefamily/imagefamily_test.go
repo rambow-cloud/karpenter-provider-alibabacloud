@@ -19,6 +19,7 @@ package imagefamily
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
@@ -114,7 +115,7 @@ func TestResolve(t *testing.T) {
 		{
 			name:          "empty selector terms",
 			selectorTerms: []v1alpha1.ImageSelectorTerm{},
-			expected:      []v1alpha1.Image{},
+			expectError:   true,
 		},
 		{
 			name: "resolve by ID",
@@ -190,7 +191,7 @@ func TestResolveMapsAllImageSelectorsAndSortsDeduplicatedResults(t *testing.T) {
 
 	mockClient.On("DescribeImages", mock.Anything, []string(nil), map[string]string{
 		"ImageName":       "app-*",
-		"ImageOwnerAlias": "self",
+		"ImageOwnerAlias": "others",
 		"ImageOwnerID":    "1234567890123456",
 		"tag:env":         "prod",
 	}).Return([]ecs.DescribeImagesResponseBodyImagesImage{
@@ -204,7 +205,7 @@ func TestResolveMapsAllImageSelectorsAndSortsDeduplicatedResults(t *testing.T) {
 
 	provider := NewProvider(mockClient)
 	result, err := provider.Resolve(context.Background(), []v1alpha1.ImageSelectorTerm{
-		{Name: stringPtr("app-*"), ImageOwnerAlias: stringPtr("self"), ImageOwnerID: stringPtr("1234567890123456"), Tags: map[string]string{"env": "prod"}},
+		{Name: stringPtr("app-*"), ImageOwnerAlias: stringPtr("others"), ImageOwnerID: stringPtr("1234567890123456"), Tags: map[string]string{"env": "prod"}},
 		{ImageFamily: stringPtr("aliyun_3")},
 	})
 
@@ -228,4 +229,27 @@ func TestResolveRejectsInvalidImageOwnerIDBeforeRequest(t *testing.T) {
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestResolveRejectsInvalidWholeSelectorBeforeAnyRequest(t *testing.T) {
+	for name, terms := range map[string][]v1alpha1.ImageSelectorTerm{
+		"empty":               {{}},
+		"empty tag":           {{Tags: map[string]string{"env": ""}}},
+		"invalid alias":       {{ImageOwnerAlias: stringPtr("public")}},
+		"mixed ID":            {{ID: stringPtr("m-test"), ImageFamily: stringPtr("app")}},
+		"owner without alias": {{Name: stringPtr("app"), ImageOwnerID: stringPtr("123456")}},
+		"owner on self":       {{ImageOwnerAlias: stringPtr("self"), ImageOwnerID: stringPtr("123456")}},
+		"overflow":            {{ImageOwnerAlias: stringPtr("others"), ImageOwnerID: stringPtr("9223372036854775808")}},
+		"later invalid":       {{ID: stringPtr("m-valid")}, {}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mockClient := new(MockECSClient)
+			provider := NewProvider(mockClient)
+			// Even a legacy cache entry cannot bypass validation.
+			provider.setCachedValue(fmt.Sprintf("images-%v", terms), []v1alpha1.Image{{ID: "m-legacy"}})
+			_, err := provider.Resolve(context.Background(), terms)
+			assert.Error(t, err)
+			mockClient.AssertNotCalled(t, "DescribeImages", mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
 }

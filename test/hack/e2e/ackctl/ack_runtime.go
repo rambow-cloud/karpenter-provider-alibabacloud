@@ -508,6 +508,9 @@ func isClusterNotFound(err error) bool {
 		strings.Contains(msg, "does not exist")
 }
 
+// OpenAPI/Tea connection timeouts are in milliseconds, not seconds.
+const ackConnectTimeoutMilliseconds = 30_000
+
 func newCSClient(cfg *Config) (*cs.Client, error) {
 	if cfg.AlibabaCloud.AccessKeyID == "" || cfg.AlibabaCloud.AccessKeySecret == "" {
 		return nil, fmt.Errorf("AlibabaCloud access key credentials are required")
@@ -516,7 +519,7 @@ func newCSClient(cfg *Config) (*cs.Client, error) {
 		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
 		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
 		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(30),
+		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
 		MaxIdleConns:    tea.Int(100),
 	})
 	if err != nil {
@@ -533,7 +536,7 @@ func newECSClient(cfg *Config) (*ecs.Client, error) {
 		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
 		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
 		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(30),
+		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
 		MaxIdleConns:    tea.Int(100),
 	})
 	if err != nil {
@@ -550,7 +553,7 @@ func newVPCClient(cfg *Config) (*vpc.Client, error) {
 		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
 		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
 		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(30),
+		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
 		MaxIdleConns:    tea.Int(100),
 	})
 	if err != nil {

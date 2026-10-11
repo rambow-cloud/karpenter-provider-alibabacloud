@@ -179,30 +179,46 @@ type SecurityGroupSelectorTerm struct {
 // ImageSelectorTerm defines selection logic for Image
 // +kubebuilder:object:generate=true
 // +kubebuilder:object:root=false
+// +kubebuilder:validation:XValidation:rule="has(self.id) || has(self.imageFamily) || has(self.imageOwnerAlias) || has(self.name) || (has(self.tags) && size(self.tags) > 0)",message="image selector must specify id, imageFamily, imageOwnerAlias, name, or non-empty tags"
+// +kubebuilder:validation:XValidation:rule="!has(self.id) || (!has(self.imageFamily) && !has(self.imageOwnerAlias) && !has(self.imageOwnerID) && !has(self.name) && (!has(self.tags) || size(self.tags) == 0))",message="id is mutually exclusive with other image selectors"
+// +kubebuilder:validation:XValidation:rule="!has(self.imageOwnerID) || (has(self.imageOwnerAlias) && self.imageOwnerAlias == 'others')",message="imageOwnerID requires imageOwnerAlias=others (shared images)"
 type ImageSelectorTerm struct {
 	// Alias is the image alias (system, self, others, marketplace)
 	// +optional
+	// +kubebuilder:validation:Enum=system;self;others;marketplace
 	ImageOwnerAlias *string `json:"imageOwnerAlias,omitempty"`
 
 	// Tags is a map of tags to match
 	// +optional
 	// +kubebuilder:validation:MaxProperties=20
+	// +kubebuilder:validation:XValidation:rule="self.all(k, size(k) > 0 && size(self[k]) > 0)",message="image tag keys and values must be non-empty"
 	Tags map[string]string `json:"tags,omitempty"`
 
 	// ID is the image ID
 	// +optional
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^(m-[A-Za-z0-9._:-]{1,126}|[A-Za-z0-9][A-Za-z0-9._:-]{0,126}\.(vhd|qcow2))$`
 	ID *string `json:"id,omitempty"`
 
 	// Name is the image name pattern
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:XValidation:rule="self.matches('[^[:space:]]')",message="image name must contain a non-whitespace character"
 	Name *string `json:"name,omitempty"`
 
-	// Owner is the image owner
+	// Owner is the account owning a shared image; requires ImageOwnerAlias=others
 	// +optional
+	// +kubebuilder:validation:MaxLength=19
+	// +kubebuilder:validation:Pattern=`^[1-9][0-9]{5,18}$`
+	// +kubebuilder:validation:XValidation:rule="size(self) < 19 || self <= '9223372036854775807'",message="imageOwnerID must fit a positive int64"
 	ImageOwnerID *string `json:"imageOwnerID,omitempty"`
 
 	// Family is the image family (e.g. acs:alibaba_cloud_linux_3_2104_lts_x64)
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:XValidation:rule="self.matches('[^[:space:]]')",message="image family must contain a non-whitespace character"
 	ImageFamily *string `json:"imageFamily,omitempty"`
 }
 
