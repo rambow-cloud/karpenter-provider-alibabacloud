@@ -32,18 +32,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.suite == 'regression' && 240 || inputs.suite == 'performance' && 240 || 30 }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: changes
         name: Determine validation scope
         run: python .github/scripts/ci_changes.py
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: steps.changes.outputs.run_go == 'true'
         with:
           go-version-file: go.mod
           cache: false
-      - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         if: steps.changes.outputs.run_go == 'true'
         with:
           version: v0.30.0
@@ -88,7 +88,7 @@ jobs:
         run: bash test/hack/kwok/report.sh
       - name: Upload KWOK report
         if: always() && steps.changes.outputs.run_go == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-kwok-report
           path: .e2e/kwok
