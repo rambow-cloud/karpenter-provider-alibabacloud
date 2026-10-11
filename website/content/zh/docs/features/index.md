@@ -20,7 +20,7 @@ description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNod
 
 ## 实现与验收的边界
 
-当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；真实 ACK/ECS 生命周期、版本迁移以及升级/回滚验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。镜像解析、失败恢复、资源计算等已知问题继续在 provider milestone 中推进。
+当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；全新部署的真实 ACK/ECS 生命周期验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。镜像解析、失败恢复、资源计算等已知问题继续在 provider milestone 中推进。
 
 Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功能**，见 [Issue #20](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/20)。不能将实例创建支持视为完整的中断通知、排空与替换支持。
 
@@ -42,7 +42,7 @@ Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功�
 
 ### 现在可以直接用于生产吗？
 
-当前 chart 是 **0.3.0-dev 开发候选版本**，真实 ACK 验收及升级/回滚证据待完成。先阅读 [上手指南](../participate/index.md)、[UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) 与 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5)，使用匹配源码的自建 controller 镜像在隔离环境中验证。
+当前 chart 是 **0.3.0-dev 开发候选版本**，全新部署的真实 ACK 验收证据待完成。先阅读 [上手指南](../participate/index.md)、[UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) 与 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5)，使用匹配源码的自建 controller 镜像在隔离环境中验证。
 
 ### 如何参与维护？
 
@@ -54,4 +54,4 @@ Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功�
 
 当前 provider 只支持 Linux，拒绝 Windows 和未知 OS。ContainerOS 需要恰好一块显式持久数据盘，暂不支持通过 LaunchTemplate 使用 ContainerOS。自定义/共享镜像需要显式 `imageCompatibilityPolicy: Custom` 和精确 ID，基础 OS、runtime、GPU 驱动及启动兼容性由用户验证。
 
-升级时新增 RAM 只读权限 `cs:DescribeKubernetesVersionMetadata` 并同步更新 CRD。[完整支持边界与配置示例](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)。只读 API 测试不代表真实 ACK 节点生命周期已验收。
+部署时配置 RAM 只读权限 `cs:DescribeKubernetesVersionMetadata` 并安装匹配的 CRD。[完整支持边界与配置示例](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)。只读 API 测试不代表真实 ACK 节点生命周期已验收。

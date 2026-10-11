@@ -12,7 +12,7 @@ List commands and results. Distinguish passed checks from checks requiring an AC
 
 ## Compatibility and rollout
 
-Describe API/CRD/RBAC/feature-gate changes, migration steps, and rollback limits. Write "None" when applicable.
+Describe API/CRD/RBAC/feature-gate changes and fresh-install configuration. Current scope is a fresh provider installation; old-provider migration and rollback are not required. Write "None" when applicable.
 
 ## Checklist
 

@@ -92,7 +92,7 @@ Alibaba Cloud SDK V2.0, CGO-disabled builds and Go vulnerability checks, with de
 
 </div>
 
-These describe current code capabilities and engineering direction. **Chart 0.3.0-dev remains a development candidate. Real ACK/ECS lifecycle and upgrade/rollback acceptance are pending; Spot interruption handling is planned.** [Review features and validation boundaries →](docs/features/index.md)
+These describe current code capabilities and engineering direction. **Chart 0.3.0-dev remains a development candidate. Fresh-install ACK/ECS lifecycle acceptance are pending; Spot interruption handling is planned.** [Review features and validation boundaries →](docs/features/index.md)
 
 ## Why we keep maintaining it
 

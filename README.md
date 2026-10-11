@@ -13,9 +13,9 @@
 
 Alibaba Cloud Karpenter Provider 是一个为 [Karpenter](https://github.com/aws/karpenter) 项目提供的阿里云实现，用于在阿里云上自动管理 Kubernetes 节点。
 
-开发分支已将 Karpenter core 和 AWS 测试依赖固定为 **v1.14.1**，构建需要 **Go 1.26.9**。Chart 为 **0.3.0-dev**，部署时必须指定从当前提交构建的镜像。升级方法、feature gates 参数迁移和待完成的 ACK 发布验收见 [UPGRADING.md](UPGRADING.md)。
+开发分支已将 Karpenter core 和 AWS 测试依赖固定为 **v1.14.1**，构建需要 **Go 1.26.9**。Chart 为 **0.3.0-dev**，部署时必须指定从当前提交构建的镜像。全新安装、feature gates 配置和待完成的 ACK 发布验收见 [UPGRADING.md](UPGRADING.md)。
 
-最低受支持版本为 **Kubernetes 1.34**，**1.33 及更早版本不受支持**。请先升级集群，再安装本候选版本。最低支持要求与实测版本分别记录；Helm/离线检查不代表真实 ACK 兼容性验收。详见 [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md)。
+最低受支持版本为 **Kubernetes 1.34**，**1.33 及更早版本不受支持**。请选择符合版本要求的集群安装本候选版本。最低支持要求与实测版本分别记录；Helm/离线检查不代表真实 ACK 兼容性验收。详见 [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md)。
 
 ## 功能特性
 
@@ -255,9 +255,9 @@ make run
 
 Alibaba Cloud Karpenter Provider is an Alibaba Cloud implementation of the [Karpenter](https://github.com/aws/karpenter) project. It automatically manages Kubernetes nodes on Alibaba Cloud.
 
-The development branch pins Karpenter core and the AWS test harness to **v1.14.1** and requires **Go 1.26.9**. The chart is **0.3.0-dev**; deploy an image built from the matching commit. See [UPGRADING.md](UPGRADING.md) for migration and the pending ACK release gate.
+The development branch pins Karpenter core and the AWS test harness to **v1.14.1** and requires **Go 1.26.9**. The chart is **0.3.0-dev**; deploy an image built from the matching commit. See [UPGRADING.md](UPGRADING.md) for fresh-install configuration and the pending ACK release gate.
 
-The minimum supported version is **Kubernetes 1.34**; **1.33 and earlier are unsupported**. Upgrade the cluster before installing this candidate. Minimum requirements and tested versions are recorded separately; Helm/offline checks do not establish real ACK compatibility. See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md).
+The minimum supported version is **Kubernetes 1.34**; **1.33 and earlier are unsupported**. Select a cluster meeting the version requirement for this fresh installation. Minimum requirements and tested versions are recorded separately; Helm/offline checks do not establish real ACK compatibility. See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md).
 
 ### Features
 
@@ -489,6 +489,6 @@ This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE
 
 ## ACK 镜像兼容性 / ACK image compatibility
 
-ACK 公共镜像默认按目标集群区域、实际版本和 containerd 的兼容清单选择，而不是自动采用 ECS 最新镜像。本 provider 当前只支持 Linux；ContainerOS 需要恰好一块显式持久数据盘，暂不支持 ContainerOS + LaunchTemplate。自定义/共享镜像需要 `imageCompatibilityPolicy: Custom` 和精确 ID，由用户验证基础 OS、runtime、架构和启动兼容性。参见 [镜像支持与升级说明](ACK_IMAGE_SUPPORT.md)。
+ACK 公共镜像默认按目标集群区域、实际版本和 containerd 的兼容清单选择，而不是自动采用 ECS 最新镜像。本 provider 当前只支持 Linux；ContainerOS 需要恰好一块显式持久数据盘，暂不支持 ContainerOS + LaunchTemplate。自定义/共享镜像需要 `imageCompatibilityPolicy: Custom` 和精确 ID，由用户验证基础 OS、runtime、架构和启动兼容性。参见 [镜像支持与部署说明](ACK_IMAGE_SUPPORT.md)。
 
 ACK public images are selected from the target cluster's regional, version-specific containerd metadata, then verified through ECS. This provider supports Linux only. ContainerOS requires exactly one explicit persistent data disk; ContainerOS with a launch template is rejected. Custom/shared images require `imageCompatibilityPolicy: Custom` and exact IDs, with provenance/runtime/bootstrap compatibility verified by the user. Add the read-only RAM action `cs:DescribeKubernetesVersionMetadata` before upgrading. Image resolution and read-only API checks do not constitute real ACK lifecycle acceptance.

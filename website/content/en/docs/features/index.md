@@ -20,7 +20,7 @@ description: Explore Pod-driven ECS provisioning, NodePool, ECSNodeClass, on-dem
 
 ## Implementation and acceptance boundaries
 
-The baseline is **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**. The minimum-version checks and offline tests are delivered. Real ACK/ECS lifecycle, migration and upgrade/rollback acceptance remain tracked by [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5). Known image resolution, failure recovery and resource accounting issues remain in the provider milestone.
+The baseline is **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**. The minimum-version checks and offline tests are delivered. Fresh-install ACK/ECS lifecycle acceptance remain tracked by [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5). Known image resolution, failure recovery and resource accounting issues remain in the provider milestone.
 
 The Spot creation path exists. **Spot interruption handling is still planned**, under [Issue #20](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/20). Creating Spot instances does not establish interruption notification, draining or replacement support.
 
@@ -42,7 +42,7 @@ The project reuses Karpenter core and draws on the AWS provider's experience and
 
 ### Can I deploy it directly to production?
 
-The current chart is a **0.3.0-dev development candidate**. Real ACK acceptance and upgrade/rollback evidence remain pending. Read [getting started](../participate/index.md), [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) and [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5), then validate an image built from matching source in an isolated environment.
+The current chart is a **0.3.0-dev development candidate**. Fresh-install ACK acceptance evidence remain pending. Read [getting started](../participate/index.md), [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) and [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5), then validate an image built from matching source in an isolated environment.
 
 ### How can I contribute?
 
