@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
-	alb "github.com/alibabacloud-go/alb-20200616/v2/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
-	nlb "github.com/alibabacloud-go/nlb-20220430/v4/client"
 	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
 	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
@@ -143,14 +141,6 @@ func describeOwnedResources(ctx context.Context, cfg *Config, selectors []map[st
 	if err != nil {
 		return SweepReport{}, err
 	}
-	albClient, err := newALBClient(cfg)
-	if err != nil {
-		return SweepReport{}, err
-	}
-	nlbClient, err := newNLBClient(cfg)
-	if err != nil {
-		return SweepReport{}, err
-	}
 	var report SweepReport
 	for _, selector := range selectors {
 		if err := describeOwnedInstances(ecsClient, cfg, selector, &report); err != nil {
@@ -178,12 +168,6 @@ func describeOwnedResources(ctx context.Context, cfg *Config, selectors []map[st
 			return report, err
 		}
 		if err := describeOwnedSLBs(slbClient, cfg.AlibabaCloud.RegionID, selector, &report); err != nil {
-			return report, err
-		}
-		if err := describeOwnedALBs(albClient, selector, &report); err != nil {
-			return report, err
-		}
-		if err := describeOwnedNLBs(nlbClient, cfg.AlibabaCloud.RegionID, selector, &report); err != nil {
 			return report, err
 		}
 		if err := describeOwnedVSwitches(vpcClient, cfg, selector, &report); err != nil {
@@ -227,16 +211,8 @@ func deleteOwnedResources(ctx context.Context, cfg *Config, report SweepReport) 
 	if err != nil {
 		return err
 	}
-	albClient, err := newALBClient(cfg)
-	if err != nil {
-		return err
-	}
-	nlbClient, err := newNLBClient(cfg)
-	if err != nil {
-		return err
-	}
 	var deleteErrs []error
-	for _, resourceType := range []string{"ecs-instance", "slb", "alb", "nlb", "disk", "network-interface", "security-group", "launch-template", "capacity-reservation", "nat-gateway", "eip", "vswitch", "vpc"} {
+	for _, resourceType := range []string{"ecs-instance", "slb", "disk", "network-interface", "security-group", "launch-template", "capacity-reservation", "nat-gateway", "eip", "vswitch", "vpc"} {
 		for _, resource := range report.Resources {
 			if resource.Type != resourceType {
 				continue
@@ -265,19 +241,6 @@ func deleteOwnedResources(ctx context.Context, cfg *Config, report SweepReport) 
 				req.LoadBalancerId = tea.String(resource.ID)
 				if _, err := slbClient.DeleteLoadBalancer(req); err != nil && !isNotFoundOrDependencyError(err) {
 					deleteErrs = append(deleteErrs, fmt.Errorf("delete SLB %s: %w", resource.ID, err))
-				}
-			case "alb":
-				req := &alb.DeleteLoadBalancerRequest{}
-				req.LoadBalancerId = tea.String(resource.ID)
-				if _, err := albClient.DeleteLoadBalancer(req); err != nil && !isNotFoundOrDependencyError(err) {
-					deleteErrs = append(deleteErrs, fmt.Errorf("delete ALB %s: %w", resource.ID, err))
-				}
-			case "nlb":
-				req := &nlb.DeleteLoadBalancerRequest{}
-				req.RegionId = tea.String(cfg.AlibabaCloud.RegionID)
-				req.LoadBalancerId = tea.String(resource.ID)
-				if _, err := nlbClient.DeleteLoadBalancer(req); err != nil && !isNotFoundOrDependencyError(err) {
-					deleteErrs = append(deleteErrs, fmt.Errorf("delete NLB %s: %w", resource.ID, err))
 				}
 			case "disk":
 				if !strings.EqualFold(resource.Status, "Available") {
@@ -482,62 +445,6 @@ func describeOwnedSLBs(client slbDiscoveryClient, region string, selector map[st
 			return nil
 		}
 		page++
-	}
-}
-
-func describeOwnedALBs(client albDiscoveryClient, selector map[string]string, report *SweepReport) error {
-	var nextToken *string
-	seenTokens := map[string]bool{}
-	for {
-		resp, err := client.ListLoadBalancers(&alb.ListLoadBalancersRequest{MaxResults: tea.Int32(100), NextToken: nextToken, Tag: albLoadBalancerTags(selector)})
-		if err != nil {
-			return fmt.Errorf("describe ALBs: %w", err)
-		}
-		if resp == nil || resp.Body == nil {
-			return fmt.Errorf("describe ALBs returned empty body")
-		}
-		for _, lb := range resp.Body.LoadBalancers {
-			if lb != nil {
-				report.Append("alb", tea.StringValue(lb.LoadBalancerId), tea.StringValue(lb.LoadBalancerStatus))
-			}
-		}
-		nextToken = resp.Body.NextToken
-		token := strings.TrimSpace(tea.StringValue(nextToken))
-		if token == "" {
-			return nil
-		}
-		if seenTokens[token] {
-			return fmt.Errorf("describe ALBs returned repeated pagination token")
-		}
-		seenTokens[token] = true
-	}
-}
-
-func describeOwnedNLBs(client nlbDiscoveryClient, region string, selector map[string]string, report *SweepReport) error {
-	var nextToken *string
-	seenTokens := map[string]bool{}
-	for {
-		resp, err := client.ListLoadBalancers(&nlb.ListLoadBalancersRequest{RegionId: tea.String(region), MaxResults: tea.Int32(100), NextToken: nextToken, Tag: nlbLoadBalancerTags(selector)})
-		if err != nil {
-			return fmt.Errorf("describe NLBs: %w", err)
-		}
-		if resp == nil || resp.Body == nil {
-			return fmt.Errorf("describe NLBs returned empty body")
-		}
-		for _, lb := range resp.Body.LoadBalancers {
-			if lb != nil {
-				report.Append("nlb", tea.StringValue(lb.LoadBalancerId), tea.StringValue(lb.LoadBalancerStatus))
-			}
-		}
-		nextToken = resp.Body.NextToken
-		token := strings.TrimSpace(tea.StringValue(nextToken))
-		if token == "" {
-			return nil
-		}
-		if seenTokens[token] {
-			return fmt.Errorf("describe NLBs returned repeated pagination token")
-		}
-		seenTokens[token] = true
 	}
 }
 
@@ -890,22 +797,6 @@ func slbLoadBalancerTags(selector map[string]string) []*slb.DescribeLoadBalancer
 	return tags
 }
 
-func albLoadBalancerTags(selector map[string]string) []*alb.ListLoadBalancersRequestTag {
-	tags := make([]*alb.ListLoadBalancersRequestTag, 0, len(selector))
-	for key, value := range selector {
-		tags = append(tags, &alb.ListLoadBalancersRequestTag{Key: tea.String(key), Value: tea.String(value)})
-	}
-	return tags
-}
-
-func nlbLoadBalancerTags(selector map[string]string) []*nlb.ListLoadBalancersRequestTag {
-	tags := make([]*nlb.ListLoadBalancersRequestTag, 0, len(selector))
-	for key, value := range selector {
-		tags = append(tags, &nlb.ListLoadBalancersRequestTag{Key: tea.String(key), Value: tea.String(value)})
-	}
-	return tags
-}
-
 func newSLBClient(cfg *Config) (*slb.Client, error) {
 	config, err := loadBalancerClientConfig(cfg)
 	if err != nil {
@@ -914,30 +805,6 @@ func newSLBClient(cfg *Config) (*slb.Client, error) {
 	client, err := slb.NewClient(config)
 	if err != nil {
 		return nil, fmt.Errorf("create SLB client: %w", err)
-	}
-	return client, nil
-}
-
-func newALBClient(cfg *Config) (*alb.Client, error) {
-	config, err := loadBalancerClientConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	client, err := alb.NewClient(config)
-	if err != nil {
-		return nil, fmt.Errorf("create ALB client: %w", err)
-	}
-	return client, nil
-}
-
-func newNLBClient(cfg *Config) (*nlb.Client, error) {
-	config, err := loadBalancerClientConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	client, err := nlb.NewClient(config)
-	if err != nil {
-		return nil, fmt.Errorf("create NLB client: %w", err)
 	}
 	return client, nil
 }

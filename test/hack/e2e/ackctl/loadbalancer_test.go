@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	alb "github.com/alibabacloud-go/alb-20200616/v2/client"
-	nlb "github.com/alibabacloud-go/nlb-20220430/v4/client"
 	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/stretchr/testify/require"
@@ -16,18 +14,6 @@ import (
 type fakeSLBDiscovery func(*slb.DescribeLoadBalancersRequest) (*slb.DescribeLoadBalancersResponse, error)
 
 func (f fakeSLBDiscovery) DescribeLoadBalancers(r *slb.DescribeLoadBalancersRequest) (*slb.DescribeLoadBalancersResponse, error) {
-	return f(r)
-}
-
-type fakeALBDiscovery func(*alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error)
-
-func (f fakeALBDiscovery) ListLoadBalancers(r *alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error) {
-	return f(r)
-}
-
-type fakeNLBDiscovery func(*nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error)
-
-func (f fakeNLBDiscovery) ListLoadBalancers(r *nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error) {
 	return f(r)
 }
 
@@ -61,58 +47,7 @@ func TestV2SLBDiscoveryKeepsRegionTagsAndPagination(t *testing.T) {
 	require.Equal(t, SweepResource{Type: "slb", ID: "lb-2-0", Status: "active"}, report.Resources[50])
 }
 
-func TestV2ALBAndNLBDiscoveryKeepsTagsAndTokens(t *testing.T) {
-	selector := map[string]string{"testing/cluster": "test"}
-	t.Run("alb", func(t *testing.T) {
-		calls := 0
-		client := fakeALBDiscovery(func(req *alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error) {
-			calls++
-			require.Equal(t, int32(100), tea.Int32Value(req.MaxResults))
-			require.Len(t, req.Tag, 1)
-			require.Equal(t, "testing/cluster", tea.StringValue(req.Tag[0].Key))
-			require.Equal(t, "test", tea.StringValue(req.Tag[0].Value))
-			body := &alb.ListLoadBalancersResponseBody{LoadBalancers: []*alb.ListLoadBalancersResponseBodyLoadBalancers{nil, {LoadBalancerId: tea.String(fmt.Sprintf("alb-%d", calls)), LoadBalancerStatus: tea.String("Active")}}}
-			if calls == 1 {
-				require.Nil(t, req.NextToken)
-				body.NextToken = tea.String("next")
-			} else {
-				require.Equal(t, "next", tea.StringValue(req.NextToken))
-			}
-			return &alb.ListLoadBalancersResponse{Body: body}, nil
-		})
-		var report SweepReport
-		require.NoError(t, describeOwnedALBs(client, selector, &report))
-		require.Equal(t, 2, calls)
-		require.Len(t, report.Resources, 2)
-		require.Equal(t, "alb-2", report.Resources[1].ID)
-	})
-	t.Run("nlb", func(t *testing.T) {
-		calls := 0
-		client := fakeNLBDiscovery(func(req *nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error) {
-			calls++
-			require.Equal(t, "cn-hangzhou", tea.StringValue(req.RegionId))
-			require.Equal(t, int32(100), tea.Int32Value(req.MaxResults))
-			require.Len(t, req.Tag, 1)
-			require.Equal(t, "testing/cluster", tea.StringValue(req.Tag[0].Key))
-			require.Equal(t, "test", tea.StringValue(req.Tag[0].Value))
-			body := &nlb.ListLoadBalancersResponseBody{LoadBalancers: []*nlb.ListLoadBalancersResponseBodyLoadBalancers{{LoadBalancerId: tea.String(fmt.Sprintf("nlb-%d", calls)), LoadBalancerStatus: tea.String("Active")}}}
-			if calls == 1 {
-				require.Nil(t, req.NextToken)
-				body.NextToken = tea.String("next")
-			} else {
-				require.Equal(t, "next", tea.StringValue(req.NextToken))
-			}
-			return &nlb.ListLoadBalancersResponse{Body: body}, nil
-		})
-		var report SweepReport
-		require.NoError(t, describeOwnedNLBs(client, "cn-hangzhou", selector, &report))
-		require.Equal(t, 2, calls)
-		require.Len(t, report.Resources, 2)
-		require.Equal(t, "nlb-2", report.Resources[1].ID)
-	})
-}
-
-func TestV2DiscoveryRejectsMissingBodiesAndPropagatesErrors(t *testing.T) {
+func TestV2SLBDiscoveryRejectsMissingBodiesAndPropagatesErrors(t *testing.T) {
 	cloudErr := errors.New("denied")
 	for _, mode := range []string{"nil response", "nil body", "API error"} {
 		t.Run(mode, func(t *testing.T) {
@@ -127,45 +62,15 @@ func TestV2DiscoveryRejectsMissingBodiesAndPropagatesErrors(t *testing.T) {
 				}
 				return nil, wantErr
 			})
-			a := fakeALBDiscovery(func(*alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error) {
-				if mode == "nil body" {
-					return &alb.ListLoadBalancersResponse{}, nil
-				}
-				return nil, wantErr
-			})
-			n := fakeNLBDiscovery(func(*nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error) {
-				if mode == "nil body" {
-					return &nlb.ListLoadBalancersResponse{}, nil
-				}
-				return nil, wantErr
-			})
-			for _, err := range []error{describeOwnedSLBs(clb, "cn-hangzhou", nil, &report), describeOwnedALBs(a, nil, &report), describeOwnedNLBs(n, "cn-hangzhou", nil, &report)} {
-				require.Error(t, err)
-				if wantErr != nil {
-					require.ErrorIs(t, err, wantErr)
-				} else {
-					require.ErrorContains(t, err, "empty body")
-				}
+			err := describeOwnedSLBs(clb, "cn-hangzhou", nil, &report)
+			require.Error(t, err)
+			if wantErr != nil {
+				require.ErrorIs(t, err, wantErr)
+			} else {
+				require.ErrorContains(t, err, "empty body")
 			}
 		})
 	}
-}
-
-func TestV2DiscoveryRejectsRepeatedPaginationTokens(t *testing.T) {
-	var report SweepReport
-	albCalls, nlbCalls := 0, 0
-	a := fakeALBDiscovery(func(*alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error) {
-		albCalls++
-		return &alb.ListLoadBalancersResponse{Body: &alb.ListLoadBalancersResponseBody{NextToken: tea.String("loop")}}, nil
-	})
-	n := fakeNLBDiscovery(func(*nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error) {
-		nlbCalls++
-		return &nlb.ListLoadBalancersResponse{Body: &nlb.ListLoadBalancersResponseBody{NextToken: tea.String("loop")}}, nil
-	})
-	require.ErrorContains(t, describeOwnedALBs(a, nil, &report), "repeated pagination token")
-	require.ErrorContains(t, describeOwnedNLBs(n, "cn-hangzhou", nil, &report), "repeated pagination token")
-	require.Equal(t, 2, albCalls)
-	require.Equal(t, 2, nlbCalls)
 }
 
 type fakeSLBProtection struct {
@@ -291,13 +196,9 @@ func TestV2SLBListenerMissingBodyStopsBeforeMutations(t *testing.T) {
 	require.ErrorContains(t, addSLBACLAllowlists(client, "cn-hangzhou", "acl-owned", []string{"192.0.2.0/24"}), "empty body")
 }
 
-func TestV2LoadBalancerFactoriesValidateConfiguration(t *testing.T) {
+func TestV2SLBFactoryValidatesConfiguration(t *testing.T) {
 	for _, cfg := range []*Config{nil, {}, {AlibabaCloud: CloudConfig{RegionID: "cn-hangzhou"}}, {AlibabaCloud: CloudConfig{AccessKeyID: "test", AccessKeySecret: "test"}}} {
 		_, err := newSLBClient(cfg)
-		require.Error(t, err)
-		_, err = newALBClient(cfg)
-		require.Error(t, err)
-		_, err = newNLBClient(cfg)
 		require.Error(t, err)
 	}
 	cfg := &Config{AlibabaCloud: CloudConfig{RegionID: "cn-hangzhou", AccessKeyID: "local-test", AccessKeySecret: "local-test"}}
@@ -305,12 +206,4 @@ func TestV2LoadBalancerFactoriesValidateConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "cn-hangzhou", tea.StringValue(clb.RegionId))
 	require.Equal(t, 30_000, tea.IntValue(clb.ConnectTimeout))
-	a, err := newALBClient(cfg)
-	require.NoError(t, err)
-	require.Equal(t, "cn-hangzhou", tea.StringValue(a.RegionId))
-	require.Equal(t, 30_000, tea.IntValue(a.ConnectTimeout))
-	n, err := newNLBClient(cfg)
-	require.NoError(t, err)
-	require.Equal(t, "cn-hangzhou", tea.StringValue(n.RegionId))
-	require.Equal(t, 30_000, tea.IntValue(n.ConnectTimeout))
 }

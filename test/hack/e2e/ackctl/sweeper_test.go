@@ -83,8 +83,6 @@ func TestClassicLoadBalancerTags(t *testing.T) {
 	}
 
 	require.Len(t, slbLoadBalancerTags(selector), 2)
-	require.Len(t, albLoadBalancerTags(selector), 2)
-	require.Len(t, nlbLoadBalancerTags(selector), 2)
 }
 
 func TestECSLaunchTemplateTags(t *testing.T) {

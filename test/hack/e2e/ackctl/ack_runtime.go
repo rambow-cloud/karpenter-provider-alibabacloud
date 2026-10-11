@@ -326,7 +326,6 @@ func CleanupACKCluster(ctx context.Context, cfg *Config, manifest *Manifest, man
 	deleteMode := "delete"
 	deleteOptions := []*cs.DeleteClusterRequestDeleteOptions{
 		{ResourceType: tea.String("SLB"), DeleteMode: tea.String(deleteMode)},
-		{ResourceType: tea.String("ALB"), DeleteMode: tea.String(deleteMode)},
 		{ResourceType: tea.String("SLS_Data"), DeleteMode: tea.String(deleteMode)},
 		{ResourceType: tea.String("SLS_ControlPlane"), DeleteMode: tea.String(deleteMode)},
 		{ResourceType: tea.String("PrivateZone"), DeleteMode: tea.String(deleteMode)},
