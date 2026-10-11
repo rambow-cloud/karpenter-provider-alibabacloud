@@ -165,6 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           source "${{ steps.setup-cluster.outputs.env_file }}"
+          printf '%s\n' "${TEST_KUBERNETES_VERSION}" > ".e2e/${TEST_CLUSTER_NAME}/kubernetes-version.txt"
           {
             echo "KUBECONFIG=${KUBECONFIG}"
             echo "TEST_REGION=${TEST_REGION}"
@@ -184,6 +185,13 @@ jobs:
             echo "TEST_IMAGE_ID=${TEST_IMAGE_ID:-}"
             echo "TEST_IMAGE_FAMILY=${TEST_IMAGE_FAMILY:-}"
           } >> "${GITHUB_ENV}"
+      - name: Upload actual ACK Kubernetes version
+        if: always() && steps.setup-cluster.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ack-version-${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}
+          path: .e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/kubernetes-version.txt
+          if-no-files-found: error
       - name: Run ${{ inputs.suite }} tests
         shell: bash
         env:

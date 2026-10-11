@@ -9,7 +9,7 @@ This provider's `0.3.0-dev` candidate with Karpenter core `v1.14.1` requires **K
 - Helm declares `kubeVersion: ">=1.34.0-0"`, admitting distribution suffixes such as `1.34.0-aliyun.1`.
 - Controller startup checks the API server's actual `GitVersion` before initializing cloud clients/providers. Old, malformed, missing or undiscoverable versions fail clearly.
 - ACK `render-config` validates the effective version after manual overrides. `setup`, node-pool creation and capacity-reservation commands reject old or missing configured targets before cloud creation. Specify `cluster.kubernetes_version` or the E2E workflow's `k8s_version`; an unspecified cloud default is not a supported test target.
-- Setup also checks the running ACK cluster's actual `CurrentVersion`. Successful setup records the observed version in `manifest.yaml` (`kubernetesVersion`) and `ack.env` (`TEST_KUBERNETES_VERSION`). Dry-run does not claim an observed version.
+- Setup also checks the running ACK cluster's actual `CurrentVersion`. Successful setup records the observed version in `manifest.yaml` (`kubernetesVersion`) and `ack.env` (`TEST_KUBERNETES_VERSION`); the E2E workflow uploads an `ack-version-*` artifact containing only the observed version. Dry-run does not claim an observed version.
 - Config loading and cleanup remain available for old clusters, so the new installation minimum does not prevent test resource removal.
 
 Semantic parsing and numeric major/minor comparisons handle minor inputs (`1.34`), full versions, `v` prefixes and valid distribution/build suffixes. String ordering is not used.
