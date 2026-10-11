@@ -57,21 +57,23 @@ type CacheEntry struct {
 
 // CreateOptions represents options for creating an instance
 type CreateOptions struct {
-	ClientToken         string
-	InstanceType        string
-	ImageID             string
-	VSwitchID           string
-	SecurityGroupIDs    []string
-	UserData            string
-	Tags                map[string]string
-	SystemDisk          SystemDisk
-	DataDisks           []DataDisk
-	SpotStrategy        string
-	SpotPriceLimit      float64
-	RAMRoleName         string
-	MetadataOptions     *MetadataOptions
-	InstanceStorePolicy *string // Add instance store policy field
-	Ipv6AddressCount    *int32
+	LaunchTemplateID      string
+	LaunchTemplateVersion *int64
+	ClientToken           string
+	InstanceType          string
+	ImageID               string
+	VSwitchID             string
+	SecurityGroupIDs      []string
+	UserData              string
+	Tags                  map[string]string
+	SystemDisk            SystemDisk
+	DataDisks             []DataDisk
+	SpotStrategy          string
+	SpotPriceLimit        float64
+	RAMRoleName           string
+	MetadataOptions       *MetadataOptions
+	InstanceStorePolicy   *string // Add instance store policy field
+	Ipv6AddressCount      *int32
 }
 
 // MetadataOptions represents metadata service options for instance creation.
@@ -224,6 +226,13 @@ func (p *Provider) Create(ctx context.Context, opts CreateOptions) (string, erro
 	}
 	if opts.ClientToken != "" {
 		request.ClientToken = tea.String(opts.ClientToken)
+	}
+	if opts.LaunchTemplateID != "" {
+		if opts.LaunchTemplateVersion == nil || *opts.LaunchTemplateVersion <= 0 {
+			return "", fmt.Errorf("concrete launch template version is required")
+		}
+		request.LaunchTemplateId = tea.String(opts.LaunchTemplateID)
+		request.LaunchTemplateVersion = opts.LaunchTemplateVersion
 	}
 	request.Amount = tea.Int32(1)
 	request.InstanceChargeType = tea.String(ecsutil.ChargeTypePostPaid)
