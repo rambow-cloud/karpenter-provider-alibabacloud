@@ -18,9 +18,6 @@ package hash
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
@@ -58,46 +55,6 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-func computeHash(spec v1alpha1.ECSNodeClassSpec) (string, error) {
-	type nodeClassHashInput struct {
-		VSwitchSelectorTerms             []v1alpha1.VSwitchSelectorTerm             `json:"vSwitchSelectorTerms"`
-		SecurityGroupSelectorTerms       []v1alpha1.SecurityGroupSelectorTerm       `json:"securityGroupSelectorTerms"`
-		ImageSelectorTerms               []v1alpha1.ImageSelectorTerm               `json:"imageSelectorTerms"`
-		UserData                         *string                                    `json:"userData,omitempty"`
-		Kubelet                          *v1alpha1.KubeletConfiguration             `json:"kubelet,omitempty"`
-		SystemDisk                       *v1alpha1.SystemDiskSpec                   `json:"systemDisk,omitempty"`
-		DataDisks                        []v1alpha1.DataDiskSpec                    `json:"dataDisks,omitempty"`
-		InstanceStorePolicy              *string                                    `json:"instanceStorePolicy,omitempty"`
-		Tags                             map[string]string                          `json:"tags,omitempty"`
-		Role                             *string                                    `json:"role,omitempty"`
-		CapacityReservationPreference    *string                                    `json:"capacityReservationPreference,omitempty"`
-		CapacityReservationSelectorTerms []v1alpha1.CapacityReservationSelectorTerm `json:"capacityReservationSelectorTerms,omitempty"`
-		MetadataOptions                  *v1alpha1.MetadataOptions                  `json:"metadataOptions,omitempty"`
-	}
-
-	hashInput := nodeClassHashInput{
-		VSwitchSelectorTerms:             spec.VSwitchSelectorTerms,
-		SecurityGroupSelectorTerms:       spec.SecurityGroupSelectorTerms,
-		ImageSelectorTerms:               spec.ImageSelectorTerms,
-		UserData:                         spec.UserData,
-		Kubelet:                          spec.Kubelet,
-		SystemDisk:                       spec.SystemDisk,
-		DataDisks:                        spec.DataDisks,
-		InstanceStorePolicy:              spec.InstanceStorePolicy,
-		Tags:                             spec.Tags,
-		Role:                             spec.Role,
-		CapacityReservationPreference:    spec.CapacityReservationPreference,
-		CapacityReservationSelectorTerms: spec.CapacityReservationSelectorTerms,
-		MetadataOptions:                  spec.MetadataOptions,
-	}
-	data, err := json.Marshal(hashInput)
-	if err != nil {
-		return "", err
-	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:8]), nil
-}
-
 // updateNodeClass updates the nodeclass with retry on conflict
 func (c *Controller) updateNodeClass(ctx context.Context, nodeClass *v1alpha1.ECSNodeClass) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -107,12 +64,12 @@ func (c *Controller) updateNodeClass(ctx context.Context, nodeClass *v1alpha1.EC
 			return err
 		}
 
-		hash, err := computeHash(latest.Spec)
+		hash, err := latest.Hash()
 		if err != nil {
 			return fmt.Errorf("failed to compute hash: %w", err)
 		}
 		if latest.Annotations[v1alpha1.AnnotationECSNodeClassHash] == hash &&
-			latest.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] == "v1" {
+			latest.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] == v1alpha1.ECSNodeClassHashVersion {
 			return nil
 		}
 
@@ -120,7 +77,7 @@ func (c *Controller) updateNodeClass(ctx context.Context, nodeClass *v1alpha1.EC
 			latest.Annotations = map[string]string{}
 		}
 		latest.Annotations[v1alpha1.AnnotationECSNodeClassHash] = hash
-		latest.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] = "v1"
+		latest.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] = v1alpha1.ECSNodeClassHashVersion
 
 		// Update the latest object
 		return c.kubeClient.Update(ctx, latest)

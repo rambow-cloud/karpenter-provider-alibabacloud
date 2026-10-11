@@ -4,6 +4,8 @@
 
 [NodeClass 状态与镜像筛选规则 / NodeClass readiness and image selectors](ECSNODECLASS_VALIDATION.md)
 
+[节点漂移、缺货反馈与 E2E 镜像发现 / Drift, capacity feedback and E2E images](PROVIDER_BEHAVIOR.md)
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/AliyunContainerService/karpenter-provider-alibabacloud)](https://goreportcard.com/report/github.com/AliyunContainerService/karpenter-provider-alibabacloud)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/AliyunContainerService/karpenter-provider-alibabacloud/blob/main/LICENSE)
 

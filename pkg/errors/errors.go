@@ -17,9 +17,38 @@ limitations under the License.
 package errors
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strings"
+
+	"github.com/alibabacloud-go/tea/dara"
+	"github.com/alibabacloud-go/tea/tea"
 )
+
+// IsInstanceTypeCapacityError is deliberately narrower than fallback eligibility:
+// a vSwitch running out of IPs must never block every vSwitch in its zone.
+// Only structured ECS codes are trusted for shared negative cache feedback.
+func IsInstanceTypeCapacityError(err error) bool {
+	var sdkErr *tea.SDKError
+	var daraErr *dara.SDKError
+	var baseErr dara.BaseError
+	code := ""
+	if stderrors.As(err, &sdkErr) {
+		code = tea.StringValue(sdkErr.Code)
+	} else if stderrors.As(err, &daraErr) {
+		code = tea.StringValue(daraErr.Code)
+	} else if stderrors.As(err, &baseErr) {
+		code = tea.StringValue(baseErr.GetCode())
+	} else {
+		return false
+	}
+	switch code {
+	case ErrCodeNoStock, ErrCodeZoneNotOnSale, ErrCodeResourceTypeNotSupported:
+		return true
+	default:
+		return false
+	}
+}
 
 // Error codes from Alibaba Cloud ECS API
 const (

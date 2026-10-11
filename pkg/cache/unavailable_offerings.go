@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"k8s.io/utils/clock"
 )
 
 // UnavailableOfferingsCache tracks instance type + zone combinations that are temporarily unavailable
@@ -27,6 +29,7 @@ type UnavailableOfferingsCache struct {
 	mu      sync.RWMutex
 	entries map[string]time.Time
 	ttl     time.Duration
+	clock   clock.Clock
 }
 
 // NewUnavailableOfferingsCache creates a new unavailable offerings cache
@@ -36,9 +39,14 @@ func NewUnavailableOfferingsCache() *UnavailableOfferingsCache {
 
 // NewUnavailableOfferingsCacheWithTTL creates a new unavailable offerings cache with the given TTL.
 func NewUnavailableOfferingsCacheWithTTL(ttl time.Duration) *UnavailableOfferingsCache {
+	return NewUnavailableOfferingsCacheWithClock(ttl, clock.RealClock{})
+}
+
+func NewUnavailableOfferingsCacheWithClock(ttl time.Duration, clk clock.Clock) *UnavailableOfferingsCache {
 	return &UnavailableOfferingsCache{
 		entries: make(map[string]time.Time),
 		ttl:     ttl,
+		clock:   clk,
 	}
 }
 
@@ -48,13 +56,14 @@ func (u *UnavailableOfferingsCache) MarkUnavailable(instanceType, zone, capacity
 	defer u.mu.Unlock()
 
 	key := u.makeKey(instanceType, zone, capacityType)
-	u.entries[key] = time.Now().Add(u.ttl)
+	u.cleanupExpiredLocked()
+	u.entries[key] = u.clock.Now().Add(u.ttl)
 }
 
 // IsAvailable checks if an instance type + zone combination is available
 func (u *UnavailableOfferingsCache) IsAvailable(instanceType, zone, capacityType string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
+	u.mu.Lock()
+	defer u.mu.Unlock()
 
 	key := u.makeKey(instanceType, zone, capacityType)
 	expiryTime, exists := u.entries[key]
@@ -64,20 +73,13 @@ func (u *UnavailableOfferingsCache) IsAvailable(instanceType, zone, capacityType
 	}
 
 	// Check if entry has expired
-	if time.Now().After(expiryTime) {
-		// Entry expired, remove it
-		go u.cleanup(key)
+	if !u.clock.Now().Before(expiryTime) {
+		// Remove under the same lock so an old expiry cannot delete a fresh mark.
+		delete(u.entries, key)
 		return true
 	}
 
 	return false
-}
-
-// cleanup removes an expired entry
-func (u *UnavailableOfferingsCache) cleanup(key string) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	delete(u.entries, key)
 }
 
 // Flush removes all unavailable markings
@@ -103,9 +105,13 @@ func (u *UnavailableOfferingsCache) CleanupExpired() {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
-	now := time.Now()
+	u.cleanupExpiredLocked()
+}
+
+func (u *UnavailableOfferingsCache) cleanupExpiredLocked() {
+	now := u.clock.Now()
 	for key, expiryTime := range u.entries {
-		if now.After(expiryTime) {
+		if !now.Before(expiryTime) {
 			delete(u.entries, key)
 		}
 	}

@@ -68,9 +68,14 @@ func TestCreateRechecksLegacyImageStatusBeforeInstanceDiscovery(t *testing.T) {
 
 func TestImagePolicyHashNormalizesDefaultAndTracksCustom(t *testing.T) {
 	class := &v1alpha1.ECSNodeClass{}
-	baseline := calculateNodeClassHash(class)
+	baseline, err := class.Hash()
+	require.NoError(t, err)
 	class.Spec.ImageCompatibilityPolicy = "ACK"
-	require.Equal(t, baseline, calculateNodeClassHash(class))
+	current, err := class.Hash()
+	require.NoError(t, err)
+	require.Equal(t, baseline, current)
 	class.Spec.ImageCompatibilityPolicy = "Custom"
-	require.NotEqual(t, baseline, calculateNodeClassHash(class))
+	current, err = class.Hash()
+	require.NoError(t, err)
+	require.NotEqual(t, baseline, current)
 }

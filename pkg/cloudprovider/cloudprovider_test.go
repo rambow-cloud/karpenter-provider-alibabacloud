@@ -224,7 +224,7 @@ func TestVSwitchFallbackSortsByIPCount(t *testing.T) {
 		return "i-success", nil
 	}
 
-	if _, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn); err != nil {
+	if _, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn, nil); err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
 	want := []string{"vsw-high", "vsw-mid", "vsw-low"}
@@ -252,7 +252,7 @@ func TestVSwitchFallbackDoesNotMutateInputSlice(t *testing.T) {
 		return "i-success", nil
 	}
 
-	if _, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn); err != nil {
+	if _, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn, nil); err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
 	for i, id := range originalOrder {
@@ -277,7 +277,7 @@ func TestVSwitchFallbackOnNoStock(t *testing.T) {
 		return "i-success", nil
 	}
 
-	id, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn)
+	id, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn, nil)
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestVSwitchFallbackFailFastOnQuotaError(t *testing.T) {
 		return "", fmt.Errorf("QuotaExceed.Instance: quota exceeded")
 	}
 
-	_, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn)
+	_, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -324,7 +324,7 @@ func TestVSwitchFallbackAllExhausted(t *testing.T) {
 		return "", fmt.Errorf("InvalidVSwitchId.IpNotEnough: vswitch %s has no available IPs", opts.VSwitchID)
 	}
 
-	_, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn)
+	_, err := vswitchFallbackCreate(context.Background(), instance.CreateOptions{}, vswitches, createFn, nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -814,7 +814,7 @@ func TestInstanceTypeFallbackOnCapacityError(t *testing.T) {
 			ImageID:      image.ID,
 		}
 
-		instanceID, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn)
+		instanceID, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn, nil)
 		if err == nil {
 			// Success on this instance type
 			assert.Equal(t, "i-success", instanceID)
@@ -867,7 +867,7 @@ func TestInstanceTypeFallbackAllExhausted(t *testing.T) {
 			ImageID:      image.ID,
 		}
 
-		_, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn)
+		_, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn, nil)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -909,7 +909,7 @@ func TestInstanceTypeFallbackFailFastOnNonCapacityError(t *testing.T) {
 			ImageID:      image.ID,
 		}
 
-		_, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn)
+		_, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn, nil)
 		if err != nil {
 			// Non-capacity error should fail fast, not continue to next instance type
 			if !strings.Contains(err.Error(), "exhausted") {
@@ -962,7 +962,7 @@ func TestInstanceTypeFallbackRespectsArchitecture(t *testing.T) {
 			ImageID:      image.ID,
 		}
 
-		instanceID, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn)
+		instanceID, err := vswitchFallbackCreate(context.Background(), baseOpts, vswitches, createFn, nil)
 		if err == nil {
 			assert.Equal(t, "i-success", instanceID)
 			break
