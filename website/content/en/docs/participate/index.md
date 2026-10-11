@@ -9,11 +9,11 @@ description: Prepare an isolated Alibaba Cloud Karpenter trial with a matching c
 
 ## Before trying the provider
 
-Read the [current status](../status/index.md), [quick start](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md), and [upgrade notes](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md). Historical quick-start version examples need the upgrade notes; an old image must not be paired with the current development chart.
+Read the [current status](../status/index.md), [quick start](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md), and [installation notes](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md). Use a matching controller image, chart and CRDs for the fresh installation.
 
-Identify the ACK cluster, region, VPC/vSwitches, security groups, available images, and RAM permissions, and use an isolated test environment. The current candidate requires a controller image built from matching source. Follow the upgrade notes for build requirements and feature-gate migration.
+Identify the ACK cluster, region, VPC/vSwitches, security groups, available images, and RAM permissions, and use an isolated test environment. The current candidate requires a controller image built from matching source. Follow the installation notes for build requirements and feature-gate configuration.
 
-Kubernetes 1.34+ is required; 1.33 and earlier are unsupported. Upgrade the cluster before installing this candidate. Version enforcement is tracked in [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7). Relevant milestones track real cloud acceptance. Check the target environment against the documented boundaries first.
+Kubernetes 1.34+ is required; 1.33 and earlier are unsupported. Select a cluster meeting the version requirement for this fresh installation. Version enforcement is tracked in [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7). Relevant milestones track real cloud acceptance. Check the target environment against the documented boundaries first.
 
 ## Choose a contribution
 

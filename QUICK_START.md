@@ -4,15 +4,15 @@
 
 <a id="chinese"></a>
 
-本文档将指导您如何快速部署和使用 Alibaba Cloud Karpenter Provider。
+本文档将指导您如何快速部署和使用阿里云 Karpenter Provider。
 
-当前开发 chart 为 `0.3.0-dev`，对应 Karpenter core `v1.14.1`。部署时需显式设置 `controller.image.repository` 和 `controller.image.tag`，使用从当前提交构建的镜像。升级已有集群前请阅读 [UPGRADING.md](UPGRADING.md)。
+当前开发 chart 为 `0.3.0-dev`，对应 Karpenter core `v1.14.1`。部署时需显式设置 `controller.image.repository` 和 `controller.image.tag`，使用从当前提交构建的镜像。全新安装配置与验收要求见 [UPGRADING.md](UPGRADING.md)。
 
 支持边界和离线/实测版本的区别见 [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md)。
 
 ## 前置条件
 
-1. 一个运行中的 **Kubernetes 1.34 或更新版本**集群（推荐使用阿里云 ACK）。1.33 及更早版本不受支持；先升级集群再安装本候选版本。
+1. 一个运行中的 **Kubernetes 1.34 或更新版本**集群（推荐使用阿里云 ACK）。1.33 及更早版本不受支持；请选择符合版本要求的集群安装本候选版本。
 2. 配置好 kubectl 并能够访问集群
 3. 阿里云账号和访问凭证 (AccessKey ID 和 AccessKey Secret)
 4. 集群所在的 VPC、VSwitch 和安全组资源
@@ -22,7 +22,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/AliyunContainerService/karpenter-provider-alibabacloud.git
+git clone https://github.com/rambow-cloud/karpenter-provider-alibabacloud.git
 cd karpenter-provider-alibabacloud
 ```
 
@@ -54,7 +54,7 @@ kubectl apply -f charts/karpenter/crds/
 ### 4. 部署 Karpenter Controller
 
 ```bash
-helm upgrade --install karpenter ./charts/karpenter \
+helm install karpenter ./charts/karpenter \
   -n karpenter --create-namespace -f your-values.yaml \
   --set-string settings.clusterID=YOUR_ACK_CLUSTER_ID \
   --set controller.image.repository=YOUR_REGISTRY/YOUR_PROVIDER \
@@ -233,13 +233,13 @@ kubectl delete namespace karpenter
 
 This guide explains how to quickly deploy and use Alibaba Cloud Karpenter Provider.
 
-The development chart is `0.3.0-dev` with Karpenter core `v1.14.1`. Use an image built from the matching commit and read [UPGRADING.md](UPGRADING.md) before upgrading an existing cluster.
+The development chart is `0.3.0-dev` with Karpenter core `v1.14.1`. Use an image built from the matching commit and read the [fresh-install configuration](UPGRADING.md).
 
 See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md) for the support boundary and the distinction between offline checks and runtime-tested versions.
 
 ### Prerequisites
 
-1. A running **Kubernetes 1.34 or newer** cluster (Alibaba Cloud ACK is recommended). Versions 1.33 and earlier are unsupported; upgrade the cluster before installing this candidate.
+1. A running **Kubernetes 1.34 or newer** cluster (Alibaba Cloud ACK is recommended). Versions 1.33 and earlier are unsupported; select a cluster meeting the version requirement for installation.
 2. A configured `kubectl` that can access the cluster
 3. An Alibaba Cloud account and credentials (AccessKey ID and AccessKey Secret)
 4. VPC, VSwitch, and security group resources for the cluster
@@ -249,7 +249,7 @@ See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md) for the support boundary and 
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/AliyunContainerService/karpenter-provider-alibabacloud.git
+git clone https://github.com/rambow-cloud/karpenter-provider-alibabacloud.git
 cd karpenter-provider-alibabacloud
 ```
 
@@ -281,7 +281,7 @@ kubectl apply -f charts/karpenter/crds/
 #### 4. Deploy the Karpenter Controller
 
 ```bash
-helm upgrade --install karpenter ./charts/karpenter \
+helm install karpenter ./charts/karpenter \
   -n karpenter --create-namespace -f your-values.yaml \
   --set-string settings.clusterID=YOUR_ACK_CLUSTER_ID \
   --set controller.image.repository=YOUR_REGISTRY/YOUR_PROVIDER \

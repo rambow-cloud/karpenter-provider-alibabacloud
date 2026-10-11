@@ -8,11 +8,11 @@ description: 准备 阿里云 Karpenter 的隔离试用环境与匹配 controlle
 
 ## 准备试用
 
-先阅读[当前状态](../status/index.md)、[快速开始](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md)与[升级说明](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。快速开始文档中的历史版本示例需结合升级说明使用，不能把旧镜像与当前开发 chart 混用。
+先阅读[当前状态](../status/index.md)、[快速开始](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md)与[安装说明](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。全新安装使用与当前代码匹配的 controller 镜像、Chart 和 CRD。
 
-试用前需要明确 ACK 集群、区域、VPC/交换机、安全组、可用镜像与 RAM 权限，并使用隔离测试环境。当前候选版本必须从对应代码构建 controller 镜像；构建条件和 feature gates 迁移以升级说明为准。
+试用前需要明确 ACK 集群、区域、VPC/交换机、安全组、可用镜像与 RAM 权限，并使用隔离测试环境。当前候选版本必须从对应代码构建 controller 镜像；构建条件和 feature gates 配置以安装说明为准。
 
-本项目要求 Kubernetes 1.34+，1.33 及更早版本不受支持；请先升级集群再安装本候选版本。版本限制由 [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) 跟踪，真实云端验收由相应 milestone 跟踪。请先确认目标环境与已记录的支持边界。
+本项目要求 Kubernetes 1.34+，1.33 及更早版本不受支持；请选择符合版本要求的集群进行全新安装。版本限制由 [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) 跟踪，真实云端验收由相应 milestone 跟踪。请先确认目标环境与已记录的支持边界。
 
 ## 找到下一项工作
 

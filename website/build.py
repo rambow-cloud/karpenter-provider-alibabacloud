@@ -90,7 +90,7 @@ def write_discovery(base: str, routes: list[str]) -> None:
     # No robots.txt: this project cannot configure the GitHub Pages host root.
     lines = ["# Alibaba Cloud Karpenter", "",
              "> Rambow Cloud's community-maintained Alibaba Cloud Karpenter provider, inspired by AWS Karpenter. A development candidate, not an official Alibaba Cloud release.", "",
-             "Requires Kubernetes >=1.34; core v1.14.1 and chart 0.3.0-dev. Real ACK/ECS runtime and upgrade/rollback acceptance remain pending under issue #5. Spot interruption handling remains planned under issue #20.", "",
+             "Requires Kubernetes >=1.34; core v1.14.1 and chart 0.3.0-dev. Fresh-install ACK/ECS runtime acceptance remain pending under issue #5. Spot interruption handling remains planned under issue #20.", "",
              "## Project documentation"]
     for route in routes:
         for language in LANGUAGES:

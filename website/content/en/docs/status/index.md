@@ -10,7 +10,7 @@ description: Review Karpenter v1.14.1, Kubernetes 1.34+, SDK, security and lifec
 
 Karpenter core and the AWS test harness are pinned to **v1.14.1**, with chart **0.3.0-dev**. The migration is merged. This is a development candidate; deployment requires an image built from matching source.
 
-Offline CI covers the Kubernetes minimum. KWOK results must be read with each run's actual Kubernetes baseline; pinning a new baseline alone does not establish a complete regression pass. **Real ACK runtime, migration, and upgrade/rollback acceptance remain pending.** Simulated nodes do not establish actual ECS or ACK behavior. See [Kubernetes support](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) and [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md).
+Offline CI covers the Kubernetes minimum. KWOK results must be read with each run's actual Kubernetes baseline; pinning a new baseline alone does not establish a complete regression pass. **Fresh-install ACK runtime acceptance remain pending.** Simulated nodes do not establish actual ECS or ACK behavior. See [Kubernetes support](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) and [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md).
 
 ## What is being worked on
 
