@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block site_meta %}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if page is defined and page.meta is defined and page.meta and page.meta.seo is defined %}
+    <meta name="description" content="{{ page.meta.description }}">
+    <meta name="author" content="Rambow Cloud and project contributors">
+    <meta name="robots" content="index,follow,max-image-preview:large">
+    <link rel="canonical" href="{{ page.canonical_url }}">
+    <link rel="alternate" hreflang="zh-CN" href="{{ page.meta.seo.zh_url }}">
+    <link rel="alternate" hreflang="en" href="{{ page.meta.seo.en_url }}">
+    <link rel="alternate" hreflang="x-default" href="{{ page.meta.seo.zh_url }}">
+    <link rel="sitemap" type="application/xml" href="{{ page.meta.seo.root }}sitemap.xml">
+    <link rel="alternate" type="text/plain" href="{{ page.meta.seo.root }}llms.txt" title="Project documentation for AI readers">
+  {% else %}
+    <meta name="robots" content="noindex,follow">
+  {% endif %}
+  <link rel="icon" href="{{ config.theme.favicon | url }}">
+  <meta name="generator" content="{{ generator }}">
+{% endblock %}
+
+{% block extrahead %}
+  {% if page is defined and page.meta is defined and page.meta and page.meta.seo is defined %}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ config.site_name }}">
+    <meta property="og:title" content="{{ page.meta.title }}">
+    <meta property="og:description" content="{{ page.meta.description }}">
+    <meta property="og:url" content="{{ page.canonical_url }}">
+    <meta property="og:locale" content="{{ page.meta.seo.locale }}">
+    <meta property="og:image" content="{{ page.meta.seo.root }}assets/rambow-karpenter.png">
+    <meta property="og:image:alt" content="Rambow Cloud ram and cloud with the Karpenter K">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ page.meta.title }}">
+    <meta name="twitter:description" content="{{ page.meta.description }}">
+    <meta name="twitter:image" content="{{ page.meta.seo.root }}assets/rambow-karpenter.png">
+    <script type="application/ld+json">{{ page.meta.seo.schema | tojson }}</script>
+  {% endif %}
+{% endblock %}

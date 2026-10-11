@@ -1,3 +1,9 @@
+---
+title: Development status, evidence and roadmap
+description: Review Karpenter v1.14.1, Kubernetes 1.34+, SDK, security and lifecycle
+  progress. Distinguish offline CI and KWOK checks from pending real ACK acceptance.
+---
+
 # Status and roadmap
 
 ## Current development baseline
@@ -18,7 +24,7 @@ Offline CI covers the Kubernetes minimum. KWOK results must be read with each ru
 | Minimal ACK/ECS E2E | A one-NodePool, one-Pod, target-one-ECS acceptance entry is being planned | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
 | Spot interruption | A separately planned feature; Spot creation does not establish interruption handling | [Spot milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/5) |
 
-This is the status at the website's initial launch. [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues), [Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones), and the [Project](https://github.com/orgs/rambow-cloud/projects/4) carry live progress.
+Content reviewed **2026-10-11**. [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues), [Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones), and the [Project](https://github.com/orgs/rambow-cloud/projects/4) carry live progress.
 
 ## What completion means
 

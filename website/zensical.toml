@@ -1,6 +1,6 @@
 [project]
 site_name = "Alibaba Cloud Karpenter"
-site_description = "Community-maintained Karpenter provider for Alibaba Cloud, inspired by the AWS Karpenter experience."
+site_description = "Rambow Cloud 社区维护的阿里云 Karpenter provider，让 Pod 需求驱动 ECS 节点供给，持续跟进版本与维护。"
 site_url = "https://rambow-cloud.github.io/karpenter-provider-alibabacloud/"
 repo_url = "https://github.com/rambow-cloud/karpenter-provider-alibabacloud"
 repo_name = "rambow-cloud/karpenter-provider-alibabacloud"
@@ -12,6 +12,7 @@ nav = [
   { "首页" = "index.md" },
   { "项目指南" = [
     { "概览" = "docs/index.md" },
+    { "功能与常见问题" = "docs/features/index.md" },
     { "为什么继续维护" = "docs/motivation/index.md" },
     { "状态与路线图" = "docs/status/index.md" },
     { "上手与参与" = "docs/participate/index.md" },
@@ -19,6 +20,7 @@ nav = [
 ]
 
 [project.theme]
+custom_dir = "overrides"
 variant = "modern"
 language = "zh"
 font = false

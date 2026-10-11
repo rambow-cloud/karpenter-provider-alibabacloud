@@ -1,0 +1,20 @@
+<div class="md-header__option">
+  <div class="md-select">
+    <button class="md-header__button md-icon" aria-label="{{ lang.t('select.language') }}">
+      {% include ".icons/lucide/languages.svg" %}
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        {% for alt in config.extra.alternate %}
+          {% set target = alt.link %}
+          {% if page is defined and page.meta is defined and page.meta and page.meta.seo is defined %}
+            {% set target = page.meta.seo.en_url if alt.lang == 'en' else page.meta.seo.zh_url %}
+          {% endif %}
+          <li class="md-select__item">
+            <a href="{{ target }}" hreflang="{{ alt.lang }}" class="md-select__link">{{ alt.name }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
