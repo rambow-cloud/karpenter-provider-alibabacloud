@@ -31,6 +31,9 @@ var imageNonWhitespaceRegex = regexp.MustCompile(`[^[:space:]]`)
 
 // Validate validates the ECSNodeClass spec
 func (nc *ECSNodeClass) Validate() error {
+	if err := ValidateImageCompatibilityPolicy(nc.Spec); err != nil {
+		return err
+	}
 	if err := nc.validateTags(); err != nil {
 		return err
 	}
@@ -72,6 +75,20 @@ func (nc *ECSNodeClass) Validate() error {
 	}
 	if err := nc.validateKubelet(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func ValidateImageCompatibilityPolicy(spec ECSNodeClassSpec) error {
+	if spec.ImageCompatibilityPolicy != "" && spec.ImageCompatibilityPolicy != "ACK" && spec.ImageCompatibilityPolicy != "Custom" {
+		return fmt.Errorf("imageCompatibilityPolicy must be ACK or Custom")
+	}
+	if spec.ImageCompatibilityPolicy == "Custom" && spec.LaunchTemplateID == nil {
+		for _, term := range spec.ImageSelectorTerms {
+			if term.ID == nil {
+				return fmt.Errorf("Custom image compatibility requires exact image IDs")
+			}
+		}
 	}
 	return nil
 }

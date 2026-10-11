@@ -99,7 +99,8 @@ RRSA (RAM Roles for Service Accounts) 是阿里云提供的一种安全认证方
       "Action": [
         "cs:DescribeClusterAttachScripts",
         "cs:GetClusterAddonInstance",
-        "cs:DescribeClusterDetail"
+        "cs:DescribeClusterDetail",
+        "cs:DescribeKubernetesVersionMetadata"
       ],
       "Resource": "*"
     },
@@ -338,7 +339,8 @@ Attach the following custom permission policy to the RAM role:
       "Action": [
         "cs:DescribeClusterAttachScripts",
         "cs:GetClusterAddonInstance",
-        "cs:DescribeClusterDetail"
+        "cs:DescribeClusterDetail",
+        "cs:DescribeKubernetesVersionMetadata"
       ],
       "Resource": "*"
     },
@@ -484,3 +486,9 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md): issue → `feat/<issue-number>-<descr
 ### License
 
 This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
+## ACK 镜像兼容性 / ACK image compatibility
+
+ACK 公共镜像默认按目标集群区域、实际版本和 containerd 的兼容清单选择，而不是自动采用 ECS 最新镜像。本 provider 当前只支持 Linux；ContainerOS 需要恰好一块显式持久数据盘，暂不支持 ContainerOS + LaunchTemplate。自定义/共享镜像需要 `imageCompatibilityPolicy: Custom` 和精确 ID，由用户验证基础 OS、runtime、架构和启动兼容性。参见 [镜像支持与升级说明](ACK_IMAGE_SUPPORT.md)。
+
+ACK public images are selected from the target cluster's regional, version-specific containerd metadata, then verified through ECS. This provider supports Linux only. ContainerOS requires exactly one explicit persistent data disk; ContainerOS with a launch template is rejected. Custom/shared images require `imageCompatibilityPolicy: Custom` and exact IDs, with provenance/runtime/bootstrap compatibility verified by the user. Add the read-only RAM action `cs:DescribeKubernetesVersionMetadata` before upgrading. Image resolution and read-only API checks do not constitute real ACK lifecycle acceptance.

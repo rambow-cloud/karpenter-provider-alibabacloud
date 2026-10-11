@@ -512,7 +512,7 @@ func NewOperator(ctx context.Context, coreOp *coreoperator.Operator) (*Operator,
 	instanceProfileProvider := instanceprofile.NewProvider(ramClient, opts.Region)
 	ramProvider := ramrole.NewProvider(ramClient, opts.Region)
 	instanceTypeProvider := instancetype.NewProvider(opts.Region, ecsClient)
-	imageFamilyProvider := imagefamily.NewProvider(ecsClient)
+	imageFamilyProvider := imagefamily.NewProvider(ecsClient, imagefamily.WithACKCompatibility(csClient, opts.Region, opts.ClusterID))
 	instanceProvider := instance.NewProvider(ctx, opts.Region, ecsClient)
 	capacityReservationProvider := capacityreservation.NewProvider(opts.Region, ecsClient)
 

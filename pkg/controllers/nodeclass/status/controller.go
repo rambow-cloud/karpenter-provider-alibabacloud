@@ -175,7 +175,17 @@ func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx
 		return err
 	}
 
-	nodeClass.Status.Images = []v1alpha1.Image{{ID: data.ImageID}}
+	imageClass := nodeClass.DeepCopy()
+	imageClass.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: &data.ImageID}}
+	images, err := c.imageFamilyProvider.ResolveForNodeClass(ctx, imageClass)
+	if err != nil || len(images) == 0 {
+		if err == nil {
+			err = fmt.Errorf("launch template image did not resolve")
+		}
+		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
+		return err
+	}
+	nodeClass.Status.Images = images
 	vSwitchID := data.VSwitchID
 	vswitches, err := c.vswitchProvider.Resolve(ctx, []v1alpha1.VSwitchSelectorTerm{{ID: &vSwitchID}})
 	if err != nil {
@@ -275,7 +285,7 @@ func (c *Controller) resolveSelectorResources(nodeClass *v1alpha1.ECSNodeClass, 
 	}
 
 	// Resolve Images
-	images, err := c.imageFamilyProvider.Resolve(ctx, nodeClass.Spec.ImageSelectorTerms)
+	images, err := c.imageFamilyProvider.ResolveForNodeClass(ctx, nodeClass)
 	if err != nil {
 		c.setCondition(nodeClass, v1alpha1.ConditionTypeImageResolved, metav1.ConditionFalse,
 			"ImageResolutionFailed", err.Error())

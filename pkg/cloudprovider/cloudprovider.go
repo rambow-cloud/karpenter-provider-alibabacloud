@@ -152,6 +152,19 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	if err := nodeClassReadinessError(nodeClass); err != nil {
 		return nil, err
 	}
+	// Refresh concrete image IDs against the actual ACK version before any launch.
+	// Old status may lack OS information or have been resolved before an upgrade.
+	if c.imageFamilyProvider != nil && c.imageFamilyProvider.ACKCompatibilityEnabled() {
+		images, err := c.imageFamilyProvider.RevalidateForLaunch(ctx, nodeClass, nodeClass.Status.Images)
+		if err != nil || len(images) == 0 {
+			if err == nil {
+				err = fmt.Errorf("no compatible Linux images remain")
+			}
+			return nil, cloudprovider.NewCreateError(err, "ImageCompatibilityFailed", err.Error())
+		}
+		nodeClass = nodeClass.DeepCopy()
+		nodeClass.Status.Images = images
+	}
 
 	// 3. Get instance types that match requirements
 	instanceTypes, err := c.instanceTypeProvider.List(ctx)
@@ -1213,6 +1226,7 @@ func calculateNodeClassHash(nodeClass *v1alpha1.ECSNodeClass) string {
 		VSwitchSelectorTerms       []v1alpha1.VSwitchSelectorTerm       `json:"vSwitchSelectorTerms"`
 		SecurityGroupSelectorTerms []v1alpha1.SecurityGroupSelectorTerm `json:"securityGroupSelectorTerms"`
 		ImageSelectorTerms         []v1alpha1.ImageSelectorTerm         `json:"imageSelectorTerms"`
+		ImageCompatibilityPolicy   string                               `json:"imageCompatibilityPolicy,omitempty"`
 		ImageFamily                *string                              `json:"imageFamily,omitempty"`
 		UserData                   *string                              `json:"userData,omitempty"`
 		Kubelet                    *v1alpha1.KubeletConfiguration       `json:"kubelet,omitempty"`
@@ -1228,6 +1242,7 @@ func calculateNodeClassHash(nodeClass *v1alpha1.ECSNodeClass) string {
 		VSwitchSelectorTerms:       nodeClass.Spec.VSwitchSelectorTerms,
 		SecurityGroupSelectorTerms: nodeClass.Spec.SecurityGroupSelectorTerms,
 		ImageSelectorTerms:         nodeClass.Spec.ImageSelectorTerms,
+		ImageCompatibilityPolicy:   nodeClass.Spec.ImageCompatibilityPolicy,
 		UserData:                   nodeClass.Spec.UserData,
 		Kubelet:                    nodeClass.Spec.Kubelet,
 		Tags:                       nodeClass.Spec.Tags,
@@ -1239,6 +1254,9 @@ func calculateNodeClassHash(nodeClass *v1alpha1.ECSNodeClass) string {
 	}
 
 	// Serialize to JSON with deterministic ordering
+	if hashInput.ImageCompatibilityPolicy == "ACK" {
+		hashInput.ImageCompatibilityPolicy = ""
+	}
 	jsonData, err := json.Marshal(hashInput)
 	if err != nil {
 		// This should never happen with valid structs

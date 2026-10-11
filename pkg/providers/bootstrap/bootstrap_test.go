@@ -52,8 +52,8 @@ func (m *MockCSClient) DescribeClusterAttachScripts(ctx context.Context, cluster
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, k8sVersion string) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
-	args := m.Called(ctx, k8sVersion)
+func (m *MockCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, request *cs.DescribeKubernetesVersionMetadataRequest) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
+	args := m.Called(ctx, request)
 	return args.Get(0).([]*cs.DescribeKubernetesVersionMetadataResponseBody), args.Error(1)
 }
 
@@ -625,9 +625,12 @@ func TestPatchRuntimeVersion(t *testing.T) {
 			&cs.DescribeClusterDetailResponse{
 				Body: &cs.DescribeClusterDetailResponseBody{
 					CurrentVersion: tea.String("1.34.10-aliyun.1"),
+					ClusterType:    tea.String("ManagedKubernetes"),
 				},
 			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.34.10-aliyun.1").Return(
+		m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.MatchedBy(func(req *cs.DescribeKubernetesVersionMetadataRequest) bool {
+			return tea.StringValue(req.Region) == "cn-shanghai" && tea.StringValue(req.ClusterType) == "ManagedKubernetes" && tea.StringValue(req.Profile) == "Default" && tea.StringValue(req.Runtime) == "containerd" && tea.StringValue(req.KubernetesVersion) == "1.34.10-aliyun.1"
+		})).Return(
 			[]*cs.DescribeKubernetesVersionMetadataResponseBody{
 				{
 					Runtimes: []*cs.Runtime{
@@ -658,9 +661,12 @@ func TestPatchRuntimeVersion(t *testing.T) {
 			&cs.DescribeClusterDetailResponse{
 				Body: &cs.DescribeClusterDetailResponseBody{
 					CurrentVersion: tea.String("1.34.10-aliyun.1"),
+					ClusterType:    tea.String("ManagedKubernetes"),
 				},
 			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.34.10-aliyun.1").Return(
+		m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.MatchedBy(func(req *cs.DescribeKubernetesVersionMetadataRequest) bool {
+			return tea.StringValue(req.Region) == "cn-shanghai" && tea.StringValue(req.ClusterType) == "ManagedKubernetes" && tea.StringValue(req.Profile) == "Default" && tea.StringValue(req.Runtime) == "containerd" && tea.StringValue(req.KubernetesVersion) == "1.34.10-aliyun.1"
+		})).Return(
 			[]*cs.DescribeKubernetesVersionMetadataResponseBody{}, nil)
 
 		p := NewProvider("cn-shanghai", m)

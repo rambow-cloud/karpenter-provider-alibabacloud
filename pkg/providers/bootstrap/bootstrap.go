@@ -135,7 +135,12 @@ func (p *Provider) patchRuntimeVersion(ctx context.Context, clusterID, script st
 		return script
 	}
 	k8sVersion := *detail.Body.CurrentVersion
-	runtimes, err := p.csClient.DescribeKubernetesVersionMetadata(ctx, k8sVersion)
+	request, err := clients.VersionMetadataRequest(p.region, detail.Body, "containerd")
+	if err != nil {
+		klog.V(2).Infof("patchRuntimeVersion: invalid cluster metadata context: %v", err)
+		return script
+	}
+	runtimes, err := p.csClient.DescribeKubernetesVersionMetadata(ctx, request)
 	if err != nil || len(runtimes) == 0 || len(runtimes[0].Runtimes) == 0 {
 		klog.V(2).Infof("patchRuntimeVersion: skipping runtime patch, no runtime metadata for version %s: %v", k8sVersion, err)
 		return script

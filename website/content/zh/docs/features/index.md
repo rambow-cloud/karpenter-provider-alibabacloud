@@ -47,3 +47,11 @@ Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功�
 ### 如何参与维护？
 
 通过 Issue 明确问题与验收条件，进入 `feat/<issue-number>-<description>` 分支，再提交关联 Issue 的 PR。贡献与试用入口见 [上手与参与](../participate/index.md)。项目采用 [Apache-2.0](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE) 许可。
+
+## ACK 镜像与操作系统边界
+
+公共镜像按目标 ACK 区域、集群实际版本和 containerd 兼容清单选择，再通过 ECS 核对镜像状态、Linux OS 和架构。ECS 最新镜像不一定已进入 ACK 清单，精确 pin 不会被替换。元数据错误会阻止解析和启动。
+
+当前 provider 只支持 Linux，拒绝 Windows 和未知 OS。ContainerOS 需要恰好一块显式持久数据盘，暂不支持通过 LaunchTemplate 使用 ContainerOS。自定义/共享镜像需要显式 `imageCompatibilityPolicy: Custom` 和精确 ID，基础 OS、runtime、GPU 驱动及启动兼容性由用户验证。
+
+升级时新增 RAM 只读权限 `cs:DescribeKubernetesVersionMetadata` 并同步更新 CRD。[完整支持边界与配置示例](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)。只读 API 测试不代表真实 ACK 节点生命周期已验收。

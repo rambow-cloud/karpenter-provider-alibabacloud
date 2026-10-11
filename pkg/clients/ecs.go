@@ -313,10 +313,10 @@ func buildDescribeImagesRequest(region string, imageIDs []string, filters map[st
 		return nil, fmt.Errorf("invalid image query: %w", err)
 	}
 
-	// ShowExpired is always set to true because the ECS API hides certain system
-	// images (e.g. ContainerOS / LifseaOS) by default. Those images have
-	// Status=Available and are perfectly usable, but the API filters them out
-	// unless ShowExpired=true is explicitly passed. See GH issue #13.
+	// Preserve exact ContainerOS pins: a cn-hangzhou live query confirmed the
+	// Lifsea 20260519 pin is hidden unless ShowExpired=true (#29). This does not
+	// establish launch eligibility for every image or every region. ACK public
+	// compatibility and Linux/disk checks are enforced by the image provider.
 	request := &ecs.DescribeImagesRequest{
 		RegionId:    tea.String(region),
 		ShowExpired: tea.Bool(true),
