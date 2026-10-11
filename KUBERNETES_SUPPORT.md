@@ -2,7 +2,7 @@
 
 This provider's `0.3.0-dev` candidate with Karpenter core `v1.14.1` requires **Kubernetes 1.34 or newer**. Kubernetes **1.33 and earlier are unsupported**. Select a supported cluster for a fresh installation with matching CRDs and controller. Passing the minimum check does not establish runtime compatibility for every later version.
 
-最低受支持 Kubernetes 版本为 **1.34**，**1.33 及更早版本不受支持**。请先升级集群，再应用本候选版本的 CRD 或安装、升级控制器。最低版本要求、离线检查与真实 ACK 验收分别记录；更高版本通过版本检查不代表已验证兼容。
+最低受支持 Kubernetes 版本为 **1.34**，**1.33 及更早版本不受支持**。请选择符合版本要求的集群，使用匹配的 CRD 与控制器进行全新安装。最低版本要求、离线检查与真实 ACK 验收分别记录；更高版本通过版本检查不代表已验证兼容。
 
 ## Enforcement
 
