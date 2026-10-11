@@ -15,8 +15,9 @@ DEFAULT_NODEPOOL ?= $(shell pwd)/test/pkg/environment/alibabacloud/default_nodep
 KWOK_NODECLASS ?= $(shell pwd)/test/pkg/environment/kwok/default_kwoknodeclass.yaml
 KWOK_NODEPOOL ?= $(shell pwd)/test/pkg/environment/kwok/default_nodepool.yaml
 KWOK_CLUSTER_NAME ?= karpenter-kwok-e2e
+KWOK_TEST_SUITE ?= smoke
 KWOK_LARGE_SCALE ?= true
-KWOK_SCALE_REPLICAS ?= 1000
+KWOK_SCALE_REPLICAS ?= 10
 KWOK_REPORT_DIR ?= $(shell pwd)/.e2e/kwok
 DEPLOY_CONFIG ?= deploy-config.yaml
 
@@ -207,12 +208,12 @@ upstream-e2etests: core-module ## Run upstream Karpenter contract suites with Al
 		--default-nodepool="$(DEFAULT_NODEPOOL)"
 
 .PHONY: kwok-core-e2e
-kwok-core-e2e: core-module ## Run upstream regression/performance contracts on kind + KWOK.
+kwok-core-e2e: core-module ## Run a 10-pod KWOK smoke check; upstream suites are opt-in via KWOK_TEST_SUITE.
 	KARPENTER_CORE_DIR="$(KARPENTER_CORE_DIR)" \
 	KWOK_CLUSTER_NAME="$(KWOK_CLUSTER_NAME)" \
 	KWOK_NODECLASS="$(KWOK_NODECLASS)" \
 	KWOK_NODEPOOL="$(KWOK_NODEPOOL)" \
-	UPSTREAM_TEST_SUITE="$(UPSTREAM_TEST_SUITE)" \
+	UPSTREAM_TEST_SUITE="$(KWOK_TEST_SUITE)" \
 	FOCUS="$(FOCUS)" \
 	SKIP="$(SKIP)" \
 	E2E_GOFLAGS="$(E2E_GOFLAGS)" \

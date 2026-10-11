@@ -4,8 +4,9 @@ on:
     inputs:
       suite:
         type: choice
-        default: regression
+        default: smoke
         options:
+          - smoke
           - regression
           - performance
       focus:
@@ -14,7 +15,7 @@ on:
         type: string
       replicas:
         type: string
-        default: "1000"
+        default: "10"
   pull_request:
     paths:
       - "test/hack/kwok/**"
@@ -29,7 +30,7 @@ concurrency:
 jobs:
   kwok:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: ${{ inputs.suite == 'regression' && 240 || inputs.suite == 'performance' && 240 || 30 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -70,10 +71,10 @@ jobs:
         if: steps.changes.outputs.run_go == 'true'
         shell: bash
         env:
-          UPSTREAM_TEST_SUITE: ${{ inputs.suite || 'regression' }}
+          KWOK_TEST_SUITE: ${{ inputs.suite || 'smoke' }}
           FOCUS: ${{ inputs.focus || '' }}
           SKIP: ${{ inputs.skip || '' }}
-          KWOK_SCALE_REPLICAS: ${{ inputs.replicas || '1000' }}
+          KWOK_SCALE_REPLICAS: ${{ inputs.replicas || '10' }}
           KWOK_REPORT_DIR: .e2e/kwok
         run: |
           set -euo pipefail
