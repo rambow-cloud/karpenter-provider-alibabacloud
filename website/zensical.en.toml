@@ -10,12 +10,14 @@ copyright = "Rambow Cloud & project contributors · Apache-2.0"
 extra_css = ["assets/brand.css"]
 nav = [
   { "Home" = "index.md" },
+  { "Core features" = "docs/features/index.md" },
+  { "Quick start" = "docs/quickstart/index.md" },
+  { "Versions and images" = "docs/support/index.md" },
+  { "Status and roadmap" = "docs/status/index.md" },
   { "Project guide" = [
     { "Overview" = "docs/index.md" },
-    { "Features and FAQ" = "docs/features/index.md" },
     { "Why this fork" = "docs/motivation/index.md" },
-    { "Status and roadmap" = "docs/status/index.md" },
-    { "Get started and contribute" = "docs/participate/index.md" },
+    { "Contribute" = "docs/participate/index.md" },
   ] },
 ]
 
@@ -26,7 +28,7 @@ language = "en"
 font = false
 logo = "assets/rambow-karpenter.png"
 favicon = "assets/rambow-karpenter.png"
-features = ["navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "content.code.copy"]
+features = ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "content.code.copy"]
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"

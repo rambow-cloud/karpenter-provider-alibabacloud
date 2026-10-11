@@ -1,10 +1,10 @@
 ---
-title: 开发状态、验证边界与路线图
+title: 状态与路线图
 description: 查看 Karpenter v1.14.1、Kubernetes 1.34+、SDK、安全和生命周期工作的当前状态，区分离线 CI、KWOK
   与待完成的真实 ACK 验收。
 ---
 
-# 当前状态与路线图
+# 状态与路线图
 
 ## 当前开发基线
 

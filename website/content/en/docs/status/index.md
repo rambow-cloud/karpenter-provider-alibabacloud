@@ -1,5 +1,5 @@
 ---
-title: Development status, evidence and roadmap
+title: Status and roadmap
 description: Review Karpenter v1.14.1, Kubernetes 1.34+, SDK, security and lifecycle
   progress. Distinguish offline CI and KWOK checks from pending real ACK acceptance.
 ---

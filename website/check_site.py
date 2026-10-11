@@ -26,10 +26,22 @@ class Page(HTMLParser):
         self.title = ""
         self.in_title = False
         self.in_schema = False
+        self.in_breadcrumbs = False
+        self.breadcrumbs = []
         self.feed(text)
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == "nav" and "project-breadcrumbs" in attrs.get("class", "").split():
+            self.in_breadcrumbs = True
+        if self.in_breadcrumbs:
+            if tag == "li":
+                self.breadcrumbs.append({"name": "", "href": None, "current": False})
+            elif self.breadcrumbs:
+                if tag == "a":
+                    self.breadcrumbs[-1]["href"] = attrs.get("href")
+                if attrs.get("aria-current") == "page":
+                    self.breadcrumbs[-1]["current"] = True
         if tag == "html":
             self.language = attrs.get("lang")
         if tag == "meta":
@@ -48,12 +60,16 @@ class Page(HTMLParser):
             self.scripts.append("")
 
     def handle_endtag(self, tag):
+        if tag == "nav":
+            self.in_breadcrumbs = False
         if tag == "title":
             self.in_title = False
         if tag == "script":
             self.in_schema = False
 
     def handle_data(self, data):
+        if self.in_breadcrumbs and self.breadcrumbs:
+            self.breadcrumbs[-1]["name"] += data
         if self.in_title:
             self.title += data
         if self.in_schema:
@@ -76,7 +92,7 @@ def local_target(url: str, source: Path) -> Path | None:
         path = source.parent / unquote(parsed.path)
     if parsed.path.endswith("/") or path.is_dir():
         path /= "index.html"
-    return path
+    return path.resolve()
 
 
 def main():
@@ -117,6 +133,28 @@ def main():
             webpage = schema["@graph"][0]
             assert webpage["url"] == canonical and webpage["description"] == description[0], path
             assert webpage["inLanguage"] == ("en" if language == "en" else "zh-CN"), path
+            breadcrumbs = [node for node in schema["@graph"] if node["@type"] == "BreadcrumbList"]
+            if route:
+                assert len(breadcrumbs) == 1, f"Missing/duplicate breadcrumb schema: {path}"
+                breadcrumb = breadcrumbs[0]
+                assert webpage["breadcrumb"] == {"@id": canonical + "#breadcrumbs"}, path
+                assert breadcrumb["@id"] == canonical + "#breadcrumbs", path
+                items = breadcrumb["itemListElement"]
+                assert len(items) >= 2 and len(items) == len(page.breadcrumbs), path
+                assert items[0]["item"] == BASE + prefix and items[-1]["item"] == canonical, path
+                assert items[0]["name"] == ("首页" if language == "zh" else "Home"), path
+                for position, (item, visible) in enumerate(zip(items, page.breadcrumbs), 1):
+                    assert item["@type"] == "ListItem" and item["position"] == position, path
+                    assert item["name"] == visible["name"].strip(), f"Breadcrumb name mismatch: {path}"
+                    assert visible["current"] == (position == len(items)), path
+                    assert visible["href"] == (None if visible["current"] else item["item"]), path
+                    target = local_target(item["item"], path)
+                    assert target is not None and target.is_file(), f"Invalid breadcrumb target: {path}"
+            else:
+                assert not breadcrumbs and not page.breadcrumbs, path
+            targets = {local_target(url, path) for url in page.targets}
+            for category in ("features", "quickstart", "support", "status"):
+                assert SITE / prefix / "docs" / category / "index.html" in targets, f"Missing category link: {path}"
             for url in (translations["zh-CN"], translations["en"]):
                 assert f'href="{url}" hreflang=' in html, path
             for url in page.targets:

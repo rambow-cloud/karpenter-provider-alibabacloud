@@ -20,6 +20,19 @@
   <meta name="generator" content="{{ generator }}">
 {% endblock %}
 
+{% block content %}
+  {% if page is defined and page.meta is defined and page.meta and page.meta.seo is defined and page.meta.seo.breadcrumbs %}
+    <nav class="project-breadcrumbs" aria-label="{{ '面包屑导航' if config.theme.language == 'zh' else 'Breadcrumb' }}">
+      <ol>
+        {% for item in page.meta.seo.breadcrumbs %}
+          <li>{% if loop.last %}<span aria-current="page">{{ item.name }}</span>{% else %}<a href="{{ item.url }}">{{ item.name }}</a>{% endif %}</li>
+        {% endfor %}
+      </ol>
+    </nav>
+  {% endif %}
+  {{ super() }}
+{% endblock %}
+
 {% block extrahead %}
   {% if page is defined and page.meta is defined and page.meta and page.meta.seo is defined %}
     <meta property="og:type" content="website">

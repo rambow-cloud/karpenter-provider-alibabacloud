@@ -1,9 +1,9 @@
 ---
-title: 核心功能与常见问题
+title: 核心功能
 description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNodeClass、按需与 Spot 创建、节点生命周期及验证边界，回答最低版本、官方关系和生产可用性问题。
 ---
 
-# 核心功能与常见问题
+# 核心功能
 
 **阿里云 Karpenter 是 Rambow Cloud 持续维护的社区 provider，将 Karpenter 的容量决策连接到阿里云 ECS。** 目标是在阿里云提供类似 AWS Karpenter 的节点弹性体验，当前不是 AWS provider 的全部能力对等实现。
 
@@ -38,11 +38,11 @@ Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功�
 
 ### 最低支持哪个 Kubernetes 版本？
 
-最低为 **1.34**，1.33 及更早版本不受支持。Helm、controller 启动和 ACK 配置都执行版本检查，并识别 ACK 发行版后缀。目标 ACK 版本还需在所选区域、集群类型可用且符合阿里云维护策略；更高版本通过最低检查不代表已完成运行验证。
+最低为 **1.34**，1.33 及更早版本不受支持。Helm、controller 启动和 ACK 配置都执行版本检查，并识别 ACK 发行版后缀。目标 ACK 版本还需在所选区域、集群类型可用且符合阿里云维护策略；更高版本通过最低检查不代表已完成运行验证。详见[支持版本与镜像](../support/index.md)。
 
 ### 现在可以直接用于生产吗？
 
-当前 chart 是 **0.3.0-dev 开发候选版本**，全新部署的真实 ACK 验收证据待完成。先阅读 [上手指南](../participate/index.md)、[UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) 与 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5)，使用匹配源码的自建 controller 镜像在隔离环境中验证。
+当前 chart 是 **0.3.0-dev 开发候选版本**，全新部署的真实 ACK 验收证据待完成。先阅读[快速开始](../quickstart/index.md)与 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5)，使用匹配源码的自建 controller 镜像在隔离环境中验证。
 
 ### 如何参与维护？
 

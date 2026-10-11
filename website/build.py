@@ -15,6 +15,31 @@ LANGUAGES = {"zh": "zh-CN", "en": "en"}
 REPOSITORY = "https://github.com/rambow-cloud/karpenter-provider-alibabacloud"
 
 
+def navigation_paths(items: list, parents: list | None = None) -> dict[str, list]:
+    """Use the actual navigation, including linked section landing pages."""
+    parents = parents or []
+    paths = {}
+    for item in items:
+        for label, value in item.items():
+            if isinstance(value, str):
+                if value.endswith(".md"):
+                    if value in paths:
+                        raise ValueError(f"Duplicate navigation page: {value}")
+                    paths[value] = parents + [{"name": label, "source": value}]
+            else:
+                landing = next((source for child in value for source in child.values()
+                                if isinstance(source, str) and source.endswith("/index.md")), None)
+                section = [{"name": label, "source": landing}] if landing else []
+                children = navigation_paths(value, parents + section)
+                for source, trail in children.items():
+                    if source == landing:
+                        trail = parents + section
+                    if source in paths:
+                        raise ValueError(f"Duplicate navigation page: {source}")
+                    paths[source] = trail
+    return paths
+
+
 def prepare_content(staged: Path) -> tuple[str, list[str]]:
     configs = [tomllib.loads((ROOT / name).read_text(encoding="utf-8"))["project"]
                for name in ("zensical.toml", "zensical.en.toml")]
@@ -27,6 +52,11 @@ def prepare_content(staged: Path) -> tuple[str, list[str]]:
                          for p in files} for language, files in paths.items()}
     if routes["zh"] != routes["en"]:
         raise ValueError("Every content page needs a matching translation")
+    navigation = {language: navigation_paths(config["nav"])
+                  for language, config in zip(LANGUAGES, configs)}
+    for language in LANGUAGES:
+        if set(navigation[language]) != routes[language]:
+            raise ValueError(f"Navigation must cover each {language} content page exactly once")
     page_routes = []
     for source_path in sorted(routes["zh"]):
         if not source_path.endswith("index.md"):
@@ -44,10 +74,25 @@ def prepare_content(staged: Path) -> tuple[str, list[str]]:
             if not meta.get("title") or not meta.get("description"):
                 raise ValueError(f"Missing page title/description: {path}")
             url = base + ("en/" if language == "en" else "") + route
+            language_base = base + ("en/" if language == "en" else "")
+            breadcrumbs = []
+            if route:
+                trail = [navigation[language]["index.md"][0]] + navigation[language][source_path]
+                breadcrumbs = [{"name": part["name"],
+                                "url": language_base + part["source"].removesuffix("index.md")}
+                               for part in trail]
             graph = [{"@type": "WebPage", "@id": url + "#page", "url": url,
                       "name": meta["title"], "description": meta["description"],
                       "inLanguage": LANGUAGES[language],
                       "isPartOf": {"@id": base + "#website"}}]
+            if breadcrumbs:
+                breadcrumb_id = url + "#breadcrumbs"
+                graph[0]["breadcrumb"] = {"@id": breadcrumb_id}
+                graph.append({"@type": "BreadcrumbList", "@id": breadcrumb_id,
+                              "itemListElement": [
+                                  {"@type": "ListItem", "position": position,
+                                   "name": part["name"], "item": part["url"]}
+                                  for position, part in enumerate(breadcrumbs, 1)]})
             if not route:
                 graph += [{"@type": "WebSite", "@id": base + "#website",
                            "url": base, "name": project_name,
@@ -62,6 +107,7 @@ def prepare_content(staged: Path) -> tuple[str, list[str]]:
             meta["seo"] = {"root": base, "zh_url": base + route,
                            "en_url": base + "en/" + route,
                            "language": LANGUAGES[language],
+                           "breadcrumbs": breadcrumbs,
                            "locale": "zh_CN" if language == "zh" else "en_US",
                            "schema": {"@context": "https://schema.org", "@graph": graph}}
             path.write_text("---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False)

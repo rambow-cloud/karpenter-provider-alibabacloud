@@ -18,10 +18,19 @@ hide:
 <p class="hero-summary">以 AWS Karpenter 的节点弹性体验为方向，<br class="wide-break">为阿里云 Kubernetes 提供持续维护的 ECS 节点供给。</p>
 
 [探索功能](docs/features/index.md){ .md-button .md-button--primary }
-[上手指南](docs/participate/index.md){ .md-button }
+[快速开始](docs/quickstart/index.md){ .md-button }
 
 <div class="project-baseline"><span>Karpenter v1.14.1</span><span>Kubernetes 1.34+</span><span>Apache-2.0</span></div>
 
+</div>
+
+## 探索项目
+
+<div class="project-categories">
+  <a href="docs/features/"><strong>核心功能</strong><span>Pod 驱动供给、节点配置与生命周期</span></a>
+  <a href="docs/quickstart/"><strong>快速开始</strong><span>准备集群、配置权限并全新安装</span></a>
+  <a href="docs/support/"><strong>支持版本与镜像</strong><span>Kubernetes 要求与 ACK 镜像选择边界</span></a>
+  <a href="docs/status/"><strong>状态与路线图</strong><span>已完成的验证与正在推进的工作</span></a>
 </div>
 
 ## 工作负载优先，云资源按需
