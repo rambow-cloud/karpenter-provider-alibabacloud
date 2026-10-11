@@ -3,11 +3,9 @@ module github.com/AliyunContainerService/karpenter-provider-alibabacloud
 go 1.26.9
 
 require (
-	github.com/alibabacloud-go/alb-20200616/v2 v2.3.2
 	github.com/alibabacloud-go/cs-20151215/v5 v5.9.8
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.1
 	github.com/alibabacloud-go/ecs-20140526/v5 v5.1.0
-	github.com/alibabacloud-go/nlb-20220430/v4 v4.1.3
 	github.com/alibabacloud-go/ram-20150501/v2 v2.2.0
 	github.com/alibabacloud-go/slb-20140515/v4 v4.0.14
 	github.com/alibabacloud-go/tea v1.5.0

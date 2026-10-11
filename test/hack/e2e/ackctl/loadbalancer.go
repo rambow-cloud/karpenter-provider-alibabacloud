@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 
-	alb "github.com/alibabacloud-go/alb-20200616/v2/client"
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-	nlb "github.com/alibabacloud-go/nlb-20220430/v4/client"
 	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
 )
@@ -26,14 +24,6 @@ func loadBalancerClientConfig(cfg *Config) (*openapi.Config, error) {
 // Narrow interfaces allow migration regressions to be tested without cloud calls.
 type slbDiscoveryClient interface {
 	DescribeLoadBalancers(*slb.DescribeLoadBalancersRequest) (*slb.DescribeLoadBalancersResponse, error)
-}
-
-type albDiscoveryClient interface {
-	ListLoadBalancers(*alb.ListLoadBalancersRequest) (*alb.ListLoadBalancersResponse, error)
-}
-
-type nlbDiscoveryClient interface {
-	ListLoadBalancers(*nlb.ListLoadBalancersRequest) (*nlb.ListLoadBalancersResponse, error)
 }
 
 type slbProtectionClient interface {

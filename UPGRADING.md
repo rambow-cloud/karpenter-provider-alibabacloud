@@ -78,3 +78,5 @@ Offline implementation and ACK runtime acceptance are separate. ACK E2E is defer
 - Relevant upstream contract suites, provider suites and retained test artifacts.
 
 The existing E2E workflows require explicit dispatch and cloud credentials. Do not dispatch them as part of ordinary PR CI. `E2EUpgrade` currently runs the Drift suite; it is not evidence of a complete old-controller-to-new-controller upgrade rehearsal.
+
+The minimal ACK/ECS helper retains SLB API-server listener/ACL configuration and tagged SLB cleanup. ALB/NLB SDKs and their dedicated resource sweep are removed in [#39](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/39); the helper also omits the explicit ALB cluster-deletion option. ALB/NLB workloads and residual-resource cleanup need separate acceptance coverage before those scenarios are added.

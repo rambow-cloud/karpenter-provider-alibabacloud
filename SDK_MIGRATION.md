@@ -2,6 +2,10 @@
 
 Tracks [issue #36](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/36) and [milestone #8](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/8). Baseline: `ed71a65e0f571e53c4afa08d7ee95c5582602e8a`; audit date: 2026-10-11.
 
+This report records the SDK migration snapshot in PR #37. A subsequent cleanup, [issue #39](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/39), removes unused ALB/NLB sweeper coverage and their SDK modules: selected modules **294 → 292**, with no new modules. The version table and scan evidence below describe the earlier migration snapshot.
+
+The current minimal ACK/ECS baseline retains SLB listener/ACL handling and tagged SLB resource sweep. It does not query or explicitly delete ALB/NLB resources, or include an explicit ALB option in the ACK cluster deletion request. ALB/NLB workload testing and residual-resource cleanup are outside this baseline. ACK cluster deletion still uses the CS API; these scope statements concern the helper's explicit operations, not the service's internal resource-deletion behavior.
+
 Alibaba Cloud [SDK V2.0](https://www.alibabacloud.com/help/en/sdk/developer-reference/v2-go-integrated-sdk) is the Tea/OpenAPI SDK family. Product modules have independent major versions; ECS `/v5`, ALB `/v2` and SLB/NLB `/v4` all belong to that family.
 
 ## Scope and versions
