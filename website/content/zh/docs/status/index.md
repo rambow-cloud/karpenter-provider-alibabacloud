@@ -10,7 +10,7 @@ description: 查看 Karpenter v1.14.1、Kubernetes 1.34+、SDK、安全和生命
 
 Karpenter core 和 AWS 测试 harness 固定为 **v1.14.1**，chart 为 **0.3.0-dev**。版本迁移已经合并；这是开发候选版本，部署必须使用与当前代码匹配的自建镜像。
 
-离线 CI 覆盖 Kubernetes 最低版本边界。KWOK 结果应结合各次运行的实际 Kubernetes 基线查看，固定新基线本身不代表完整回归通过。**真实 ACK 运行、版本迁移和升级/回滚验收仍待完成**，不能用模拟节点的结果替代 ECS 与 ACK 的实际表现。详见 [Kubernetes 支持边界](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) 和 [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。
+离线 CI 覆盖 Kubernetes 最低版本边界。KWOK 结果应结合各次运行的实际 Kubernetes 基线查看，固定新基线本身不代表完整回归通过。**全新部署的真实 ACK 运行验收仍待完成**，不能用模拟节点的结果替代 ECS 与 ACK 的实际表现。详见 [Kubernetes 支持边界](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) 和 [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。
 
 ## 工作如何推进
 

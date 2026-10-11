@@ -1,6 +1,6 @@
 # Kubernetes version policy
 
-This provider's `0.3.0-dev` candidate with Karpenter core `v1.14.1` requires **Kubernetes 1.34 or newer**. Kubernetes **1.33 and earlier are unsupported**. Upgrade the cluster before applying this candidate's CRDs or installing/upgrading the controller. Passing the minimum check does not establish runtime compatibility for every later version.
+This provider's `0.3.0-dev` candidate with Karpenter core `v1.14.1` requires **Kubernetes 1.34 or newer**. Kubernetes **1.33 and earlier are unsupported**. Select a supported cluster for a fresh installation with matching CRDs and controller. Passing the minimum check does not establish runtime compatibility for every later version.
 
 最低受支持 Kubernetes 版本为 **1.34**，**1.33 及更早版本不受支持**。请先升级集群，再应用本候选版本的 CRD 或安装、升级控制器。最低版本要求、离线检查与真实 ACK 验收分别记录；更高版本通过版本检查不代表已验证兼容。
 
@@ -33,4 +33,4 @@ Example syntax: `["1.35", "1.36"]`. Confirm regional availability before using t
 
 Helm and envtest do not establish ACK/ECS runtime compatibility. Pinning KWOK does not by itself establish that the complete regression suite passed; actual results belong in CI/run evidence.
 
-Real ACK E2E remains deferred under [release acceptance #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5). Before release, record the actual ACK/Kubernetes version (>=1.34), region, controller digest/chart/git SHA, enabled gates, lifecycle and upgrade/rollback results, limitations and cleanup evidence. [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) performs no cloud test or cluster upgrade.
+Real ACK E2E remains deferred under [release acceptance #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5). Before release, record the actual ACK/Kubernetes version (>=1.34), region, controller digest/chart/git SHA, enabled gates, fresh-install lifecycle results, limitations and cleanup evidence. [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) performs no cloud test or cluster upgrade.

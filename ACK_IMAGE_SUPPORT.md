@@ -56,15 +56,15 @@ ContainerOS 3.4 起只读系统盘需要数据盘，且不适用于带本地盘�
 
 ACK 元数据不是全部部署约束的检查器。阿里云 Linux 4 的 Terway 版本、Ubuntu 的 CPFS/镜像加速/安全加固限制、ContainerOS 的本地盘限制及 GPU 驱动适配仍需按官方说明配置和验收。具体镜像以目标区域、ACK 类型、版本和 runtime 返回的清单为准，不把文档示例 ID 固定为通用最新版。参见[ACK 操作系统与限制](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/overview-of-os-images/)。
 
-## 升级与权限
+## 全新部署与权限
 
 ACK bootstrap 在每次读取脚本缓存前查询当前集群上下文，按 cluster、region、type、profile、version、runtime 分区，成功脚本缓存最多 5 分钟。集群升级和 Profile 变化立即刷新；runtime 元数据必须提供精确 Kubernetes 版本的 containerd。查询失败不会缓存未经验证的 fallback 脚本，也不会用旧版本缓存掩盖失败。
 
 生产 ECS/VPC/RAM/CS SDK 的连接和读超时各为 30 秒（配置字段单位毫秒，值为 `30000`），默认 HTTP 总超时为 60 秒。adapter 把调用者 context 绑定到实际 HTTP 请求，兼容清单缓存等待也可取消。SDK 自定义 HTTP client 保持原配置；SDK 内部凭证刷新没有 context 参数，取消无法中断这部分调用，也不能撤销云端已接收的请求。云端创建结果不确定时仍需要资源对账，真实节点验收由 #5/#23 跟踪。
 
-先更新 CRD（Chart 和嵌入 CRD 包含新 spec 字段与 status 的 `osType`/`imageType`），再更新 controller。RAM 策略新增只读 `cs:DescribeKubernetesVersionMetadata`，保留 `cs:DescribeClusterDetail`、`ecs:DescribeImages`。缺少权限会阻止公共镜像解析和启动。
+全新安装时使用匹配的 CRD、Chart 与 controller；CRD 包含 spec 配置与 status 的 `osType`/`imageType`/`creationTime` 字段。RAM 策略需要只读 `cs:DescribeKubernetesVersionMetadata`，保留 `cs:DescribeClusterDetail`、`ecs:DescribeImages`。缺少权限会阻止公共镜像解析和启动。
 
-原有公共镜像 pin 如已不在当前 ACK 清单中需要手动更新，不会自动替换。自定义/共享镜像需要显式启用 Custom。旧 status 的缺失 OS 信息会在创建前重新查询；不会把未验证旧 status 当作成功证据。回滚到旧 controller 会恢复旧的兼容检查缺口，不能作为无风险兼容策略。
+公共镜像 pin 必须属于目标 ACK 清单，不会自动替换为其他镜像。自定义/共享镜像需要显式启用 Custom。创建前仍会按当前 selector 和启动条件重新验证镜像，防止解析后的云端状态变化导致错误启动。当前交付范围为全新部署，不要求旧 provider 的迁移或回滚验收。
 
 ## 取证
 
