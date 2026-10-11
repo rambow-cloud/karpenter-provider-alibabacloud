@@ -60,6 +60,7 @@ func main() {
 		alibabaOperator.LaunchTemplateProvider,
 		alibabaOperator.BootstrapProvider,
 		alibabaOperator.ClusterNetworkConfig,
+		alibabaOperator.UnavailableOfferingsCache,
 	)
 
 	overlayUndecoratedCloudProvider := metrics.Decorate(alibabaCloudProvider)

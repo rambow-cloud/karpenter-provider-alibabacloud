@@ -184,55 +184,6 @@ func TestBuildCapacityReservationRequestRequiresZone(t *testing.T) {
 	require.ErrorContains(t, err, "zone")
 }
 
-func TestExtractWorkerImageID(t *testing.T) {
-	imageID := ExtractWorkerImageID(&ecs.DescribeInstancesResponse{
-		Body: &ecs.DescribeInstancesResponseBody{
-			Instances: &ecs.DescribeInstancesResponseBodyInstances{
-				Instance: []*ecs.DescribeInstancesResponseBodyInstancesInstance{
-					{ImageId: tea.String("aliyun_3_x64_20G_container_optimized_alibase_20260513.vhd")},
-				},
-			},
-		},
-	})
-
-	require.Equal(t, "aliyun_3_x64_20G_container_optimized_alibase_20260513.vhd", imageID)
-}
-
-func TestExtractImageIDFromImageNameLookup(t *testing.T) {
-	imageID := ExtractImageIDFromImageNameLookup(&ecs.DescribeImagesResponse{
-		Body: &ecs.DescribeImagesResponseBody{
-			Images: &ecs.DescribeImagesResponseBodyImages{
-				Image: []*ecs.DescribeImagesResponseBodyImagesImage{
-					{
-						ImageId:   tea.String("m-bp1234567890"),
-						ImageName: tea.String("aliyun_3_x64_20G_container_optimized_alibase_20260513.vhd"),
-						Status:    tea.String("Available"),
-					},
-				},
-			},
-		},
-	})
-
-	require.Equal(t, "m-bp1234567890", imageID)
-}
-
-func TestExtractImageIDFromImageNameLookupAllowsVHDImageID(t *testing.T) {
-	imageID := ExtractImageIDFromImageNameLookup(&ecs.DescribeImagesResponse{
-		Body: &ecs.DescribeImagesResponseBody{
-			Images: &ecs.DescribeImagesResponseBodyImages{
-				Image: []*ecs.DescribeImagesResponseBodyImagesImage{
-					{
-						ImageId: tea.String("aliyun_3_x64_20G_container_optimized_alibase_20260625.vhd"),
-						Status:  tea.String("Available"),
-					},
-				},
-			},
-		},
-	})
-
-	require.Equal(t, "aliyun_3_x64_20G_container_optimized_alibase_20260625.vhd", imageID)
-}
-
 func TestAppendVSwitchZones(t *testing.T) {
 	zones := appendVSwitchZones(nil, &vpc.DescribeVSwitchesResponse{
 		Body: &vpc.DescribeVSwitchesResponseBody{

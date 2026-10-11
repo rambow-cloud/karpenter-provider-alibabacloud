@@ -18,9 +18,6 @@ package cloudprovider
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -28,6 +25,7 @@ import (
 	"time"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/cache"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/errors"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/operator/options"
@@ -77,6 +75,7 @@ type CloudProvider struct {
 	csClient                clients.CSClient
 
 	clusterNetworkConfig *cluster.NetworkConfig
+	unavailableOfferings *cache.UnavailableOfferingsCache
 }
 
 // New creates a new CloudProvider with injected dependencies
@@ -93,6 +92,7 @@ func New(
 	launchTemplateProvider *launchtemplate.Provider,
 	bootstrapProvider *bootstrap.Provider,
 	networkConfig *cluster.NetworkConfig,
+	unavailableOfferings *cache.UnavailableOfferingsCache,
 ) *CloudProvider {
 	return &CloudProvider{
 		kubeClient:              kubeClient,
@@ -106,6 +106,7 @@ func New(
 		bootstrapProvider:       bootstrapProvider,
 		instanceProfileProvider: instanceProfileProvider,
 		clusterNetworkConfig:    networkConfig,
+		unavailableOfferings:    unavailableOfferings,
 	}
 }
 
@@ -164,6 +165,11 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		}
 		nodeClass = nodeClass.DeepCopy()
 		nodeClass.Status.Images = images
+	}
+
+	hash, err := nodeClass.Hash()
+	if err != nil {
+		return nil, fmt.Errorf("hash nodeclass: %w", err)
 	}
 
 	// 3. Get instance types that match requirements
@@ -230,7 +236,6 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	createdNodeClaim := c.convertInstanceToNodeClaim(ctx, inst, nodeClaim, filteredTypes, nodeClass.Spec.ClusterID)
 
 	// 12. Set NodeClass hash annotation for drift detection
-	hash := calculateNodeClassHash(nodeClass)
 	setNodeClassHashAnnotation(createdNodeClaim, hash)
 
 	return createdNodeClaim, nil
@@ -534,6 +539,9 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 				capTypeAvailability[ct] = true // has stock
 			}
 			for capType, isAvailable := range capTypeAvailability {
+				if c.unavailableOfferings != nil {
+					isAvailable = isAvailable && c.unavailableOfferings.IsAvailable(it.Name, zoneID, capType)
+				}
 				offerings = append(offerings, &cloudprovider.Offering{
 					Requirements: scheduling.NewRequirements(
 						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zoneID),
@@ -685,6 +693,11 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 	}, nodeClass); err != nil {
 		return "", fmt.Errorf("failed to get nodeclass: %w", err)
 	}
+	// Unresolved selector changes must not compare an incomplete resource set
+	// against a healthy running node. Wait for this generation's resolution.
+	if err := nodeClassReadinessError(nodeClass); err != nil {
+		return "", err
+	}
 
 	// 2. Get instance details
 	instanceID := fromProviderID(nodeClaim.Status.ProviderID)
@@ -698,13 +711,16 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 	}
 
 	// 3. Check NodeClass hash (most important drift detection)
-	currentHash := calculateNodeClassHash(nodeClass)
+	currentHash, err := nodeClass.Hash()
+	if err != nil {
+		return "", err
+	}
 	annotatedHash := ""
 	if nodeClaim.Annotations != nil {
 		annotatedHash = nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 	}
 
-	if currentHash != annotatedHash {
+	if currentHash != annotatedHash || nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] != v1alpha1.ECSNodeClassHashVersion {
 		return NodeClassDrift, nil
 	}
 
@@ -1049,7 +1065,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			baseOpts.Ipv6AddressCount = &one
 		}
 
-		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, c.instanceProvider.Create)
+		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, c.instanceProvider.Create, c.unavailableOfferings)
 		if err == nil {
 			return instanceID, nil
 		}
@@ -1069,7 +1085,8 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 
 // vswitchFallbackCreate tries vswitches in order, falling back to the next on capacity or IP-exhaustion
 // errors. Non-retryable errors cause an immediate return.
-func vswitchFallbackCreate(ctx context.Context, baseOpts instance.CreateOptions, vswitches []v1alpha1.VSwitch, createFn func(context.Context, instance.CreateOptions) (string, error)) (string, error) {
+func vswitchFallbackCreate(ctx context.Context, baseOpts instance.CreateOptions, vswitches []v1alpha1.VSwitch, createFn func(context.Context, instance.CreateOptions) (string, error), unavailable *cache.UnavailableOfferingsCache) (string, error) {
+	capacityType := ecsutil.CapacityTypeFromInstance(ecsutil.ChargeTypePostPaid, baseOpts.SpotStrategy)
 	sorted := make([]v1alpha1.VSwitch, len(vswitches))
 	copy(sorted, vswitches)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -1078,6 +1095,14 @@ func vswitchFallbackCreate(ctx context.Context, baseOpts instance.CreateOptions,
 
 	var lastErr error
 	for _, vsw := range sorted {
+		zone := vsw.ZoneID
+		if zone == "" {
+			zone = vsw.Zone
+		}
+		if unavailable != nil && zone != "" && !unavailable.IsAvailable(baseOpts.InstanceType, zone, capacityType) {
+			lastErr = fmt.Errorf("%s: cached unavailable offering %s/%s/%s", errors.ErrCodeNoStock, baseOpts.InstanceType, zone, capacityType)
+			continue
+		}
 		opts := baseOpts
 		opts.VSwitchID = vsw.ID
 		instanceID, err := createFn(ctx, opts)
@@ -1085,6 +1110,9 @@ func vswitchFallbackCreate(ctx context.Context, baseOpts instance.CreateOptions,
 			return instanceID, nil
 		}
 		if errors.IsInsufficientCapacityError(err) {
+			if unavailable != nil && zone != "" && errors.IsInstanceTypeCapacityError(err) {
+				unavailable.MarkUnavailable(baseOpts.InstanceType, zone, capacityType)
+			}
 			log.FromContext(ctx).Info("vSwitch capacity/IP exhausted, trying next",
 				"vswitch", vsw.ID, "zone", vsw.Zone, "error", err)
 			lastErr = err
@@ -1157,7 +1185,7 @@ func setNodeClassHashAnnotation(nodeClaim *coreapis.NodeClaim, hash string) {
 		nodeClaim.Annotations = make(map[string]string)
 	}
 	nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHash] = hash
-	nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] = "v1"
+	nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] = v1alpha1.ECSNodeClassHashVersion
 }
 
 // convertKubeletConfigToBootstrap converts v1alpha1.KubeletConfiguration to bootstrap.KubeletConfiguration
@@ -1238,60 +1266,6 @@ func isSecurityGroupAllowed(instanceSGs []string, allowedSGs []v1alpha1.Security
 		allowedIDs = append(allowedIDs, sg.ID)
 	}
 	return securitygroups.EqualIDs(instanceSGs, allowedIDs)
-}
-
-// calculateNodeClassHash calculates a hash of the ECSNodeClass configuration
-// This hash is used for drift detection - when the NodeClass config changes,
-// the hash will change, triggering node replacement
-func calculateNodeClassHash(nodeClass *v1alpha1.ECSNodeClass) string {
-	// NodeClassHashInput contains the fields that should trigger drift when changed
-	type NodeClassHashInput struct {
-		VSwitchSelectorTerms       []v1alpha1.VSwitchSelectorTerm       `json:"vSwitchSelectorTerms"`
-		SecurityGroupSelectorTerms []v1alpha1.SecurityGroupSelectorTerm `json:"securityGroupSelectorTerms"`
-		ImageSelectorTerms         []v1alpha1.ImageSelectorTerm         `json:"imageSelectorTerms"`
-		ImageCompatibilityPolicy   string                               `json:"imageCompatibilityPolicy,omitempty"`
-		ImageFamily                *string                              `json:"imageFamily,omitempty"`
-		UserData                   *string                              `json:"userData,omitempty"`
-		Kubelet                    *v1alpha1.KubeletConfiguration       `json:"kubelet,omitempty"`
-		Tags                       map[string]string                    `json:"tags,omitempty"`
-		Role                       *string                              `json:"role,omitempty"`
-		MetadataOptions            *v1alpha1.MetadataOptions            `json:"metadataOptions,omitempty"`
-		SystemDisk                 *v1alpha1.SystemDiskSpec             `json:"systemDisk,omitempty"`
-		DataDisks                  []v1alpha1.DataDiskSpec              `json:"dataDisks,omitempty"`
-		InstanceStorePolicy        *string                              `json:"instanceStorePolicy,omitempty"`
-	}
-
-	hashInput := NodeClassHashInput{
-		VSwitchSelectorTerms:       nodeClass.Spec.VSwitchSelectorTerms,
-		SecurityGroupSelectorTerms: nodeClass.Spec.SecurityGroupSelectorTerms,
-		ImageSelectorTerms:         nodeClass.Spec.ImageSelectorTerms,
-		ImageCompatibilityPolicy:   nodeClass.Spec.ImageCompatibilityPolicy,
-		UserData:                   nodeClass.Spec.UserData,
-		Kubelet:                    nodeClass.Spec.Kubelet,
-		Tags:                       nodeClass.Spec.Tags,
-		Role:                       nodeClass.Spec.Role,
-		MetadataOptions:            nodeClass.Spec.MetadataOptions,
-		SystemDisk:                 nodeClass.Spec.SystemDisk,
-		DataDisks:                  nodeClass.Spec.DataDisks,
-		InstanceStorePolicy:        nodeClass.Spec.InstanceStorePolicy,
-	}
-
-	// Serialize to JSON with deterministic ordering
-	if hashInput.ImageCompatibilityPolicy == "ACK" {
-		hashInput.ImageCompatibilityPolicy = ""
-	}
-	jsonData, err := json.Marshal(hashInput)
-	if err != nil {
-		// This should never happen with valid structs
-		// Return a fallback hash based on object generation
-		return fmt.Sprintf("error-%d", nodeClass.Generation)
-	}
-
-	// Calculate SHA-256 hash
-	hash := sha256.Sum256(jsonData)
-
-	// Return first 16 characters (64 bits) as hex string
-	return hex.EncodeToString(hash[:8])
 }
 
 // calculateOverhead calculates the overhead for a given instance type based on its capacity

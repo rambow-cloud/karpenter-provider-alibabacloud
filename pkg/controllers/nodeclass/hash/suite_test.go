@@ -134,7 +134,7 @@ var _ = Describe("HashController", func() {
 
 			// Verify hash annotation exists
 			Expect(updated.Annotations).To(HaveKey(v1alpha1.AnnotationECSNodeClassHash))
-			Expect(updated.Annotations).To(HaveKeyWithValue(v1alpha1.AnnotationECSNodeClassHashVersion, "v1"))
+			Expect(updated.Annotations).To(HaveKeyWithValue(v1alpha1.AnnotationECSNodeClassHashVersion, v1alpha1.ECSNodeClassHashVersion))
 			Expect(updated.Annotations[v1alpha1.AnnotationECSNodeClassHash]).ToNot(BeEmpty())
 		})
 
@@ -194,8 +194,8 @@ var _ = Describe("HashController", func() {
 		})
 	})
 
-	Context("Static Field Changes", func() {
-		It("should update hash when VSwitchSelectorTerms change", func() {
+	Context("Selectors and Static Field Changes", func() {
+		It("should preserve static hash when VSwitchSelectorTerms change", func() {
 			// Create and get initial hash
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
 			_, err := hashController.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nodeClass)})
@@ -222,11 +222,11 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), final)).To(Succeed())
 			newHash := final.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Hash should be different
-			Expect(newHash).ToNot(Equal(originalHash))
+			// Resource selectors are checked through resolved membership.
+			Expect(newHash).To(Equal(originalHash))
 		})
 
-		It("should update hash when SecurityGroupSelectorTerms change", func() {
+		It("should preserve static hash when SecurityGroupSelectorTerms change", func() {
 			// Create and get initial hash
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
 			_, err := hashController.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nodeClass)})
@@ -253,11 +253,11 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), final)).To(Succeed())
 			newHash := final.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Hash should be different
-			Expect(newHash).ToNot(Equal(originalHash))
+			// Resource selectors are checked through resolved membership.
+			Expect(newHash).To(Equal(originalHash))
 		})
 
-		It("should update hash when ImageSelectorTerms change", func() {
+		It("should preserve static hash when ImageSelectorTerms change", func() {
 			// Create and get initial hash
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
 			_, err := hashController.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nodeClass)})
@@ -284,8 +284,8 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), final)).To(Succeed())
 			newHash := final.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Hash should be different
-			Expect(newHash).ToNot(Equal(originalHash))
+			// Resource selectors are checked through resolved membership.
+			Expect(newHash).To(Equal(originalHash))
 		})
 
 		It("should update hash when Role changes", func() {
@@ -315,7 +315,7 @@ var _ = Describe("HashController", func() {
 			Expect(newHash).ToNot(Equal(originalHash))
 		})
 
-		It("should update hash when multiple VSwitchSelectorTerms are reordered", func() {
+		It("should preserve static hash when multiple VSwitchSelectorTerms are reordered", func() {
 			// Create with multiple VSwitch terms
 			nodeClass.Spec.VSwitchSelectorTerms = []v1alpha1.VSwitchSelectorTerm{
 				{ID: stringPtr("vsw-1")},
@@ -344,8 +344,8 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), final)).To(Succeed())
 			newHash := final.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Hash should change.
-			Expect(newHash).ToNot(Equal(originalHash))
+			// Selector order does not affect static configuration.
+			Expect(newHash).To(Equal(originalHash))
 		})
 	})
 
@@ -556,7 +556,7 @@ var _ = Describe("HashController", func() {
 	})
 
 	Context("Dynamic Field Changes", func() {
-		It("should NOT update hash when ClusterName changes", func() {
+		It("should update hash when ClusterName changes", func() {
 			// Create and get initial hash
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
 			_, err := hashController.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nodeClass)})
@@ -579,8 +579,8 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), final)).To(Succeed())
 			newHash := final.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Hash should be same
-			Expect(newHash).To(Equal(originalHash))
+			// Bootstrap cluster identity must be hashed.
+			Expect(newHash).ToNot(Equal(originalHash))
 		})
 	})
 
@@ -751,6 +751,7 @@ var _ = Describe("HashController", func() {
 					Name: "different-nodeclass",
 				},
 				Spec: v1alpha1.ECSNodeClassSpec{
+					SystemDisk: &v1alpha1.SystemDiskSpec{Size: int32Ptr(80)},
 					VSwitchSelectorTerms: []v1alpha1.VSwitchSelectorTerm{
 						{ID: stringPtr("vsw-different-999")},
 					},

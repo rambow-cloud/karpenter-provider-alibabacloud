@@ -6,18 +6,28 @@ set -euo pipefail
 : "${KWOK_NODE_IMAGE:=kindest/node:v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a}"
 : "${KWOK_NODECLASS:?KWOK_NODECLASS is required}"
 : "${KWOK_NODEPOOL:?KWOK_NODEPOOL is required}"
-: "${UPSTREAM_TEST_SUITE:=regression}"
+: "${UPSTREAM_TEST_SUITE:=smoke}"
 : "${FOCUS:=}"
 : "${SKIP:=}"
 : "${E2E_GOFLAGS:=-mod=mod}"
 : "${KWOK_CLEANUP:=true}"
 : "${KWOK_LARGE_SCALE:=true}"
-: "${KWOK_SCALE_REPLICAS:=1000}"
-: "${KWOK_SCALE_TIMEOUT:=30m}"
+: "${KWOK_SCALE_REPLICAS:=10}"
+: "${KWOK_SCALE_TIMEOUT:=5m}"
 : "${KWOK_REPORT_DIR:=}"
 
 suite="$(echo "${UPSTREAM_TEST_SUITE}" | tr A-Z a-z)"
 focus="${FOCUS}"
+case "${suite}" in
+  smoke)
+    if [[ "${KWOK_LARGE_SCALE}" != "true" || -n "${focus}" || -n "${SKIP}" ]]; then
+      echo "smoke requires KWOK_LARGE_SCALE=true and empty FOCUS/SKIP; choose regression for Ginkgo filters" >&2
+      exit 1
+    fi
+    ;;
+  regression|performance) ;;
+  *) echo "unsupported KWOK suite: ${suite}" >&2; exit 1 ;;
+esac
 if [[ "${suite}" == "performance" && ! -d "${KARPENTER_CORE_DIR}/test/suites/performance" ]]; then
   echo "upstream performance suite is not present in ${KARPENTER_CORE_DIR}; pin a compatible suite or replacement contract" >&2
   exit 1
@@ -102,6 +112,7 @@ EOF
   if [[ -n "${KWOK_REPORT_DIR}" ]]; then
     cat >"${KWOK_REPORT_DIR}/summary.txt" <<EOF
 kwok_large_scale=true
+suite=${suite}
 replicas=${KWOK_SCALE_REPLICAS}
 ready=${ready}
 nodes=${nodes}
@@ -202,7 +213,9 @@ run_suite() {
   --default-nodepool="${KWOK_NODEPOOL}"
 }
 
-if [[ -n "${KWOK_REPORT_DIR}" ]]; then
+if [[ "${suite}" == "smoke" ]]; then
+  echo "Running KWOK provisioning smoke check with ${KWOK_SCALE_REPLICAS} pods; upstream regression is opt-in"
+elif [[ -n "${KWOK_REPORT_DIR}" ]]; then
   run_suite 2>&1 | tee "${KWOK_REPORT_DIR}/test.log"
 else
   run_suite

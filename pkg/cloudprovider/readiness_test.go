@@ -42,6 +42,9 @@ func TestCreateAndSchedulingRejectUnresolvedGeneration(t *testing.T) {
 			if _, err := provider.GetInstanceTypes(ctx, pool); !coreprovider.IsNodeClassNotReadyError(err) {
 				t.Fatalf("GetInstanceTypes error = %v", err)
 			}
+			if drift, err := provider.IsDrifted(ctx, claim); drift != "" || !coreprovider.IsNodeClassNotReadyError(err) {
+				t.Fatalf("unresolved NodeClass must defer drift before ECS lookup: drift=%s err=%v", drift, err)
+			}
 			class.Status.Conditions = []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 2}}
 			if err := nodeClassReadinessError(class); err != nil {
 				t.Fatalf("resolved generation did not recover: %v", err)

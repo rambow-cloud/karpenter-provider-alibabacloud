@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
+	ecsutil "github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/ecs"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
@@ -358,49 +360,81 @@ func DiscoverVSwitchZones(ctx context.Context, cfg *Config, vSwitchIDs []string)
 }
 
 func DiscoverWorkerImageID(ctx context.Context, cfg *Config, clusterID string) (string, error) {
-	_ = ctx
 	client, err := newECSClient(cfg)
 	if err != nil {
 		return "", err
 	}
-	resp, err := client.DescribeInstances(&ecs.DescribeInstancesRequest{
-		RegionId: tea.String(cfg.AlibabaCloud.RegionID),
-		Tag: []*ecs.DescribeInstancesRequestTag{
-			{Key: tea.String("ack.aliyun.com"), Value: tea.String(clusterID)},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("describe ACK worker instances: %w", err)
+	return discoverWorkerImageID(ctx, cfg.AlibabaCloud.RegionID, clusterID, clients.NewDefaultECSClient(client, cfg.AlibabaCloud.RegionID))
+}
+
+// The shared ECS adapter provides exact IDs, pagination, context cancellation
+// and the provider's ShowExpired policy (#29). Discovery never substitutes an
+// image: the smoke test must exercise the image observed on an ACK worker.
+func discoverWorkerImageID(ctx context.Context, region, clusterID string, client clients.ECSClient) (string, error) {
+	if strings.TrimSpace(clusterID) == "" {
+		return "", fmt.Errorf("ACK cluster ID is required for worker image discovery")
 	}
-	imageID := ExtractWorkerImageID(resp)
-	if imageID == "" || strings.HasPrefix(imageID, "m-") {
-		return imageID, nil
+	for page := int32(1); ; page++ {
+		resp, err := client.DescribeInstances(ctx, &ecs.DescribeInstancesRequest{
+			RegionId: tea.String(region), PageNumber: tea.Int32(page), PageSize: tea.Int32(100),
+			Tag: []*ecs.DescribeInstancesRequestTag{{Key: tea.String("ack.aliyun.com"), Value: tea.String(clusterID)}},
+		})
+		if err != nil {
+			return "", fmt.Errorf("describe ACK worker instances: %w", err)
+		}
+		if resp == nil || resp.Body == nil || resp.Body.Instances == nil {
+			return "", fmt.Errorf("ACK worker discovery returned no instance data for cluster %s", clusterID)
+		}
+		for _, worker := range resp.Body.Instances.Instance {
+			if worker == nil || strings.TrimSpace(tea.StringValue(worker.ImageId)) == "" {
+				continue
+			}
+			imageID := strings.TrimSpace(tea.StringValue(worker.ImageId))
+			typeID := tea.StringValue(worker.InstanceType)
+			if typeID == "" {
+				return "", fmt.Errorf("ACK worker %s has no instance type for image %s architecture validation", tea.StringValue(worker.InstanceId), imageID)
+			}
+			types, err := client.DescribeInstanceTypes(ctx, []string{typeID})
+			if err != nil {
+				return "", fmt.Errorf("describe ACK worker instance type %s: %w", typeID, err)
+			}
+			architecture := ""
+			if types != nil && types.Body != nil && types.Body.InstanceTypes != nil {
+				for _, it := range types.Body.InstanceTypes.InstanceType {
+					if it != nil && tea.StringValue(it.InstanceTypeId) == typeID {
+						architecture, _ = ecsutil.KnownArchitecture(tea.StringValue(it.CpuArchitecture))
+					}
+				}
+			}
+			if architecture == "" {
+				return "", fmt.Errorf("ACK worker instance type %s has unknown architecture", typeID)
+			}
+			images, err := client.DescribeImages(ctx, []string{imageID}, nil)
+			if err != nil {
+				return "", fmt.Errorf("resolve exact ACK worker image %s: %w", imageID, err)
+			}
+			for _, image := range images {
+				if tea.StringValue(image.ImageId) != imageID {
+					continue
+				}
+				imageArch, known := ecsutil.KnownArchitecture(tea.StringValue(image.Architecture))
+				if !known || imageArch != architecture {
+					return "", fmt.Errorf("ACK worker image %s architecture %q does not match %s (%s)", imageID, tea.StringValue(image.Architecture), typeID, architecture)
+				}
+				if tea.StringValue(image.Status) != "Available" || (tea.StringValue(image.ImageOwnerAlias) == "marketplace" && !tea.BoolValue(image.IsSubscribed)) {
+					return "", fmt.Errorf("exact ACK worker image %s is not available for instance launch", imageID)
+				}
+				if !strings.EqualFold(tea.StringValue(image.OSType), "linux") {
+					return "", fmt.Errorf("exact ACK worker image %s is not Linux", imageID)
+				}
+				return imageID, nil
+			}
+			return "", fmt.Errorf("exact ACK worker image %s is unavailable in %s; no image fallback is performed", imageID, region)
+		}
+		if len(resp.Body.Instances.Instance) == 0 || int64(page)*100 >= int64(tea.Int32Value(resp.Body.TotalCount)) {
+			return "", fmt.Errorf("ACK cluster %s has no discoverable worker image", clusterID)
+		}
 	}
-	images, err := client.DescribeImages(&ecs.DescribeImagesRequest{
-		RegionId:  tea.String(cfg.AlibabaCloud.RegionID),
-		ImageName: tea.String(imageID),
-		Status:    tea.String("Available"),
-		PageSize:  tea.Int32(10),
-	})
-	if err != nil {
-		return "", fmt.Errorf("resolve ACK worker image name %s: %w", imageID, err)
-	}
-	if resolved := ExtractImageIDFromImageNameLookup(images); resolved != "" {
-		return resolved, nil
-	}
-	images, err = client.DescribeImages(&ecs.DescribeImagesRequest{
-		RegionId:    tea.String(cfg.AlibabaCloud.RegionID),
-		ImageFamily: tea.String(defaultImageFamily()),
-		Status:      tea.String("Available"),
-		PageSize:    tea.Int32(10),
-	})
-	if err != nil {
-		return "", fmt.Errorf("resolve default worker image family %s: %w", defaultImageFamily(), err)
-	}
-	if resolved := ExtractImageIDFromImageNameLookup(images); resolved != "" {
-		return resolved, nil
-	}
-	return imageID, nil
 }
 
 func DiscoverGPUCapacity(ctx context.Context, cfg *Config, opts GPUDiscoveryOptions) ([]GPUResourceCandidate, error) {
@@ -617,39 +651,6 @@ func IntersectGPUZonesWithClusterZones(resources ClusterResources) (ClusterResou
 	}
 	resources.GPUZones = filtered
 	return resources, nil
-}
-
-func ExtractWorkerImageID(resp *ecs.DescribeInstancesResponse) string {
-	if resp == nil || resp.Body == nil || resp.Body.Instances == nil {
-		return ""
-	}
-	for _, instance := range resp.Body.Instances.Instance {
-		if instance == nil || instance.ImageId == nil {
-			continue
-		}
-		if imageID := strings.TrimSpace(*instance.ImageId); imageID != "" {
-			return imageID
-		}
-	}
-	return ""
-}
-
-func ExtractImageIDFromImageNameLookup(resp *ecs.DescribeImagesResponse) string {
-	if resp == nil || resp.Body == nil || resp.Body.Images == nil {
-		return ""
-	}
-	for _, image := range resp.Body.Images.Image {
-		if image == nil || image.ImageId == nil {
-			continue
-		}
-		if image.Status != nil && !strings.EqualFold(strings.TrimSpace(*image.Status), "Available") {
-			continue
-		}
-		if imageID := strings.TrimSpace(*image.ImageId); imageID != "" {
-			return imageID
-		}
-	}
-	return ""
 }
 
 func appendVSwitchZones(zones []string, resp *vpc.DescribeVSwitchesResponse) []string {
