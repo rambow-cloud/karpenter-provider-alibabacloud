@@ -32,17 +32,25 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - id: changes
+        name: Determine validation scope
+        run: python .github/scripts/ci_changes.py
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        if: steps.changes.outputs.run_go == 'true'
         with:
           go-version-file: go.mod
           cache: false
       - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
+        if: steps.changes.outputs.run_go == 'true'
         with:
           version: v0.30.0
           node_image: kindest/node:v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a
           kubectl_version: v1.34.0
           cluster_name: karpenter-kwok-e2e
       - name: Record and validate KWOK Kubernetes baseline
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         env:
           CGO_ENABLED: '0'
@@ -53,11 +61,13 @@ jobs:
           go run ./test/hack/e2e/ackctl validate-versions \
             --versions "$(jq -c '[.serverVersion.gitVersion]' .e2e/kwok/server-version.json)"
       - name: Install ko
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
           GOFLAGS=-mod=mod go install github.com/google/ko@latest
       - name: Run KWOK e2e
+        if: steps.changes.outputs.run_go == 'true'
         shell: bash
         env:
           UPSTREAM_TEST_SUITE: ${{ inputs.suite || 'regression' }}
@@ -69,14 +79,14 @@ jobs:
           set -euo pipefail
           make kwok-core-e2e
       - name: Collect KWOK diagnostics
-        if: always()
+        if: always() && steps.changes.outputs.run_go == 'true'
         shell: bash
         env:
           KWOK_REPORT_DIR: .e2e/kwok
           KWOK_REPORT_PRESERVE: "true"
         run: bash test/hack/kwok/report.sh
       - name: Upload KWOK report
-        if: always()
+        if: always() && steps.changes.outputs.run_go == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e2e-kwok-report

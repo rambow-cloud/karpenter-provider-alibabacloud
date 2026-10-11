@@ -1,0 +1,33 @@
+name: Website or documentation / 网站与文档
+description: Update project pages or documentation with reviewable acceptance criteria.
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user outcome
+      description: Which page or document needs updating, and what should readers understand?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Proposed scope
+      description: Include Chinese/English pages and affected links. Keep implementation and ACK acceptance claims accurate.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable content, navigation or presentation outcomes.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Website changes use the strict site build; document changes use relevant checks. CI routes by changed files, not this label. Website/docs/Actions-only changes skip Go work.
+    validations:
+      required: true
