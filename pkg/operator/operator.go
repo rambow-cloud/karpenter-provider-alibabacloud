@@ -27,6 +27,7 @@ import (
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	"github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/credentials-go/credentials"
@@ -463,6 +464,9 @@ func InitCSClient(region, accessKeyID, accessKeySecret string) (clients.CSClient
 
 // NewOperator creates a new Alibaba Cloud Karpenter Operator
 func NewOperator(ctx context.Context, coreOp *coreoperator.Operator) (*Operator, error) {
+	if err := kubernetesversion.ValidateServer(coreOp.KubernetesInterface.Discovery()); err != nil {
+		return nil, fmt.Errorf("Kubernetes support check: %w", err)
+	}
 	// Get options from context
 	opts := options.FromContext(ctx)
 

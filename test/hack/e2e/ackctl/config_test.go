@@ -22,6 +22,7 @@ alibaba_cloud:
   region_id: cn-shanghai
 cluster:
   name: e2e
+  kubernetes_version: "1.34.10-aliyun.1"
   cluster_type: ManagedKubernetes
   cluster_spec: ack.pro.small
   profile: Default
@@ -98,6 +99,7 @@ alibaba_cloud:
   region_id: cn-shanghai
 cluster:
   name: e2e
+  kubernetes_version: "1.34.10-aliyun.1"
 `), 0600))
 
 	cfg, err := LoadConfig(path)
@@ -115,6 +117,7 @@ alibaba_cloud:
   region_id: cn-shanghai
 cluster:
   name: old-name
+  kubernetes_version: "1.34.10-aliyun.1"
 `), 0600))
 
 	cfg, err := LoadConfig(path)
@@ -166,11 +169,11 @@ func TestApplyRuntimeConfigAppliesKubernetesVersion(t *testing.T) {
 
 	err := applyRuntimeConfig(cfg, RuntimeConfigOverrides{
 		Region:            "cn-shanghai",
-		KubernetesVersion: "1.32",
+		KubernetesVersion: "1.34",
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "1.32", cfg.Cluster.KubernetesVersion)
+	require.Equal(t, "1.34", cfg.Cluster.KubernetesVersion)
 }
 
 func TestApplyRuntimeConfigAppliesIPStack(t *testing.T) {

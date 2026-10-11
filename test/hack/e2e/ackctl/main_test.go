@@ -22,6 +22,7 @@ alibaba_cloud:
   region_id: cn-shanghai
 cluster:
   name: ack-e2e
+  kubernetes_version: "1.34.10-aliyun.1"
   cluster_type: ManagedKubernetes
   endpoint_public_access: true
   node_pool:
@@ -161,6 +162,7 @@ alibaba_cloud:
   region_id: cn-shanghai
 cluster:
   name: ack-e2e
+  kubernetes_version: "1.34.10-aliyun.1"
 `), 0600))
 
 	err := run([]string{
@@ -170,7 +172,7 @@ cluster:
 		"--region", "cn-hangzhou",
 		"--cluster-name", "ack-e2e-runtime",
 		"--kubeconfig", filepath.Join(dir, "kubeconfig"),
-		"--k8s-version", "1.32",
+		"--k8s-version", "1.34",
 	})
 	require.NoError(t, err)
 
@@ -179,7 +181,7 @@ cluster:
 	require.Equal(t, "cn-hangzhou", rendered.AlibabaCloud.RegionID)
 	require.Equal(t, "ack-e2e-runtime", rendered.Cluster.Name)
 	require.Equal(t, filepath.Join(dir, "kubeconfig"), rendered.Kubeconfig)
-	require.Equal(t, "1.32", rendered.Cluster.KubernetesVersion)
+	require.Equal(t, "1.34", rendered.Cluster.KubernetesVersion)
 }
 
 func TestDumpWritesManifestSummary(t *testing.T) {

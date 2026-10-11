@@ -15,7 +15,7 @@ func TestBuildCreateClusterRequestMapsConfigAndOwnershipTags(t *testing.T) {
 			ClusterType:          "ManagedKubernetes",
 			ClusterSpec:          "ack.pro.small",
 			Profile:              "Default",
-			KubernetesVersion:    "1.32",
+			KubernetesVersion:    "1.34",
 			VPCID:                "vpc-1",
 			VSwitchIDs:           []string{"vsw-1"},
 			ServiceCIDR:          "172.21.0.0/20",
@@ -50,7 +50,7 @@ func TestBuildCreateClusterRequestMapsConfigAndOwnershipTags(t *testing.T) {
 	require.Equal(t, "ManagedKubernetes", tea.StringValue(req.ClusterType))
 	require.Equal(t, "ack.pro.small", tea.StringValue(req.ClusterSpec))
 	require.Equal(t, "Default", tea.StringValue(req.Profile))
-	require.Equal(t, "1.32", tea.StringValue(req.KubernetesVersion))
+	require.Equal(t, "1.34", tea.StringValue(req.KubernetesVersion))
 	require.Equal(t, "dual", tea.StringValue(req.IpStack))
 	require.Equal(t, "vpc-1", tea.StringValue(req.Vpcid))
 	require.Equal(t, "vsw-1", tea.StringValue(req.WorkerVswitchIds[0]))

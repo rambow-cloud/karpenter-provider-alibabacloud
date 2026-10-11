@@ -8,20 +8,44 @@ on:
       cleanup:
         type: boolean
         default: true
+      k8s_versions:
+        type: string
+        required: true
+        description: 'JSON array of ACK versions confirmed available in the selected region (>=1.34); no automatic default'
 permissions:
   contents: read
 concurrency:
   group: e2e-version-compatibility-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  version-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      versions: ${{ steps.validate.outputs.versions }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: go.mod
+          cache: true
+      - id: validate
+        name: Validate confirmed ACK versions before cloud jobs
+        shell: bash
+        env:
+          ACK_VERSIONS: ${{ inputs.k8s_versions }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          mkdir -p .e2e
+          go run ./test/hack/e2e/ackctl validate-versions --versions "${ACK_VERSIONS}" > .e2e/versions.json
+          echo "versions=$(cat .e2e/versions.json)" >> "${GITHUB_OUTPUT}"
   version-compatibility:
+    needs: version-preflight
     strategy:
       fail-fast: false
       matrix:
-        k8s_version:
-          - "1.30"
-          - "1.31"
-          - "1.32"
+        k8s_version: ${{ fromJSON(needs.version-preflight.outputs.versions) }}
     uses: ./.github/workflows/e2e.yaml
     with:
       suite: Integration

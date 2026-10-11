@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
 	"github.com/alibabacloud-go/tea/tea"
@@ -54,6 +55,8 @@ func run(args []string) error {
 		return runSweep(args[1:])
 	case "render-config":
 		return runRenderConfig(args[1:])
+	case "validate-versions":
+		return runValidateVersions(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -311,6 +314,9 @@ func runEnsureCapacityReservation(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateKubernetesConfig(cfg); err != nil {
+		return err
+	}
 	manifest, err := LoadManifest(*manifestPath)
 	if err != nil {
 		return err
@@ -519,6 +525,9 @@ func runEnsureNodePool(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := validateKubernetesConfig(cfg); err != nil {
+		return err
+	}
 	manifest, err := LoadManifest(*manifestPath)
 	if err != nil {
 		return err
@@ -596,6 +605,9 @@ func runSetup(args []string) error {
 
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
+		return err
+	}
+	if err := validateKubernetesConfig(cfg); err != nil {
 		return err
 	}
 	if err := validateSuiteConfig(cfg, *suite, *discoverGPU); err != nil {
@@ -676,6 +688,7 @@ func runSetup(args []string) error {
 		return err
 	}
 	resources.GPUInstanceTypes = gpuInstanceTypes
+	manifest.KubernetesVersion = resources.KubernetesVersion
 	resources.GPUZones = gpuZones
 	resources, err = IntersectGPUZonesWithClusterZones(resources)
 	if err != nil {
@@ -768,7 +781,56 @@ func runRenderConfig(args []string) error {
 	}); err != nil {
 		return err
 	}
+	if err := validateKubernetesConfig(cfg); err != nil {
+		return err
+	}
 	return SaveConfig(*outputPath, cfg)
+}
+
+func validateKubernetesConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("ACK setup config is required")
+	}
+	if err := kubernetesversion.Validate(cfg.Cluster.KubernetesVersion); err != nil {
+		return fmt.Errorf("cluster.kubernetes_version: %w", err)
+	}
+	return nil
+}
+
+func runValidateVersions(args []string) error {
+	fs := flag.NewFlagSet("validate-versions", flag.ContinueOnError)
+	input := fs.String("versions", "", "JSON array of ACK versions confirmed available in the target region")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	versions, err := validateVersionList(*input)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(versions)
+}
+
+func validateVersionList(input string) ([]string, error) {
+	var versions []string
+	if err := json.Unmarshal([]byte(input), &versions); err != nil {
+		return nil, fmt.Errorf("versions must be a JSON array of version strings: %w", err)
+	}
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("at least one confirmed ACK version is required")
+	}
+	seen := map[string]bool{}
+	for i, value := range versions {
+		value = strings.TrimSpace(value)
+		if err := kubernetesversion.Validate(value); err != nil {
+			return nil, err
+		}
+		if seen[value] {
+			return nil, fmt.Errorf("duplicate ACK version %q", value)
+		}
+		seen[value] = true
+		versions[i] = value
+	}
+	return versions, nil
 }
 
 func recordACKClusterManifest(manifest *Manifest, manifestPath, clusterID, clusterName, kubeconfigPath string) error {
@@ -909,6 +971,7 @@ func runDump(args []string) error {
 	var summary strings.Builder
 	fmt.Fprintf(&summary, "clusterName: %s\n", manifest.ClusterName)
 	fmt.Fprintf(&summary, "clusterID: %s\n", manifest.ClusterID)
+	fmt.Fprintf(&summary, "kubernetesVersion: %s\n", manifest.KubernetesVersion)
 	fmt.Fprintf(&summary, "region: %s\n", manifest.Region)
 	fmt.Fprintf(&summary, "suite: %s\n", manifest.Suite)
 	fmt.Fprintf(&summary, "source: %s\n", manifest.Source)
@@ -981,12 +1044,13 @@ func newManifest(cfg *Config, clusterName, gitRef, suite, source, kubeconfigPath
 
 func envValues(cfg *Config, manifest *Manifest, deployConfigPath, endpoint string, rendered *RenderedFixtures, resources ClusterResources) map[string]string {
 	values := map[string]string{
-		"KUBECONFIG":            absolutePath(manifest.KubeconfigPath),
-		"TEST_DEPLOY_CONFIG":    absolutePath(deployConfigPath),
-		"TEST_REGION":           cfg.AlibabaCloud.RegionID,
-		"TEST_CLUSTER_ID":       manifest.ClusterID,
-		"TEST_CLUSTER_NAME":     manifest.ClusterName,
-		"TEST_CLUSTER_ENDPOINT": endpoint,
+		"KUBECONFIG":              absolutePath(manifest.KubeconfigPath),
+		"TEST_DEPLOY_CONFIG":      absolutePath(deployConfigPath),
+		"TEST_REGION":             cfg.AlibabaCloud.RegionID,
+		"TEST_CLUSTER_ID":         manifest.ClusterID,
+		"TEST_CLUSTER_NAME":       manifest.ClusterName,
+		"TEST_CLUSTER_ENDPOINT":   endpoint,
+		"TEST_KUBERNETES_VERSION": resources.KubernetesVersion,
 	}
 	if rendered != nil {
 		values["DEFAULT_NODECLASS"] = absolutePath(rendered.NodeClassPath)

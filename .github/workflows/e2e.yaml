@@ -23,6 +23,7 @@ on:
           - AMI
       k8s_version:
         type: string
+        description: "ACK version >=1.34, confirmed available in this region; otherwise use cluster.kubernetes_version in config"
       cluster_name:
         type: string
       cleanup:
@@ -132,6 +133,7 @@ jobs:
           ALIBABA_CLOUD_E2E_CONFIG: ${{ secrets.ALIBABA_CLOUD_E2E_CONFIG }}
           ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_ID }}
           ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
+          K8S_VERSION: ${{ inputs.k8s_version }}
         run: |
           set -euo pipefail
           umask 077
@@ -143,7 +145,7 @@ jobs:
             --region "${TEST_REGION}" \
             --cluster-name "${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}" \
             --kubeconfig ".e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/kubeconfig" \
-            --k8s-version "${{ inputs.k8s_version }}" \
+            --k8s-version "${K8S_VERSION}" \
             --ip-stack ""
       - id: setup-cluster
         name: Setup ACK cluster
@@ -163,12 +165,14 @@ jobs:
         run: |
           set -euo pipefail
           source "${{ steps.setup-cluster.outputs.env_file }}"
+          printf '%s\n' "${TEST_KUBERNETES_VERSION}" > ".e2e/${TEST_CLUSTER_NAME}/kubernetes-version.txt"
           {
             echo "KUBECONFIG=${KUBECONFIG}"
             echo "TEST_REGION=${TEST_REGION}"
             echo "TEST_CLUSTER_ID=${TEST_CLUSTER_ID}"
             echo "TEST_CLUSTER_NAME=${TEST_CLUSTER_NAME}"
             echo "TEST_CLUSTER_ENDPOINT=${TEST_CLUSTER_ENDPOINT}"
+            echo "TEST_KUBERNETES_VERSION=${TEST_KUBERNETES_VERSION}"
             echo "DEFAULT_NODECLASS=${DEFAULT_NODECLASS}"
             echo "DEFAULT_NODEPOOL=${DEFAULT_NODEPOOL}"
             echo "TEST_VSWITCH_IDS=${TEST_VSWITCH_IDS:-}"
@@ -181,6 +185,13 @@ jobs:
             echo "TEST_IMAGE_ID=${TEST_IMAGE_ID:-}"
             echo "TEST_IMAGE_FAMILY=${TEST_IMAGE_FAMILY:-}"
           } >> "${GITHUB_ENV}"
+      - name: Upload actual ACK Kubernetes version
+        if: always() && steps.setup-cluster.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ack-version-${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}
+          path: .e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/kubernetes-version.txt
+          if-no-files-found: error
       - name: Run ${{ inputs.suite }} tests
         shell: bash
         env:

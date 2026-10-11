@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
+
 	"go.yaml.in/yaml/v3"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 )
@@ -97,6 +99,7 @@ func permissions(rules []rule) map[string]bool {
 }
 func checkKWOKChart(core module) error {
 	data, err := run("helm", "template", "karpenter", filepath.Join(core.Dir, "kwok", "charts"),
+		"--kube-version", kubernetesversion.Minimum+".0",
 		"--namespace", "kube-system", "--values", "test/hack/kwok/values.yaml")
 	if err != nil {
 		return err
@@ -127,6 +130,35 @@ func checkKWOKChart(core module) error {
 		}
 	}
 	return fmt.Errorf("KWOK chart has no deployment FEATURE_GATES")
+}
+
+func checkKubernetesMinimum() error {
+	data, err := os.ReadFile("charts/karpenter/Chart.yaml")
+	if err != nil {
+		return err
+	}
+	var chart struct {
+		KubeVersion string `yaml:"kubeVersion"`
+	}
+	if err := yaml.Unmarshal(data, &chart); err != nil {
+		return err
+	}
+	if chart.KubeVersion != ">="+kubernetesversion.Minimum+".0-0" {
+		return fmt.Errorf("chart must declare Kubernetes >=%s with distribution suffix support", kubernetesversion.Minimum)
+	}
+	for _, value := range []string{"1.33.99", "1.33.99-aliyun.1"} {
+		_, err := run("helm", "template", "minimum-test", "charts/karpenter", "--kube-version", value)
+		if err == nil || !strings.Contains(err.Error(), "requires kubeVersion") {
+			return fmt.Errorf("Helm must reject Kubernetes %s through kubeVersion (got %v)", value, err)
+		}
+	}
+	for _, value := range []string{"1.34.0", "1.34.0-aliyun.1", "1.34.10-aliyun.1", "1.35.0", "1.35.0-aliyun.1", "1.36.0"} {
+		if _, err := run("helm", "template", "minimum-test", "charts/karpenter", "--kube-version", value); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("Helm Kubernetes minimum %s passed: 1.33 rejected, 1.34/1.35/1.36 and ACK suffixes rendered\n", kubernetesversion.Minimum)
+	return nil
 }
 func check(sync, kwokOnly bool) error {
 	core, err := loadModule("sigs.k8s.io/karpenter")
@@ -179,7 +211,11 @@ func check(sync, kwokOnly bool) error {
 		fmt.Printf("Synchronized %d CRDs from core %s\n", len(files), core.Version)
 		return nil
 	}
+	if err := checkKubernetesMinimum(); err != nil {
+		return err
+	}
 	actualData, err := run("helm", "template", "karpenter", "charts/karpenter", "--namespace", "karpenter",
+		"--kube-version", kubernetesversion.Minimum+".0",
 		"--set-string", "settings.featureGates=NodeOverlay=true",
 		"--set-string", "settings.providerFeatureGates=DeploymentSet=true")
 	if err != nil {
