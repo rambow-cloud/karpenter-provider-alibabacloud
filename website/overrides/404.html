@@ -1,0 +1,5 @@
+{% extends "main.html" %}
+{% block content %}
+<h1>404</h1>
+<p>{{ lang.t('language') == 'zh' and '页面未找到。请通过导航或搜索找到项目文档。' or 'Page not found. Use navigation or search to find the project documentation.' }}</p>
+{% endblock %}

@@ -12,6 +12,7 @@ nav = [
   { "Home" = "index.md" },
   { "Project guide" = [
     { "Overview" = "docs/index.md" },
+    { "Features and FAQ" = "docs/features/index.md" },
     { "Why this fork" = "docs/motivation/index.md" },
     { "Status and roadmap" = "docs/status/index.md" },
     { "Get started and contribute" = "docs/participate/index.md" },
@@ -19,6 +20,7 @@ nav = [
 ]
 
 [project.theme]
+custom_dir = "overrides"
 variant = "modern"
 language = "en"
 font = false

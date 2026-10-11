@@ -1,47 +1,109 @@
 ---
+title: Kubernetes node provisioning on Alibaba Cloud ECS
+description: Rambow Cloud's community-maintained Alibaba Cloud Karpenter provider connects Pod demand to ECS capacity. Explore features, Kubernetes 1.34+ requirements and pending ACK acceptance.
 hide:
   - toc
+  - navigation
 ---
 
-# Alibaba Cloud Karpenter
+<div class="project-hero" markdown>
 
-<div class="project-intro" markdown>
+<div class="project-brand">
+  <img src="assets/rambow-karpenter.png" width="48" height="48" alt="Rambow Cloud and Karpenter K project mark">
+  <span>RAMBOW CLOUD <span class="brand-divider">/</span> KARPENTER</span>
+</div>
 
-![Rambow Cloud ram and cloud with a K for Karpenter](assets/rambow-karpenter.png){ width="160" height="160" }
+# Alibaba Cloud nodes.<br>Driven by your workloads.
 
-<p class="tagline">Alibaba Cloud nodes that follow your workloads.</p>
+<p class="hero-summary">Working toward the AWS Karpenter experience,<br class="wide-break">with a maintained ECS provider for Kubernetes on Alibaba Cloud.</p>
 
-A community-maintained Alibaba Cloud Karpenter provider, working toward the AWS Karpenter node provisioning experience.
+[Explore features](docs/features/index.md){ .md-button .md-button--primary }
+[Get started](docs/participate/index.md){ .md-button }
 
-[About the project](docs/motivation/index.md){ .md-button .md-button--primary }
-[View source](https://github.com/rambow-cloud/karpenter-provider-alibabacloud){ .md-button }
+<div class="project-baseline"><span>Karpenter v1.14.1</span><span>Kubernetes 1.34+</span><span>Apache-2.0</span></div>
 
 </div>
 
-## Why this project exists
+## Workloads first. Cloud capacity on demand.
 
-We want **AWS Karpenter-like behavior on Alibaba Cloud**: use Pod resource and scheduling requirements to choose suitable ECS instances, provision nodes, and manage their lifecycle.
+Alibaba Cloud Karpenter is Rambow Cloud's community provider. It connects Pod resource requests and scheduling constraints to Alibaba Cloud ECS, so node configuration starts with workload needs.
 
-The official Alibaba Cloud provider established a foundation, but its ongoing maintenance, Karpenter updates, and fixes have not met our practical needs. **That gap motivates Rambow Cloud to maintain this community fork.** We preserve upstream attribution and make improvements through public issues, code review, and validation evidence.
+<div class="feature-grid" markdown>
 
-## From workloads to ECS
+<div class="feature-card" markdown>
 
-| Configuration | Responsibility |
-| --- | --- |
-| **Pod** | Resource requests, architecture, and scheduling constraints |
-| **NodePool** | Capacity, instance requirements, zones, and lifecycle boundaries |
-| **ECSNodeClass** | Images, vSwitches, security groups, and disks |
-| **Provider** | ECS API integration, instance creation, node registration, and retirement |
+<span class="feature-label">01 / PROVISIONING</span>
 
-This workflow is being improved. The AWS provider informs our intended experience and engineering practices; alignment is tracked through concrete issues and acceptance criteria. [Read the motivation →](docs/motivation/index.md)
+### Start with Pod demand
 
-## Current progress
+Use Karpenter core to process pending Pods' resource requests and scheduling constraints, then select suitable ECS node capacity.
 
-**Karpenter core v1.14.1 · Chart 0.3.0-dev · Community development candidate**
+</div>
 
-The version migration and relevant offline and KWOK checks have progressed. Real ACK/ECS runtime and upgrade/rollback acceptance remain pending. Kubernetes 1.34+ policy, dependency security, image resolution, and lifecycle fixes are tracked separately.
+<div class="feature-card" markdown>
 
-[Status and roadmap](docs/status/index.md){ .md-button }
-[Get started and contribute](docs/participate/index.md){ .md-button }
+<span class="feature-label">02 / SCHEDULING</span>
 
-<p class="project-status">A community fork of AliyunContainerService's provider, under Apache-2.0. GitHub Issues and Milestones track live progress.</p>
+### Declare capacity boundaries
+
+Define instance requirements, zones, architecture and capacity types through NodePool, with separate on-demand and Spot creation paths.
+
+</div>
+
+<div class="feature-card" markdown>
+
+<span class="feature-label">03 / CLOUD CONFIGURATION</span>
+
+### Configure Alibaba Cloud resources
+
+Manage images, vSwitches, security groups and disks through ECSNodeClass, keeping cloud configuration declarative and traceable.
+
+</div>
+
+<div class="feature-card" markdown>
+
+<span class="feature-label">04 / LIFECYCLE</span>
+
+### Connect the node lifecycle
+
+Integrate instance creation, bootstrap, discovery and deletion. Cluster ownership checks bound resource operations.
+
+</div>
+
+<div class="feature-card" markdown>
+
+<span class="feature-label">05 / COMPATIBILITY</span>
+
+### Make version requirements explicit
+
+Follow Karpenter v1.14.1 with Kubernetes 1.34 as the minimum, checked by Helm, controller startup and ACK configuration.
+
+</div>
+
+<div class="feature-card" markdown>
+
+<span class="feature-label">06 / MAINTENANCE</span>
+
+### Maintain with evidence
+
+Alibaba Cloud SDK V2.0, CGO-disabled builds and Go vulnerability checks, with delivery and verification recorded in issues, PRs and CI.
+
+</div>
+
+</div>
+
+These describe current code capabilities and engineering direction. **Chart 0.3.0-dev remains a development candidate. Real ACK/ECS lifecycle and upgrade/rollback acceptance are pending; Spot interruption handling is planned.** [Review features and validation boundaries →](docs/features/index.md)
+
+## Why we keep maintaining it
+
+We want **AWS Karpenter-like behavior on Alibaba Cloud**. The official provider established a foundation, but ongoing maintenance, upstream updates and fixes have not met our practical needs. That gap motivates this community fork.
+
+We preserve AliyunContainerService attribution and the Apache-2.0 license, and improve the project through public review and validation. [Read the motivation →](docs/motivation/index.md)
+
+<div class="project-next" markdown>
+
+### Understand the boundaries. Choose your next step.
+
+[Status and roadmap](docs/status/index.md) · [Try or contribute](docs/participate/index.md) · [Source on GitHub](https://github.com/rambow-cloud/karpenter-provider-alibabacloud)
+
+</div>

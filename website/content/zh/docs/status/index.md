@@ -1,3 +1,9 @@
+---
+title: 开发状态、验证边界与路线图
+description: 查看 Karpenter v1.14.1、Kubernetes 1.34+、SDK、安全和生命周期工作的当前状态，区分离线 CI、KWOK
+  与待完成的真实 ACK 验收。
+---
+
 # 当前状态与路线图
 
 ## 当前开发基线
@@ -18,7 +24,7 @@ Karpenter core 和 AWS 测试 harness 固定为 **v1.14.1**，chart 为 **0.3.0-
 | 最小 ACK/ECS E2E | 一个 NodePool、一个 Pod、目标一台 ECS 的验收入口正在规划 | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
 | Spot 中断处理 | 独立规划的功能；不能将 Spot 创建等同于完整中断处理 | [Spot milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/5) |
 
-这是网站首次发布时的状态说明。实时进度以 [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues)、[Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones) 和 [Project](https://github.com/orgs/rambow-cloud/projects/4) 为准。
+内容复核日期：**2026-10-11**。实时进度以 [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues)、[Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones) 和 [Project](https://github.com/orgs/rambow-cloud/projects/4) 为准。
 
 ## 如何判断一项能力已经完成
 

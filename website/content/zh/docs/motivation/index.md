@@ -1,10 +1,15 @@
+---
+title: 为什么维护阿里云 Karpenter 社区分支
+description: 了解 Rambow Cloud 维护 阿里云 Karpenter 的动力：参考 AWS Karpenter，补足持续维护、版本跟进和问题修复，并保留官方项目来源与许可。
+---
+
 # 为什么继续维护
 
 ## 项目的动力
 
 我们希望在阿里云获得类似 **AWS Karpenter** 的节点弹性效果：从 Pod 的资源与调度需求出发，选择合适的实例规格和可用区，创建能够承载负载的节点，并把节点回收纳入可控的生命周期。
 
-官方 [Alibaba Cloud provider](https://github.com/AliyunContainerService/karpenter-provider-alibabacloud) 提供了这个方向的起点。但它的持续维护、上游版本跟进与问题修复，尚未满足维护者的实际使用需求。**这就是本项目继续维护这个社区分支的动力。**
+官方 [阿里云 provider](https://github.com/AliyunContainerService/karpenter-provider-alibabacloud) 提供了这个方向的起点。但它的持续维护、上游版本跟进与问题修复，尚未满足维护者的实际使用需求。**这就是本项目继续维护这个社区分支的动力。**
 
 我们保留上游的来源与许可，通过公开代码审查、issue、测试和 PR 补足这些工作。本项目由社区维护，和阿里云官方项目及 AWS provider 分别管理。
 
