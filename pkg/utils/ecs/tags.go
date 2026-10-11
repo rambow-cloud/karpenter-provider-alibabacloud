@@ -35,6 +35,11 @@ const MaxTagsPerRequest = 20
 //
 // Returns nil if the input map is empty.
 func BatchTags(tags map[string]string) []map[string]string {
+	return BatchTagsWithPriority(tags)
+}
+
+// BatchTagsWithPriority keeps recovery ownership tags in the initial launch.
+func BatchTagsWithPriority(tags map[string]string, priority ...string) []map[string]string {
 	if len(tags) == 0 {
 		return nil
 	}
@@ -45,6 +50,20 @@ func BatchTags(tags map[string]string) []map[string]string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	ranks := map[string]int{}
+	for i, key := range priority {
+		ranks[key] = i + 1
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		a, b := ranks[keys[i]], ranks[keys[j]]
+		if a == 0 {
+			a = len(priority) + 1
+		}
+		if b == 0 {
+			b = len(priority) + 1
+		}
+		return a < b
+	})
 
 	var batches []map[string]string
 	for i := 0; i < len(keys); i += MaxTagsPerRequest {

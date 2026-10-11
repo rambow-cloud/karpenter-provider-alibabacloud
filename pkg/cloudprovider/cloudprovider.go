@@ -60,7 +60,8 @@ var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
 // CloudProvider implements the Karpenter CloudProvider interface for Alibaba Cloud.
 type CloudProvider struct {
 	// Kubernetes client for accessing cluster resources
-	kubeClient client.Client
+	kubeClient   client.Client
+	launchReader client.Reader
 
 	// Providers for Alibaba Cloud resources
 	instanceProvider        *instance.Provider
@@ -84,6 +85,7 @@ func New(
 	instanceProvider *instance.Provider,
 	recorder events.Recorder,
 	kubeClient client.Client,
+	launchReader client.Reader,
 	imageFamilyProvider *imagefamily.Provider,
 	securityGroupProvider *securitygroup.Provider,
 	vswitchProvider *vswitch.Provider,
@@ -96,6 +98,7 @@ func New(
 ) *CloudProvider {
 	return &CloudProvider{
 		kubeClient:              kubeClient,
+		launchReader:            launchReader,
 		instanceProvider:        instanceProvider,
 		instanceTypeProvider:    instanceTypeProvider,
 		imageFamilyProvider:     imageFamilyProvider,
@@ -149,8 +152,22 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		return nil, cloudprovider.NewCreateError(err, "ClusterOwnershipInvalid", err.Error())
 	}
 
-	// 2. Verify NodeClass is ready
+	if nodeClaim.UID != "" {
+		if recovered, err := c.recoverLaunch(ctx, nodeClaim, tags); err != nil || recovered != nil {
+			return recovered, err
+		}
+	}
+	// Recover first: core deletes an unlaunched claim on NodeClassNotReady.
 	if err := nodeClassReadinessError(nodeClass); err != nil {
+		if nodeClaim.UID != "" {
+			_, attempt, readErr := c.readLaunch(ctx, nodeClaim)
+			if readErr != nil {
+				return nil, readErr
+			}
+			if attempt.Token != "" && !attempt.Rejected {
+				return nil, fmt.Errorf("unresolved launch waiting for NodeClass: %v", err)
+			}
+		}
 		return nil, err
 	}
 	// Refresh concrete image IDs against the actual ACK version before any launch.
@@ -167,6 +184,9 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		nodeClass.Status.Images = images
 	}
 
+	if nodeClaim.UID == "" {
+		return nil, fmt.Errorf("persisted NodeClaim UID is required for creation")
+	}
 	hash, err := nodeClass.Hash()
 	if err != nil {
 		return nil, fmt.Errorf("hash nodeclass: %w", err)
@@ -816,9 +836,15 @@ func BuildInstanceTags(nodeClaim *coreapis.NodeClaim, nodeClass *v1alpha1.ECSNod
 		tags[v1alpha1.TagNodeClaim] = nodeClaim.Name
 	}
 
-	// Layer 3: user-defined tags — highest priority, may override layers 1 and 2
+	// Layer 3: user tags. Restore identity even when admission is bypassed.
 	for k, v := range nodeClass.Spec.Tags {
 		tags[k] = v
+	}
+	if nodeClaim.UID != "" {
+		tags[v1alpha1.TagNodeClaimUID] = string(nodeClaim.UID)
+	}
+	if nodeClaim.Name != "" {
+		tags[v1alpha1.TagNodeClaim] = nodeClaim.Name
 	}
 
 	return tags
@@ -1065,7 +1091,16 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			baseOpts.Ipv6AddressCount = &one
 		}
 
-		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, c.instanceProvider.Create, c.unavailableOfferings)
+		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, func(ctx context.Context, opts instance.CreateOptions) (string, error) {
+			if nodeClaim.UID == "" {
+				return c.instanceProvider.Create(ctx, opts)
+			}
+			hash, err := nodeClass.Hash()
+			if err != nil {
+				return "", err
+			}
+			return c.launchInstance(ctx, nodeClaim, opts, hash)
+		}, c.unavailableOfferings)
 		if err == nil {
 			return instanceID, nil
 		}

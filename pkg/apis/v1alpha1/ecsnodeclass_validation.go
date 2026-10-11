@@ -125,6 +125,7 @@ func (nc *ECSNodeClass) validateTags() error {
 		TagClusterID:            true,
 		TagNodePool:             true,
 		TagNodeClaim:            true,
+		TagNodeClaimUID:         true,
 		TagKubeletMaxPods:       true,
 		"kubernetes.io/cluster": true,
 	}

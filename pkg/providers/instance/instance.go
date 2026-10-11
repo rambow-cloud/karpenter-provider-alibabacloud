@@ -20,12 +20,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/batcher"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/errors"
@@ -55,6 +57,7 @@ type CacheEntry struct {
 
 // CreateOptions represents options for creating an instance
 type CreateOptions struct {
+	ClientToken         string
 	InstanceType        string
 	ImageID             string
 	VSwitchID           string
@@ -219,6 +222,11 @@ func (p *Provider) Create(ctx context.Context, opts CreateOptions) (string, erro
 		VSwitchId:        tea.String(opts.VSwitchID),
 		SecurityGroupIds: tea.StringSlice(securityGroupIDs),
 	}
+	if opts.ClientToken != "" {
+		request.ClientToken = tea.String(opts.ClientToken)
+	}
+	request.Amount = tea.Int32(1)
+	request.InstanceChargeType = tea.String(ecsutil.ChargeTypePostPaid)
 
 	if opts.SpotStrategy != "" {
 		request.SpotStrategy = tea.String(opts.SpotStrategy)
@@ -303,14 +311,19 @@ func (p *Provider) Create(ctx context.Context, opts CreateOptions) (string, erro
 	// batches are applied after creation via TagResources. See GH issue #14.
 	var deferredTagBatches []map[string]string
 	if len(opts.Tags) > 0 {
-		batches := ecsutil.BatchTags(opts.Tags)
+		batches := ecsutil.BatchTagsWithPriority(opts.Tags, v1alpha1.TagManagedBy, v1alpha1.TagClusterID, v1alpha1.TagNodeClaim, v1alpha1.TagNodeClaimUID)
 		// First batch goes into RunInstances request
 		if len(batches) > 0 {
 			var tags []*ecs.RunInstancesRequestTag
-			for key, value := range batches[0] {
+			keys := make([]string, 0, len(batches[0]))
+			for key := range batches[0] {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
 				tags = append(tags, &ecs.RunInstancesRequestTag{
 					Key:   tea.String(key),
-					Value: tea.String(value),
+					Value: tea.String(batches[0][key]),
 				})
 			}
 			request.Tag = tags
