@@ -1,9 +1,9 @@
 ---
-title: Features and frequently asked questions
+title: Core features
 description: Explore Pod-driven ECS provisioning, NodePool, ECSNodeClass, on-demand and Spot creation, lifecycle integration and validation boundaries. Find answers on versions, ownership and production readiness.
 ---
 
-# Features and frequently asked questions
+# Core features
 
 **Alibaba Cloud Karpenter is Rambow Cloud's maintained community provider, connecting Karpenter capacity decisions to Alibaba Cloud ECS.** The goal is an AWS Karpenter-like provisioning experience on Alibaba Cloud; it does not currently implement every AWS provider capability.
 
@@ -42,7 +42,7 @@ The project reuses Karpenter core and draws on the AWS provider's experience and
 
 ### Can I deploy it directly to production?
 
-The current chart is a **0.3.0-dev development candidate**. Fresh-install ACK acceptance evidence remain pending. Read [getting started](../participate/index.md), [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md) and [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5), then validate an image built from matching source in an isolated environment.
+The current chart is a **0.3.0-dev development candidate**. Fresh-install ACK acceptance evidence remains pending. Read [quick start](../quickstart/index.md), [versions and images](../support/index.md) and [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5), then validate an image built from matching source in an isolated environment.
 
 ### How can I contribute?
 
@@ -54,4 +54,4 @@ Public images come from the target ACK region, actual cluster version and contai
 
 This provider supports Linux only and rejects Windows or unknown OS values. ContainerOS requires exactly one explicitly configured persistent data disk; ContainerOS with a launch template is currently rejected. Custom/shared images require `imageCompatibilityPolicy: Custom` and exact IDs. Users must verify provenance, runtime, GPU drivers and bootstrap compatibility.
 
-Before upgrading, add the read-only RAM action `cs:DescribeKubernetesVersionMetadata` and update the CRD. See [the complete image policy and configuration examples](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md). Read-only API tests do not establish real ACK lifecycle acceptance.
+For a fresh installation, grant the read-only RAM action `cs:DescribeKubernetesVersionMetadata` and use matching CRDs. See [versions and images](../support/index.md) and [the complete image policy](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md). Read-only API tests do not establish real ACK lifecycle acceptance.

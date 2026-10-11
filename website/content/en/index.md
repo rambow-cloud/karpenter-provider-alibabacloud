@@ -18,10 +18,19 @@ hide:
 <p class="hero-summary">Working toward the AWS Karpenter experience,<br class="wide-break">with a maintained ECS provider for Kubernetes on Alibaba Cloud.</p>
 
 [Explore features](docs/features/index.md){ .md-button .md-button--primary }
-[Get started](docs/participate/index.md){ .md-button }
+[Quick start](docs/quickstart/index.md){ .md-button }
 
 <div class="project-baseline"><span>Karpenter v1.14.1</span><span>Kubernetes 1.34+</span><span>Apache-2.0</span></div>
 
+</div>
+
+## Explore the project
+
+<div class="project-categories">
+  <a href="docs/features/"><strong>Core features</strong><span>Pod-driven provisioning, configuration and lifecycle</span></a>
+  <a href="docs/quickstart/"><strong>Quick start</strong><span>Prepare credentials and install from scratch</span></a>
+  <a href="docs/support/"><strong>Versions and images</strong><span>Kubernetes requirements and ACK image boundaries</span></a>
+  <a href="docs/status/"><strong>Status and roadmap</strong><span>Completed validation and work in progress</span></a>
 </div>
 
 ## Workloads first. Cloud capacity on demand.

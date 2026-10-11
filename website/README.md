@@ -38,9 +38,24 @@ System fonts avoid external font requests. Search and light/dark appearance use 
 
 ## Search and AI discovery
 
+The homepage and native navigation link four independent categories: core features (`docs/features/`), quick start (`docs/quickstart/`), versions and images (`docs/support/`), and status/roadmap (`docs/status/`). Chinese/English labels and page titles agree, and previous guide routes remain available. Installation and compatibility information are readable within the site rather than only in GitHub Markdown.
+
+The build derives breadcrumb trails from each language's explicit navigation and its section landing pages. Non-home pages display a labeled breadcrumb navigation, with the current page marked `aria-current="page"`. The same trail emits `BreadcrumbList` JSON-LD with absolute canonical URLs and sequential positions. Build checks compare visible names/links with the structured data and verify all four category destinations.
+
+Google [sitelinks](https://developers.google.com/search/docs/appearance/sitelinks) are selected automatically. Clear categories, compact titles and descriptive internal links support discovery; neither a `BreadcrumbList` nor other schema forces sitelinks, their labels or order. [Breadcrumb markup](https://developers.google.com/search/docs/appearance/structured-data/breadcrumb) describes genuine hierarchy and is a separate search feature. Do not add a synthetic SearchAction: the local site search is not a published query-endpoint contract.
+
 Every translated page needs a unique front-matter `title` and `description` and a matching path in the other language. The build derives absolute canonical/translation URLs from `site_url`, adds Open Graph and Twitter summary metadata, and emits WebPage JSON-LD. Homepages also identify the website and the Go source project, with repository, license and upstream attribution. Structured data must agree with visible content; do not add unverified reviews, production-readiness claims or AWS feature parity.
 
 After both builds, `build.py` writes one root `sitemap.xml` containing all Chinese and English content pages, including reciprocal `zh-CN`, `en` and `x-default` links. No synthetic modification dates are emitted. Each page links the root sitemap; the native English-only sitemap can remain as a subset. Submit the root URL through Search Console for a property you control; deployment does not automatically submit or establish indexing.
+
+After deployment, a maintainer can finish search-engine submission in a browser:
+
+1. Open [Google Search Console](https://search.google.com/search-console/) and verify a URL-prefix property for `https://rambow-cloud.github.io/karpenter-provider-alibabacloud/`. Use a verification method supported by the hosting setup; add any required verification token through a separate authorized change.
+2. Submit `https://rambow-cloud.github.io/karpenter-provider-alibabacloud/sitemap.xml` in Sitemaps.
+3. Inspect the homepage and the four category URLs (and English equivalents), confirm crawl/index status, and request indexing where appropriate.
+4. Use the [Rich Results Test](https://search.google.com/test/rich-results) on a category page to inspect BreadcrumbList. Monitor indexing and search performance; publication alone does not confirm indexing or sitelinks.
+
+Google's [independent site names](https://developers.google.com/search/docs/appearance/site-names) apply to domain/subdomain roots, not this project subdirectory. A custom domain could provide a distinct site-name scope, but no domain, DNS or host-root configuration is changed here. This site-name restriction is separate from automated sitelinks eligibility.
 
 The root `llms.txt` is a bilingual documentation and evidence index generated from the same content metadata. It is an optional reading aid, not a search ranking mechanism. Feature explanations, direct FAQ answers, evidence links and explicit implementation/acceptance boundaries are the main AI retrieval improvements. Google states that its AI search features use ordinary search discovery and do not require special AI files or markup: [Google AI optimization guidance](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide).
 
@@ -60,7 +75,7 @@ After deployment succeeds, open these in a browser (use Ctrl+F5 if the previous 
 
 Check the Rambow + K logo, desktop/mobile navigation, language selector, light/dark toggle, and search. This browser review is separate from the strict build and deployment status; neither establishes real ACK/ECS acceptance.
 
-For this homepage update, check the compact brand mark and six feature cards at desktop and phone widths. Open `/docs/features/` and switch to English: it should stay on `/en/docs/features/`, with the matching page content. Also open `/sitemap.xml` (12 content URLs at this change) and `/llms.txt`. These are production URLs under the same project prefix. Automated builds check artifacts; visual browser review remains with the maintainer as agreed.
+Check the compact brand mark, four category links and six feature cards at desktop and phone widths. Open `/docs/quickstart/` and `/docs/support/`, follow the visible breadcrumbs and switch to English: the language selector should stay on the matching page. Also open `/sitemap.xml` (16 content URLs at this change) and `/llms.txt`. These are production URLs under the same project prefix. Automated builds check artifacts; visual browser review remains with the maintainer as agreed.
 
 To roll back a website release, revert its PR through a new PR. After the required checks pass and it merges, the website workflow republishes the reverted source. Do not manually edit the deployed artifact.
 

@@ -1,14 +1,14 @@
 ---
-title: 上手试用与参与贡献
+title: 参与贡献
 description: 准备 阿里云 Karpenter 的隔离试用环境与匹配 controller 镜像，了解最低 Kubernetes 版本、部署文档和
   Issue 到分支、PR 的贡献流程。
 ---
 
-# 上手与参与
+# 参与贡献
 
 ## 准备试用
 
-先阅读[当前状态](../status/index.md)、[快速开始](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md)与[安装说明](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md)。全新安装使用与当前代码匹配的 controller 镜像、Chart 和 CRD。
+先阅读[状态与路线图](../status/index.md)、[快速开始](../quickstart/index.md)与[支持版本与镜像](../support/index.md)。全新安装使用与当前代码匹配的 controller 镜像、Chart 和 CRD。
 
 试用前需要明确 ACK 集群、区域、VPC/交换机、安全组、可用镜像与 RAM 权限，并使用隔离测试环境。当前候选版本必须从对应代码构建 controller 镜像；构建条件和 feature gates 配置以安装说明为准。
 

@@ -10,12 +10,14 @@ copyright = "Rambow Cloud & project contributors · Apache-2.0"
 extra_css = ["assets/brand.css"]
 nav = [
   { "首页" = "index.md" },
+  { "核心功能" = "docs/features/index.md" },
+  { "快速开始" = "docs/quickstart/index.md" },
+  { "支持版本与镜像" = "docs/support/index.md" },
+  { "状态与路线图" = "docs/status/index.md" },
   { "项目指南" = [
     { "概览" = "docs/index.md" },
-    { "功能与常见问题" = "docs/features/index.md" },
     { "为什么继续维护" = "docs/motivation/index.md" },
-    { "状态与路线图" = "docs/status/index.md" },
-    { "上手与参与" = "docs/participate/index.md" },
+    { "参与贡献" = "docs/participate/index.md" },
   ] },
 ]
 
@@ -26,7 +28,7 @@ language = "zh"
 font = false
 logo = "assets/rambow-karpenter.png"
 favicon = "assets/rambow-karpenter.png"
-features = ["navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "content.code.copy"]
+features = ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.highlight", "content.code.copy"]
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"

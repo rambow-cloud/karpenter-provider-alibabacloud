@@ -1,15 +1,15 @@
 ---
-title: Get started and contribute
+title: Contribute
 description: Prepare an isolated Alibaba Cloud Karpenter trial with a matching controller
   image. Find Kubernetes requirements, deployment documents and the issue, branch
   and PR workflow.
 ---
 
-# Get started and contribute
+# Contribute
 
 ## Before trying the provider
 
-Read the [current status](../status/index.md), [quick start](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/QUICK_START.md), and [installation notes](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md). Use a matching controller image, chart and CRDs for the fresh installation.
+Read [status and roadmap](../status/index.md), [quick start](../quickstart/index.md), and [versions and images](../support/index.md). Use a matching controller image, chart and CRDs for the fresh installation.
 
 Identify the ACK cluster, region, VPC/vSwitches, security groups, available images, and RAM permissions, and use an isolated test environment. The current candidate requires a controller image built from matching source. Follow the installation notes for build requirements and feature-gate configuration.
 
