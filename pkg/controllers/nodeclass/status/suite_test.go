@@ -871,6 +871,8 @@ var _ = Describe("StatusController", func() {
 					LaunchTemplateVersionSets: &ecs.DescribeLaunchTemplateVersionsResponseBodyLaunchTemplateVersionSets{
 						LaunchTemplateVersionSet: []*ecs.DescribeLaunchTemplateVersionsResponseBodyLaunchTemplateVersionSetsLaunchTemplateVersionSet{
 							{
+								VersionNumber:    &version,
+								LaunchTemplateId: tea.String("lt-test-123"),
 								LaunchTemplateData: &ecs.DescribeLaunchTemplateVersionsResponseBodyLaunchTemplateVersionSetsLaunchTemplateVersionSetLaunchTemplateData{
 									ImageId:         &imageID,
 									VSwitchId:       &vswitchID,

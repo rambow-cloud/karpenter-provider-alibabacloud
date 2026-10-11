@@ -171,6 +171,12 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		return nil, err
 	}
 	// Refresh concrete image IDs against the actual ACK version before any launch.
+	launchSpec, err := nodeClass.LaunchSpec()
+	if err != nil {
+		return nil, err
+	}
+	nodeClass = nodeClass.DeepCopy()
+	nodeClass.Spec = launchSpec
 	// Old status may lack OS information or have been resolved before an upgrade.
 	if c.imageFamilyProvider != nil && c.imageFamilyProvider.ACKCompatibilityEnabled() {
 		images, err := c.imageFamilyProvider.RevalidateForLaunch(ctx, nodeClass, nodeClass.Status.Images)
@@ -186,6 +192,9 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 
 	if nodeClaim.UID == "" {
 		return nil, fmt.Errorf("persisted NodeClaim UID is required for creation")
+	}
+	if err := imagefamily.ValidateBootImages(nodeClass.Spec, nodeClass.Status.Images); err != nil {
+		return nil, err
 	}
 	hash, err := nodeClass.Hash()
 	if err != nil {
@@ -234,6 +243,16 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		Taints:          convertToCoreTaints(nodeClaim.Spec.Taints),
 		CustomUserData:  lo.ToPtr(getCustomUserData(nodeClass)),
 	}
+	for _, image := range nodeClass.Status.Images {
+		if strings.HasPrefix(image.ImageType, "ContainerOS") {
+			bootstrapOpts.FormatDisk = true
+		}
+	}
+	diskLayout, err := v1alpha1.NormalizeDisks(nodeClass.Spec)
+	if err != nil {
+		return nil, err
+	}
+	bootstrapOpts.Disks = &diskLayout
 
 	userData, err := c.bootstrapProvider.GenerateUserData(ctx, bootstrapOpts)
 	if err != nil {
@@ -502,6 +521,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 		nodePool.Spec.Template.Spec.Requirements,
 	)
 	filteredTypes = filterInstanceTypesByImages(filteredTypes, nodeClass.Status.Images)
+	filteredTypes = filterInstanceTypesByTemplate(filteredTypes, nodeClass)
 
 	// Log filtered instance types (only at debug level)
 	logger.V(1).Info("Filtered instance types", "count", len(filteredTypes))
@@ -1002,7 +1022,12 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 	if len(instanceTypes) == 0 || len(images) == 0 || len(vswitches) == 0 || len(securityGroups) == 0 {
 		return "", fmt.Errorf("missing required parameters for instance creation")
 	}
-	instanceTypes = filterInstanceTypesByImages(instanceTypes, images)
+	if nodeClass.Spec.LaunchTemplateID != nil {
+		if err := imagefamily.ValidateBootImages(nodeClass.Spec, images); err != nil {
+			return "", err
+		}
+	}
+	instanceTypes = filterInstanceTypesByTemplate(filterInstanceTypesByImages(instanceTypes, images), nodeClass)
 	if len(instanceTypes) == 0 {
 		return "", fmt.Errorf("no instance types have a known compatible image architecture")
 	}
@@ -1081,6 +1106,10 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			InstanceStorePolicy: disks.InstanceStorePolicy,
 			DataDisks:           dataDisks,
 			SpotStrategy:        ecsutil.SpotStrategyForCapacityType(capacityType, nodeClass.Spec.SpotStrategy),
+		}
+		if nodeClass.Spec.LaunchTemplateID != nil {
+			baseOpts.LaunchTemplateID = *nodeClass.Spec.LaunchTemplateID
+			baseOpts.LaunchTemplateVersion = nodeClass.Spec.LaunchTemplateVersion
 		}
 		if capacityType == v1alpha1.CapacityTypeSpot && nodeClass.Spec.SpotPriceLimit != nil {
 			baseOpts.SpotPriceLimit = *nodeClass.Spec.SpotPriceLimit

@@ -429,6 +429,9 @@ type MetadataOptions struct {
 // +kubebuilder:object:generate=true
 // +kubebuilder:object:root=false
 type ECSNodeClassStatus struct {
+	// LaunchTemplate is the concrete version and disk layout used by launch.
+	// +optional
+	LaunchTemplate *ResolvedLaunchTemplate `json:"launchTemplate,omitempty"`
 	// Ready indicates whether the ECSNodeClass is ready to provision instances
 	// +optional
 	Ready bool `json:"ready,omitempty"`
@@ -452,6 +455,15 @@ type ECSNodeClassStatus struct {
 	// Conditions contains the current conditions of the ECSNodeClass
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// ResolvedLaunchTemplate contains no credentials or template userdata.
+// +kubebuilder:object:generate=true
+type ResolvedLaunchTemplate struct {
+	ID           string          `json:"id"`
+	Version      int64           `json:"version"`
+	InstanceType string          `json:"instanceType,omitempty"`
+	Disks        NormalizedDisks `json:"disks"`
 }
 
 // VSwitch represents a resolved VSwitch

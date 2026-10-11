@@ -278,5 +278,10 @@ func TestACKContainerOSResolutionRejectsMissingDiskAndLaunchTemplate(t *testing.
 	require.Equal(t, "ContainerOS4", images[0].ImageType)
 	nc.Spec.LaunchTemplateID = tea.String("lt-test")
 	_, err = p.ResolveForNodeClass(context.Background(), nc)
-	require.ErrorContains(t, err, "launchTemplateID is unsupported")
+	require.ErrorContains(t, err, "unresolved")
+	disks, err := v1alpha1.NormalizeDisks(nc.Spec)
+	require.NoError(t, err)
+	nc.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 1, Disks: disks}
+	_, err = p.ResolveForNodeClass(context.Background(), nc)
+	require.NoError(t, err)
 }

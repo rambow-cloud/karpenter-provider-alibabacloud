@@ -46,7 +46,7 @@ spec:
       size: 40
 ```
 
-**目前拒绝 ContainerOS + LaunchTemplate**：现有启动路径没有将模板的数据盘配置传入 RunInstances，无法证明盘配置会生效。改用 selector 和上述显式数据盘。自定义派生镜像的特殊磁盘/初始化需求必须由用户验证。
+**LaunchTemplate 模式**：controller 将具体版本、实例规格及规范化磁盘配置写入 `status.launchTemplate`。启动时使用这个数字版本，模板磁盘与显式 selector 模式使用相同校验。ContainerOS 仅允许一块全新持久云数据盘，不允许快照盘或未知布局；ACK attach script 明确设置 `format_disk=true` 挂载容器和 kubelet 数据盘。普通 Linux 保留 `format_disk=false`，不替用户格式化数据盘。模板模式继续禁止 NodeClass 磁盘 override，controller 不额外加盘。自定义派生镜像的特殊磁盘/初始化需求必须由用户验证。
 
 ContainerOS 3.4 起只读系统盘需要数据盘，且不适用于带本地盘的实例规格。选择 GPU 变体还需要匹配 GPU 机型和驱动。镜像清单校验并不能替代这些硬件/运行验收。参见[更换操作系统](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/replace-the-operating-system)、[ContainerOS 说明](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/containeros-overview/)。
 

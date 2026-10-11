@@ -38,6 +38,12 @@ func (p *Provider) ACKCompatibilityEnabled() bool { return p.ack != nil }
 // ResolveForNodeClass resolves selectors using ACK's version-specific public image
 // IDs. ECS image-family queries alone may return an image ACK has not adopted yet.
 func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNodeClass) ([]v1alpha1.Image, error) {
+	spec, err := nc.LaunchSpec()
+	if err != nil {
+		return nil, err
+	}
+	nc = nc.DeepCopy()
+	nc.Spec = spec
 	if err := v1alpha1.ValidateImageSelectorTerms(nc.Spec.ImageSelectorTerms); err != nil {
 		return nil, err
 	}
@@ -168,11 +174,6 @@ func ValidateBootImages(spec v1alpha1.ECSNodeClassSpec, images []v1alpha1.Image)
 		if !strings.HasPrefix(img.ImageType, "ContainerOS") {
 			continue
 		}
-		// The current launch-template path does not propagate template data disks
-		// to RunInstances. Reject it rather than claiming its disk layout is applied.
-		if spec.LaunchTemplateID != nil {
-			return fmt.Errorf("ContainerOS with launchTemplateID is unsupported; use image selectors and one explicit data disk")
-		}
 		disks, err := v1alpha1.NormalizeDisks(spec)
 		if err != nil {
 			return err
@@ -182,6 +183,9 @@ func ValidateBootImages(spec v1alpha1.ECSNodeClassSpec, images []v1alpha1.Image)
 		}
 		if strings.Contains(disks.DataDisks[0].Category, "ephemeral") {
 			return fmt.Errorf("ContainerOS requires a persistent cloud data disk")
+		}
+		if disks.DataDisks[0].SnapshotID != "" {
+			return fmt.Errorf("ContainerOS data disk must be newly initialized, not restored from a snapshot")
 		}
 	}
 	return nil

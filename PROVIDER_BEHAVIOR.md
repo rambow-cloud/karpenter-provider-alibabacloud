@@ -10,11 +10,21 @@
 
 ## 节点漂移
 
-ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用版本 `v2`。全新部署使用该版本；当前范围不包含旧哈希迁移。
+ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用版本 `v3`。全新部署使用该版本；当前范围不包含旧哈希迁移。
 
 镜像、交换机与安全组 selector 的原文、顺序和重复项不参与静态哈希。修改 selector 后，当前节点的镜像和交换机仍在解析集合中、安全组集合仍相同时，不会仅因 selector 改写报告漂移。节点使用的资源不再被允许时，分别报告 `ImageDrift`、`VSwitchDrift` 或 `SecurityGroupDrift`。出现更新的镜像不会自动淘汰仍在允许集合中的旧镜像。当前 generation 尚未 Ready 时暂停漂移判断，避免使用未完成的解析结果。
 
-启动脚本、集群身份及 API endpoint、RAM role、kubelet、标签、metadata、Spot 配置、LaunchTemplate ID/version 与磁盘配置等静态字段变化仍会触发 `NodeClassDrift`。磁盘使用创建路径的默认值与校验；数据盘顺序和 clusterDNS 顺序保留。容量预留 selector 暂无动态 membership drift 检查，仍按排序去重的 OR 集合参与静态哈希。可变 LaunchTemplate 的实际数据盘传播由 #51 单独跟踪。
+启动脚本、集群身份及 API endpoint、RAM role、kubelet、标签、metadata、Spot 配置、LaunchTemplate ID/具体 version 与磁盘配置等静态字段变化仍会触发 `NodeClassDrift`。磁盘使用创建路径的默认值与校验；数据盘顺序和 clusterDNS 顺序保留。容量预留 selector 暂无动态 membership drift 检查，仍按排序去重的 OR 集合参与静态哈希。
+
+## LaunchTemplate 磁盘与版本
+
+模板模式与 selector 模式保持互斥，不支持 NodeClass 磁盘 override。controller 请求模板详细信息，验证返回的模板 ID、唯一数字版本和磁盘配置，并将启动所需的磁盘快照写入 `status.launchTemplate`；不写入模板 userdata、密码或凭据。显式版本必须与返回值一致；未指定版本时解析默认版本，后续 RunInstances 固定该数字版本，避免默认版本在解析与创建之间切换。默认版本或磁盘变化经 status 重新解析后参与哈希和漂移判断。
+
+系统盘未定义的字段继续使用 provider 的既有默认值（40 GiB cloud_essd、ESSD PL0）；定义的数据盘按原顺序传入，保留 category、size、device、performanceLevel、encrypted、snapshotId 和 deleteWithInstance。RunInstances 同时指定原模板和数字版本，由 ECS 保留模板其他参数，provider 覆盖其已解析镜像/网络/磁盘、生成的 ACK bootstrap、NodePool capacity type 和所有权标签；NodeClass 明确指定的 role/metadata 配置优先。模板固定实例规格时，与 NodePool 约束取交集，不能改用其他规格。
+
+ContainerOS 的启动校验与 bootstrap 使用同一规范化磁盘快照；只支持一块全新的持久云数据盘，通过 ACK `format_disk=true` 初始化并挂载容器和 kubelet 目录。缺盘、多盘、ephemeral/实例本地盘策略、快照盘或无效配置在创建前拒绝；普通 Linux 不自动格式化数据盘。脚本缓存额外按 format_disk 分区，避免误用其他磁盘模式的脚本。没有自动加盘或更改磁盘数量；保留磁盘的 deleteWithInstance=false 配置仍按用户意图保留。
+
+此实现依据 [ECS 模板版本 API](https://www.alibabacloud.com/help/en/ecs/developer-reference/api-ecs-2014-05-26-describelaunchtemplateversions) 和 [ACK attach script API](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/developer-reference/api-cs-2015-12-15-describeclusterattachscripts)。实际挂载、ECS 模板参数继承和 ACK 注册仍由 #5/#23 验收；OS/硬件前置条件由 #52 跟踪。
 
 参考 [AWS v1.14.1 静态 hash 与 selector 忽略策略](https://github.com/aws/karpenter-provider-aws/blob/v1.14.1/pkg/apis/v1/ec2nodeclass.go)。
 

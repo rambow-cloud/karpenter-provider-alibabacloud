@@ -619,6 +619,73 @@ spec:
                   - id
                   type: object
                 type: array
+              launchTemplate:
+                description: LaunchTemplate is the concrete version and disk layout
+                  used by launch.
+                properties:
+                  disks:
+                    description: NormalizedDisks is the canonical launch-affecting
+                      disk state.
+                    properties:
+                      dataDisks:
+                        items:
+                          properties:
+                            category:
+                              type: string
+                            deleteWithInstance:
+                              type: boolean
+                            device:
+                              type: string
+                            encrypted:
+                              type: boolean
+                            kmsKeyID:
+                              type: string
+                            performanceLevel:
+                              type: string
+                            size:
+                              format: int32
+                              type: integer
+                            snapshotID:
+                              type: string
+                          required:
+                          - category
+                          - size
+                          type: object
+                        type: array
+                      instanceStorePolicy:
+                        type: string
+                      systemDisk:
+                        properties:
+                          category:
+                            type: string
+                          encrypted:
+                            type: boolean
+                          kmsKeyID:
+                            type: string
+                          performanceLevel:
+                            type: string
+                          size:
+                            format: int32
+                            type: integer
+                        required:
+                        - category
+                        - size
+                        type: object
+                    required:
+                    - systemDisk
+                    type: object
+                  id:
+                    type: string
+                  instanceType:
+                    type: string
+                  version:
+                    format: int64
+                    type: integer
+                required:
+                - disks
+                - id
+                - version
+                type: object
               ramRole:
                 description: RAMRole is the resolved RAM role
                 type: string

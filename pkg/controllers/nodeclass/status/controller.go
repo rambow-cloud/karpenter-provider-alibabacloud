@@ -103,6 +103,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	if nodeClass.Spec.LaunchTemplateID != nil {
 		resolveErr = c.resolveLaunchTemplate(nodeClass, ctx)
 	} else {
+		nodeClass.Status.LaunchTemplate = nil
 		resolveErr = c.resolveSelectorResources(nodeClass, ctx)
 	}
 
@@ -159,6 +160,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 }
 
 func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx context.Context) error {
+	nodeClass.Status.LaunchTemplate = nil
 	if c.launchTemplateProvider == nil {
 		err := fmt.Errorf("launch template provider is required")
 		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
@@ -174,6 +176,7 @@ func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx
 		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
 		return err
 	}
+	nodeClass.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: *nodeClass.Spec.LaunchTemplateID, Version: data.Version, InstanceType: data.InstanceType, Disks: data.Disks}
 
 	imageClass := nodeClass.DeepCopy()
 	imageClass.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: &data.ImageID}}
