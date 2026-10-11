@@ -155,13 +155,13 @@ func TestPendingLaunchReusesTokenAndRejectsChangedParameters(t *testing.T) {
 	changed.VSwitchID = "vsw-other"
 	_, err = p.launchInstance(ctx, claim, changed, hash)
 	require.ErrorContains(t, err, "parameters changed")
-	otherRegion := (&options.Options{ClusterID: "cluster-test", Region: "cn-beijing"}).ToContext(ctx)
-	_, err = p.launchInstance(otherRegion, claim, opts, hash)
-	require.ErrorContains(t, err, "parameters changed")
 	// Restore the exact intent, including tags. Indexed Tag.N ordering must agree.
 	for n := 0; n < 30; n++ {
 		delete(opts.Tags, fmt.Sprintf("aaa-%02d", n))
 	}
+	otherRegion := (&options.Options{ClusterID: "cluster-test", Region: "cn-beijing"}).ToContext(ctx)
+	_, err = p.launchInstance(otherRegion, claim, opts, hash)
+	require.ErrorContains(t, err, "parameters changed")
 	_, err = p.launchInstance(ctx, claim, opts, hash)
 	require.Error(t, err)
 	require.Len(t, e.requests, 2)
