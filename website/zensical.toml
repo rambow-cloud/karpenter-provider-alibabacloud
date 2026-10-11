@@ -1,5 +1,5 @@
 [project]
-site_name = "Alibaba Cloud Karpenter"
+site_name = "阿里云 Karpenter"
 site_description = "Rambow Cloud 社区维护的阿里云 Karpenter provider，让 Pod 需求驱动 ECS 节点供给，持续跟进版本与维护。"
 site_url = "https://rambow-cloud.github.io/karpenter-provider-alibabacloud/"
 repo_url = "https://github.com/rambow-cloud/karpenter-provider-alibabacloud"

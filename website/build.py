@@ -34,6 +34,7 @@ def prepare_content(staged: Path) -> tuple[str, list[str]]:
         route = source_path.removesuffix("index.md")
         page_routes.append(route)
         for language in LANGUAGES:
+            project_name = configs[0 if language == "zh" else 1]["site_name"]
             path = staged / language / source_path
             text = path.read_text(encoding="utf-8")
             if not text.startswith("---\n"):
@@ -49,10 +50,10 @@ def prepare_content(staged: Path) -> tuple[str, list[str]]:
                       "isPartOf": {"@id": base + "#website"}}]
             if not route:
                 graph += [{"@type": "WebSite", "@id": base + "#website",
-                           "url": base, "name": "Alibaba Cloud Karpenter",
+                           "url": base, "name": project_name,
                            "inLanguage": list(LANGUAGES.values())},
                           {"@type": "SoftwareSourceCode", "@id": base + "#provider",
-                           "name": "Alibaba Cloud Karpenter",
+                           "name": project_name,
                            "description": meta["description"],
                            "codeRepository": REPOSITORY, "url": base,
                            "programmingLanguage": "Go",

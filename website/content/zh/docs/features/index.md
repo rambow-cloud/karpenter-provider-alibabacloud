@@ -1,11 +1,11 @@
 ---
 title: 核心功能与常见问题
-description: 了解 Alibaba Cloud Karpenter 的 Pod 驱动供给、NodePool、ECSNodeClass、按需与 Spot 创建、节点生命周期及验证边界，回答最低版本、官方关系和生产可用性问题。
+description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNodeClass、按需与 Spot 创建、节点生命周期及验证边界，回答最低版本、官方关系和生产可用性问题。
 ---
 
 # 核心功能与常见问题
 
-**Alibaba Cloud Karpenter 是 Rambow Cloud 持续维护的社区 provider，将 Karpenter 的容量决策连接到阿里云 ECS。** 目标是在阿里云提供类似 AWS Karpenter 的节点弹性体验，当前不是 AWS provider 的全部能力对等实现。
+**阿里云 Karpenter 是 Rambow Cloud 持续维护的社区 provider，将 Karpenter 的容量决策连接到阿里云 ECS。** 目标是在阿里云提供类似 AWS Karpenter 的节点弹性体验，当前不是 AWS provider 的全部能力对等实现。
 
 ## 核心功能
 

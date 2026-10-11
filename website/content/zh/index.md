@@ -1,6 +1,6 @@
 ---
 title: 阿里云 Kubernetes 节点弹性与 ECS 自动供给
-description: Rambow Cloud 社区维护的 Alibaba Cloud Karpenter provider，让 Pod 需求驱动 ECS 节点供给。了解核心功能、Kubernetes 1.34+ 支持边界、项目动机与 ACK 验收进度。
+description: Rambow Cloud 社区维护的 阿里云 Karpenter provider，让 Pod 需求驱动 ECS 节点供给。了解核心功能、Kubernetes 1.34+ 支持边界、项目动机与 ACK 验收进度。
 hide:
   - toc
   - navigation
@@ -26,7 +26,7 @@ hide:
 
 ## 工作负载优先，云资源按需
 
-Alibaba Cloud Karpenter 是 Rambow Cloud 维护的社区 provider：将 Pod 的资源请求和调度约束连接到阿里云 ECS，让节点配置围绕工作负载展开。
+阿里云 Karpenter 是 Rambow Cloud 维护的社区 provider：将 Pod 的资源请求和调度约束连接到阿里云 ECS，让节点配置围绕工作负载展开。
 
 <div class="feature-grid" markdown>
 

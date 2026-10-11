@@ -1,6 +1,6 @@
 ---
 title: 上手试用与参与贡献
-description: 准备 Alibaba Cloud Karpenter 的隔离试用环境与匹配 controller 镜像，了解最低 Kubernetes 版本、部署文档和
+description: 准备 阿里云 Karpenter 的隔离试用环境与匹配 controller 镜像，了解最低 Kubernetes 版本、部署文档和
   Issue 到分支、PR 的贡献流程。
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 项目指南
-description: Alibaba Cloud Karpenter 项目指南：核心功能、维护动机、开发状态、Kubernetes 支持边界及试用与贡献流程。
+description: 阿里云 Karpenter 项目指南：核心功能、维护动机、开发状态、Kubernetes 支持边界及试用与贡献流程。
 ---
 
 # 项目指南

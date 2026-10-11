@@ -99,6 +99,8 @@ def main():
             assert len(description) == 1 and description[0], f"Missing/duplicate description: {path}"
             assert description[0] not in descriptions, f"Repeated description: {path}"
             descriptions.add(description[0])
+            if language == "zh":
+                assert "Alibaba Cloud" not in page.title + description[0], path
             assert [link.get("href") for link in page.links if link.get("rel") == "canonical"] == [canonical], path
             translations = {"zh-CN": BASE + route, "en": BASE + "en/" + route,
                             "x-default": BASE + route}
