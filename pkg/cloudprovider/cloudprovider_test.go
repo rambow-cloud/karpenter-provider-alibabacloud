@@ -747,16 +747,16 @@ func TestSelectImageForArchitecture(t *testing.T) {
 			wantID:     "img-amd64",
 		},
 		{
-			name:       "no arch match falls back to first image",
+			name:       "no arch match returns empty",
 			images:     []v1alpha1.Image{amd64Img},
 			targetArch: v1alpha1.ArchitectureArm64,
-			wantID:     "img-amd64",
+			wantID:     "",
 		},
 		{
-			name:       "empty image architecture treated as amd64",
+			name:       "empty image architecture is rejected",
 			images:     []v1alpha1.Image{noArchImg},
 			targetArch: v1alpha1.ArchitectureAmd64,
-			wantID:     "img-noarch",
+			wantID:     "",
 		},
 	}
 	for _, tt := range tests {

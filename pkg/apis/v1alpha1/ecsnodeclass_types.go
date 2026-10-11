@@ -502,6 +502,11 @@ type Image struct {
 	// ImageType is the ACK metadata image_type, when ACK compatibility is verified.
 	// +optional
 	ImageType string `json:"imageType,omitempty"`
+
+	// CreationTime is the ECS RFC3339 creation timestamp. Missing or invalid
+	// values have unknown age and rank after images with a valid timestamp.
+	// +optional
+	CreationTime string `json:"creationTime,omitempty"`
 }
 
 // Condition types for ECSNodeClass

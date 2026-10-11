@@ -114,15 +114,25 @@ func IsValidSpotStrategy(strategy string) bool {
 // running instance must obtain the architecture from its instance type via
 // DescribeInstanceTypes rather than guessing from the instance-type name.
 func KubeArchitecture(ecsArch string) string {
+	if architecture, known := KnownArchitecture(ecsArch); known {
+		return architecture
+	}
+	if strings.EqualFold(strings.TrimSpace(ecsArch), "arm") {
+		return v1alpha1.ArchitectureArm64 // Preserve legacy discovery labels only.
+	}
+	return v1alpha1.ArchitectureAmd64
+}
+
+// KnownArchitecture is strict for launch compatibility. Unlike discovery's
+// legacy fallback, missing/unknown metadata must not authorize an image pair.
+func KnownArchitecture(ecsArch string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(ecsArch)) {
-	case "arm", "arm64", "aarch64":
-		return v1alpha1.ArchitectureArm64
-	case "x86", "x86_64", "amd64", "i386":
-		return v1alpha1.ArchitectureAmd64
+	case "arm64", "aarch64":
+		return v1alpha1.ArchitectureArm64, true
+	case "x86", "x86_64", "amd64":
+		return v1alpha1.ArchitectureAmd64, true
 	default:
-		// Default to amd64: the overwhelming majority of ECS instance types are
-		// x86_64, and an unknown value is far more likely x86 than ARM.
-		return v1alpha1.ArchitectureAmd64
+		return "", false
 	}
 }
 
