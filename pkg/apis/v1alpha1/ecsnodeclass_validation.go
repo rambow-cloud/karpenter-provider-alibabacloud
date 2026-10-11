@@ -19,12 +19,15 @@ package v1alpha1
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 var ramRoleNameRegex = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
-var imageOwnerIDRegex = regexp.MustCompile(`^[1-9][0-9]{5,19}$`)
+var imageOwnerIDRegex = regexp.MustCompile(`^[1-9][0-9]{5,18}$`)
 var imageIDRegex = regexp.MustCompile(`^(?:m-[A-Za-z0-9._:-]{1,126}|[A-Za-z0-9][A-Za-z0-9._:-]{0,126}\.(?:vhd|qcow2))$`)
+var imageNonWhitespaceRegex = regexp.MustCompile(`[^[:space:]]`)
 
 // Validate validates the ECSNodeClass spec
 func (nc *ECSNodeClass) Validate() error {
@@ -188,13 +191,20 @@ func (nc *ECSNodeClass) validateSecurityGroupSelectors() error {
 }
 
 func (nc *ECSNodeClass) validateImageSelectors() error {
-	if len(nc.Spec.ImageSelectorTerms) == 0 {
+	return ValidateImageSelectorTerms(nc.Spec.ImageSelectorTerms)
+}
+
+// ValidateImageSelectorTerms is shared by admission and runtime resolution.
+// Validate the whole OR expression before querying any term to avoid widening
+// invalid selectors or issuing partial queries for an invalid configuration.
+func ValidateImageSelectorTerms(terms []ImageSelectorTerm) error {
+	if len(terms) == 0 {
 		return fmt.Errorf("imageSelectorTerms is required")
 	}
-	if len(nc.Spec.ImageSelectorTerms) > 30 {
-		return fmt.Errorf("imageSelectorTerms may contain at most 30 terms, got %d", len(nc.Spec.ImageSelectorTerms))
+	if len(terms) > 30 {
+		return fmt.Errorf("imageSelectorTerms may contain at most 30 terms, got %d", len(terms))
 	}
-	for i, term := range nc.Spec.ImageSelectorTerms {
+	for i, term := range terms {
 		count := 0
 		if term.ID != nil {
 			count++
@@ -206,9 +216,6 @@ func (nc *ECSNodeClass) validateImageSelectors() error {
 			count++
 		}
 		if term.Name != nil {
-			count++
-		}
-		if term.ImageFamily != nil {
 			count++
 		}
 		if len(term.Tags) > 0 {
@@ -226,14 +233,30 @@ func (nc *ECSNodeClass) validateImageSelectors() error {
 		if err := validateSelectorTags(fmt.Sprintf("imageSelectorTerms[%d].tags", i), term.Tags, true); err != nil {
 			return err
 		}
-		if term.ID != nil && !imageIDRegex.MatchString(*term.ID) {
+		if term.ID != nil && (len(*term.ID) > 128 || !imageIDRegex.MatchString(*term.ID)) {
 			return fmt.Errorf("imageSelectorTerms[%d].id is not a valid image ID", i)
 		}
 		if term.ImageOwnerAlias != nil && !isValidImageOwnerAlias(*term.ImageOwnerAlias) {
 			return fmt.Errorf("imageSelectorTerms[%d].imageOwnerAlias must be one of: system, self, others, marketplace", i)
 		}
-		if term.ImageOwnerID != nil && !imageOwnerIDRegex.MatchString(*term.ImageOwnerID) {
-			return fmt.Errorf("imageSelectorTerms[%d].imageOwnerID must match ^[1-9][0-9]{5,19}$", i)
+		for field, value := range map[string]*string{"name": term.Name, "imageFamily": term.ImageFamily} {
+			if value != nil && !imageNonWhitespaceRegex.MatchString(*value) {
+				return fmt.Errorf("imageSelectorTerms[%d].%s must be non-empty", i, field)
+			}
+			if value != nil && utf8.RuneCountInString(*value) > 128 {
+				return fmt.Errorf("imageSelectorTerms[%d].%s may contain at most 128 characters", i, field)
+			}
+		}
+		if term.ImageOwnerID != nil {
+			if !imageOwnerIDRegex.MatchString(*term.ImageOwnerID) {
+				return fmt.Errorf("imageSelectorTerms[%d].imageOwnerID must match ^[1-9][0-9]{5,18}$", i)
+			}
+			if _, err := strconv.ParseInt(*term.ImageOwnerID, 10, 64); err != nil {
+				return fmt.Errorf("imageSelectorTerms[%d].imageOwnerID must fit a positive int64", i)
+			}
+			if term.ImageOwnerAlias == nil || *term.ImageOwnerAlias != "others" {
+				return fmt.Errorf("imageSelectorTerms[%d].imageOwnerID requires imageOwnerAlias=others (shared images)", i)
+			}
 		}
 	}
 	return nil

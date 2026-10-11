@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
 )
@@ -275,6 +276,43 @@ func buildDescribeSecurityGroupsRequest(region string, id string, name string, t
 }
 
 func buildDescribeImagesRequest(region string, imageIDs []string, filters map[string]string) (*ecs.DescribeImagesRequest, error) {
+	// Validate before constructing an API request; never drop an invalid filter.
+	term := v1alpha1.ImageSelectorTerm{}
+	for key, value := range filters {
+		value := value
+		switch key {
+		case "ImageFamily":
+			term.ImageFamily = &value
+		case "ImageName":
+			term.Name = &value
+		case "ImageOwnerAlias":
+			term.ImageOwnerAlias = &value
+		case "ImageOwnerID":
+			term.ImageOwnerID = &value
+		default:
+			if !strings.HasPrefix(key, "tag:") {
+				return nil, fmt.Errorf("unsupported image filter %q", key)
+			}
+			if term.Tags == nil {
+				term.Tags = map[string]string{}
+			}
+			term.Tags[strings.TrimPrefix(key, "tag:")] = value
+		}
+	}
+	terms := []v1alpha1.ImageSelectorTerm{term}
+	if len(imageIDs) > 0 {
+		terms = nil
+		for _, id := range imageIDs {
+			id := id
+			selected := term
+			selected.ID = &id
+			terms = append(terms, selected)
+		}
+	}
+	if err := v1alpha1.ValidateImageSelectorTerms(terms); err != nil {
+		return nil, fmt.Errorf("invalid image query: %w", err)
+	}
+
 	// ShowExpired is always set to true because the ECS API hides certain system
 	// images (e.g. ContainerOS / LifseaOS) by default. Those images have
 	// Status=Available and are perfectly usable, but the API filters them out
@@ -308,9 +346,6 @@ func buildDescribeImagesRequest(region string, imageIDs []string, filters map[st
 			continue
 		}
 		key := strings.TrimPrefix(k, "tag:")
-		if key == "" || v == "" {
-			continue
-		}
 		request.Tag = append(request.Tag, &ecs.DescribeImagesRequestTag{
 			Key:   tea.String(key),
 			Value: tea.String(v),

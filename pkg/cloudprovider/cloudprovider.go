@@ -149,12 +149,8 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	// 2. Verify NodeClass is ready
-	nodeClassReady := nodeClass.StatusConditions().Get(status.ConditionReady)
-	if nodeClassReady.IsFalse() {
-		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("node class is not ready: %s", nodeClassReady.Message))
-	}
-	if nodeClassReady.IsUnknown() {
-		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving nodeclass readiness, nodeclass is in Ready=Unknown: %s", nodeClassReady.Message), "NodeClassReadinessUnknown", "NodeClass is in Ready=Unknown")
+	if err := nodeClassReadinessError(nodeClass); err != nil {
+		return nil, err
 	}
 
 	// 3. Get instance types that match requirements
@@ -225,6 +221,20 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	setNodeClassHashAnnotation(createdNodeClaim, hash)
 
 	return createdNodeClaim, nil
+}
+
+// nodeClassReadinessError gates both scheduling and creation on resolved status.
+func nodeClassReadinessError(nodeClass *v1alpha1.ECSNodeClass) error {
+	// Reading readiness must not initialize missing conditions or aggregate a
+	// new Ready condition from status left by an earlier reconciliation.
+	ready := nodeClass.StatusConditions(status.WithObservedOnly()).Get(status.ConditionReady)
+	if ready == nil {
+		return cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("nodeclass %s has no Ready condition for generation %d", nodeClass.Name, nodeClass.Generation))
+	}
+	if !ready.IsTrue() || ready.ObservedGeneration != nodeClass.Generation {
+		return cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("nodeclass %s is not ready for generation %d (observed %d): %s", nodeClass.Name, nodeClass.Generation, ready.ObservedGeneration, ready.Message))
+	}
+	return nil
 }
 
 // Delete terminates the cloud instance backing the given NodeClaim.
@@ -425,12 +435,8 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 	}
 
 	// 2. Verify NodeClass is ready
-	nodeClassReady := nodeClass.StatusConditions().Get(status.ConditionReady)
-	if nodeClassReady.IsFalse() {
-		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("node class is not ready: %s", nodeClassReady.Message))
-	}
-	if nodeClassReady.IsUnknown() {
-		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving nodeclass readiness, nodeclass is in Ready=Unknown: %s", nodeClassReady.Message), "NodeClassReadinessUnknown", "NodeClass is in Ready=Unknown")
+	if err := nodeClassReadinessError(nodeClass); err != nil {
+		return nil, err
 	}
 
 	// 3. DEFENSIVE CHECK: Verify VSwitches are populated

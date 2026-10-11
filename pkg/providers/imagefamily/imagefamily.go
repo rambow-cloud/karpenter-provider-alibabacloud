@@ -19,7 +19,6 @@ package imagefamily
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -44,8 +43,6 @@ type ImageQuery struct {
 	ImageOwnerID    string
 	Tags            map[string]string
 }
-
-var imageOwnerIDRegex = regexp.MustCompile(`^[1-9][0-9]{5,19}$`)
 
 // CacheEntry represents a cached result with expiration
 type CacheEntry struct {
@@ -116,9 +113,8 @@ func (p *Provider) setCachedValue(key string, value interface{}) {
 
 // Resolve resolves image selectors to actual images
 func (p *Provider) Resolve(ctx context.Context, terms []v1alpha1.ImageSelectorTerm) ([]v1alpha1.Image, error) {
-	// If no selector terms, return empty list
-	if len(terms) == 0 {
-		return []v1alpha1.Image{}, nil
+	if err := v1alpha1.ValidateImageSelectorTerms(terms); err != nil {
+		return nil, fmt.Errorf("resolve images: %w", err)
 	}
 
 	// Create cache key from terms
@@ -133,9 +129,6 @@ func (p *Provider) Resolve(ctx context.Context, terms []v1alpha1.ImageSelectorTe
 
 	for i, term := range terms {
 		query := imageQueryFromTerm(term)
-		if query.ImageOwnerID != "" && !imageOwnerIDRegex.MatchString(query.ImageOwnerID) {
-			return nil, fmt.Errorf("resolve imageSelectorTerms[%d]: imageOwnerID %q is invalid", i, query.ImageOwnerID)
-		}
 		images, err := p.getByQuery(ctx, query)
 		if err != nil {
 			return nil, fmt.Errorf("resolve imageSelectorTerms[%d]: %w", i, err)

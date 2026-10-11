@@ -758,7 +758,7 @@ var _ = Describe("HashController", func() {
 						{ID: stringPtr("sg-different-999")},
 					},
 					ImageSelectorTerms: []v1alpha1.ImageSelectorTerm{
-						{ID: stringPtr("different-image-999")},
+						{ID: stringPtr("m-different-image-999")},
 					},
 				},
 			}

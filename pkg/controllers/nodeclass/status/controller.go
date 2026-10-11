@@ -131,9 +131,12 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	// Set Ready condition based on other conditions
-	if c.isReady(nodeClass) {
+	if resolveErr == nil && c.isReady(nodeClass) {
 		c.setCondition(nodeClass, v1alpha1.ConditionTypeReady, metav1.ConditionTrue,
 			"Ready", "ECSNodeClass is ready")
+	} else {
+		c.setCondition(nodeClass, v1alpha1.ConditionTypeReady, metav1.ConditionFalse,
+			"ResourceResolutionFailed", "Required resources have not resolved for the current generation")
 	}
 
 	// Update status if changed
@@ -306,6 +309,7 @@ func (c *Controller) setCondition(nodeClass *v1alpha1.ECSNodeClass, conditionTyp
 	// Find existing condition or create new one
 	for i, condition := range nodeClass.Status.Conditions {
 		if condition.Type == conditionType {
+			nodeClass.Status.Conditions[i].ObservedGeneration = nodeClass.Generation
 			// Status unchanged - only update reason and message, preserve LastTransitionTime
 			if condition.Status == status {
 				nodeClass.Status.Conditions[i].Reason = reason
@@ -325,6 +329,7 @@ func (c *Controller) setCondition(nodeClass *v1alpha1.ECSNodeClass, conditionTyp
 	// Add new condition
 	nodeClass.Status.Conditions = append(nodeClass.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
+		ObservedGeneration: nodeClass.Generation,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
@@ -343,7 +348,7 @@ func (c *Controller) isReady(nodeClass *v1alpha1.ECSNodeClass) bool {
 
 	for _, conditionType := range requiredConditions {
 		condition := c.getCondition(nodeClass, conditionType)
-		if condition == nil || condition.Status != metav1.ConditionTrue {
+		if condition == nil || condition.Status != metav1.ConditionTrue || condition.ObservedGeneration != nodeClass.Generation {
 			return false
 		}
 	}
@@ -381,6 +386,12 @@ func (c *Controller) updateStatus(ctx context.Context, nodeClass *v1alpha1.ECSNo
 		if err := c.client.Get(ctx, client.ObjectKeyFromObject(nodeClass), latest); err != nil {
 			log.Error(err, "failed to get latest ECSNodeClass for status update", "nodeclass", nodeClass.Name)
 			return err
+		}
+
+		// Never copy a result resolved for an older spec or a replaced object.
+		// The next reconcile must resolve the new generation from scratch.
+		if latest.UID != nodeClass.UID || latest.Generation != nodeClass.Generation {
+			return fmt.Errorf("ECSNodeClass changed during resolution; retry current generation")
 		}
 
 		// Copy the status to the latest object

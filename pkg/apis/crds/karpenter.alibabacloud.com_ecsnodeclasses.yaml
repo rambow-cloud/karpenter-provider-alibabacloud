@@ -184,27 +184,66 @@ spec:
                   properties:
                     id:
                       description: ID is the image ID
+                      maxLength: 128
+                      pattern: ^(m-[A-Za-z0-9._:-]{1,126}|[A-Za-z0-9][A-Za-z0-9._:-]{0,126}\.(vhd|qcow2))$
                       type: string
                     imageFamily:
                       description: Family is the image family (e.g. acs:alibaba_cloud_linux_3_2104_lts_x64)
+                      maxLength: 128
+                      minLength: 1
                       type: string
+                      x-kubernetes-validations:
+                      - message: image family must contain a non-whitespace character
+                        rule: self.matches('[^[:space:]]')
                     imageOwnerAlias:
                       description: Alias is the image alias (system, self, others,
                         marketplace)
+                      enum:
+                      - system
+                      - self
+                      - others
+                      - marketplace
                       type: string
                     imageOwnerID:
-                      description: Owner is the image owner
+                      description: Owner is the account owning a shared image; requires
+                        ImageOwnerAlias=others
+                      maxLength: 19
+                      pattern: ^[1-9][0-9]{5,18}$
                       type: string
+                      x-kubernetes-validations:
+                      - message: imageOwnerID must fit a positive int64
+                        rule: size(self) < 19 || self <= '9223372036854775807'
                     name:
                       description: Name is the image name pattern
+                      maxLength: 128
+                      minLength: 1
                       type: string
+                      x-kubernetes-validations:
+                      - message: image name must contain a non-whitespace character
+                        rule: self.matches('[^[:space:]]')
                     tags:
                       additionalProperties:
                         type: string
                       description: Tags is a map of tags to match
                       maxProperties: 20
                       type: object
+                      x-kubernetes-validations:
+                      - message: image tag keys and values must be non-empty
+                        rule: self.all(k, size(k) > 0 && size(self[k]) > 0)
                   type: object
+                  x-kubernetes-validations:
+                  - message: image selector must specify id, imageFamily, imageOwnerAlias,
+                      name, or non-empty tags
+                    rule: has(self.id) || has(self.imageFamily) || has(self.imageOwnerAlias)
+                      || has(self.name) || (has(self.tags) && size(self.tags) > 0)
+                  - message: id is mutually exclusive with other image selectors
+                    rule: '!has(self.id) || (!has(self.imageFamily) && !has(self.imageOwnerAlias)
+                      && !has(self.imageOwnerID) && !has(self.name) && (!has(self.tags)
+                      || size(self.tags) == 0))'
+                  - message: imageOwnerID requires imageOwnerAlias=others (shared
+                      images)
+                    rule: '!has(self.imageOwnerID) || (has(self.imageOwnerAlias) &&
+                      self.imageOwnerAlias == ''others'')'
                 maxItems: 30
                 minItems: 1
                 type: array

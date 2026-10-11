@@ -1,6 +1,9 @@
 package clients
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestBuildDescribeVSwitchesRequestMapsSelectorFields(t *testing.T) {
 	req := buildDescribeVSwitchesRequest("cn-hangzhou", "vsw-1", map[string]string{"env": "prod"}, "cn-hangzhou-h")
@@ -37,7 +40,7 @@ func TestBuildDescribeImagesRequestMapsSelectorFields(t *testing.T) {
 	req, err := buildDescribeImagesRequest("cn-hangzhou", nil, map[string]string{
 		"ImageFamily":     "aliyun_3",
 		"ImageName":       "app-*",
-		"ImageOwnerAlias": "self",
+		"ImageOwnerAlias": "others",
 		"ImageOwnerID":    "1234567890123456",
 		"tag:env":         "prod",
 	})
@@ -51,7 +54,7 @@ func TestBuildDescribeImagesRequestMapsSelectorFields(t *testing.T) {
 	if req.ImageName == nil || *req.ImageName != "app-*" {
 		t.Fatalf("expected ImageName to be mapped")
 	}
-	if req.ImageOwnerAlias == nil || *req.ImageOwnerAlias != "self" {
+	if req.ImageOwnerAlias == nil || *req.ImageOwnerAlias != "others" {
 		t.Fatalf("expected ImageOwnerAlias to be mapped")
 	}
 	if req.ImageOwnerId == nil || *req.ImageOwnerId != 1234567890123456 {
@@ -68,6 +71,43 @@ func TestBuildDescribeImagesRequestRejectsInvalidOwnerID(t *testing.T) {
 	}
 }
 
+func TestBuildDescribeImagesRequestRejectsQueriesThatWouldWiden(t *testing.T) {
+	for name, filters := range map[string]map[string]string{
+		"no selector":          nil,
+		"empty tag value":      {"tag:env": ""},
+		"empty tag key":        {"tag:": "prod"},
+		"unknown filter":       {"UnknownFilter": "prod"},
+		"empty name":           {"ImageName": ""},
+		"invalid alias":        {"ImageOwnerAlias": "public"},
+		"owner without alias":  {"ImageName": "app", "ImageOwnerID": "123456"},
+		"owner on self":        {"ImageOwnerAlias": "self", "ImageOwnerID": "123456"},
+		"owner on system":      {"ImageOwnerAlias": "system", "ImageOwnerID": "123456"},
+		"owner on marketplace": {"ImageOwnerAlias": "marketplace", "ImageOwnerID": "123456"},
+		"overflow":             {"ImageOwnerAlias": "others", "ImageOwnerID": "9223372036854775808"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := buildDescribeImagesRequest("cn-hangzhou", nil, filters); err == nil {
+				t.Fatal("invalid request was accepted")
+			}
+			// A nil SDK transport proves rejection happens before any API call.
+			client := &DefaultECSClient{region: "cn-hangzhou"}
+			if _, err := client.DescribeImages(context.Background(), nil, filters); err == nil {
+				t.Fatal("invalid request reached the SDK")
+			}
+		})
+	}
+	if _, err := buildDescribeImagesRequest("cn-hangzhou", []string{"m-test"}, map[string]string{"ImageFamily": "app"}); err == nil {
+		t.Fatal("mixed ID query accepted")
+	}
+	if _, err := buildDescribeImagesRequest("cn-hangzhou", []string{"m-test", "m-another"}, nil); err != nil {
+		t.Fatalf("valid ID list rejected: %v", err)
+	}
+	req, err := buildDescribeImagesRequest("cn-hangzhou", nil, map[string]string{"ImageOwnerAlias": "others", "ImageOwnerID": "9223372036854775807"})
+	if err != nil || req.ImageOwnerId == nil || *req.ImageOwnerId != 9223372036854775807 {
+		t.Fatalf("valid owner boundary rejected: %v", err)
+	}
+}
+
 func TestBuildDescribeImagesRequestAlwaysSetsShowExpired(t *testing.T) {
 	// ShowExpired must always be true to allow querying ContainerOS / LifseaOS
 	// images that are hidden by default. See GH issue #13.
@@ -76,11 +116,6 @@ func TestBuildDescribeImagesRequestAlwaysSetsShowExpired(t *testing.T) {
 		imageIDs []string
 		filters  map[string]string
 	}{
-		{
-			name:     "no filters",
-			imageIDs: nil,
-			filters:  nil,
-		},
 		{
 			name:     "with image ID",
 			imageIDs: []string{"lifsea_3_x64_5G_alibase_20260519.qcow2"},
@@ -92,9 +127,8 @@ func TestBuildDescribeImagesRequestAlwaysSetsShowExpired(t *testing.T) {
 			filters:  map[string]string{"ImageFamily": "acs:lifsea_os_3_x64"},
 		},
 		{
-			name:     "with multiple filters",
-			imageIDs: []string{"m-xxx"},
-			filters:  map[string]string{"ImageOwnerAlias": "system", "ImageFamily": "acs:alibaba_cloud_linux_3_2104_lts_x64"},
+			name:    "with multiple filters",
+			filters: map[string]string{"ImageOwnerAlias": "system", "ImageFamily": "acs:alibaba_cloud_linux_3_2104_lts_x64"},
 		},
 	}
 
