@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
@@ -24,6 +25,9 @@ func SetupACKCluster(ctx context.Context, cfg *Config, clusterName, gitRef strin
 }
 
 func CompleteExistingACKClusterSetup(ctx context.Context, cfg *Config, manifest *Manifest) (clusterID, kubeconfigPath, endpoint string, err error) {
+	if err := validateKubernetesConfig(cfg); err != nil {
+		return "", "", "", err
+	}
 	if manifest == nil || strings.TrimSpace(manifest.ClusterID) == "" {
 		return "", "", "", fmt.Errorf("manifest cluster id is required")
 	}
@@ -70,6 +74,9 @@ func CompleteExistingACKClusterSetup(ctx context.Context, cfg *Config, manifest 
 }
 
 func SetupACKClusterWithProgress(ctx context.Context, cfg *Config, clusterName, gitRef string, onCreated func(clusterID string) error) (clusterID, kubeconfigPath, endpoint string, err error) {
+	if err := validateKubernetesConfig(cfg); err != nil {
+		return "", "", "", err
+	}
 	if err := EnsureNodeLoginCredential(cfg); err != nil {
 		return "", "", "", fmt.Errorf("ensure node login credential: %w", err)
 	}
@@ -552,7 +559,11 @@ func newVPCClient(cfg *Config) (*vpc.Client, error) {
 	return client, nil
 }
 
-func waitForClusterRunning(ctx context.Context, client *cs.Client, clusterID string, timeout time.Duration) error {
+type ackClusterDetailClient interface {
+	DescribeClusterDetail(*string) (*cs.DescribeClusterDetailResponse, error)
+}
+
+func waitForClusterRunning(ctx context.Context, client ackClusterDetailClient, clusterID string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ticker := time.NewTicker(30 * time.Second)
@@ -562,7 +573,7 @@ func waitForClusterRunning(ctx context.Context, client *cs.Client, clusterID str
 		if err == nil && resp != nil && resp.Body != nil && resp.Body.State != nil {
 			switch *resp.Body.State {
 			case "running":
-				return nil
+				return kubernetesversion.Validate(tea.StringValue(resp.Body.CurrentVersion))
 			case "failed":
 				return fmt.Errorf("ACK cluster %s entered failed state", clusterID)
 			}

@@ -4,14 +4,14 @@
 
 Karpenter core and the AWS test harness are pinned to **v1.14.1**, with chart **0.3.0-dev**. The migration is merged. This is a development candidate; deployment requires an image built from matching source.
 
-Offline CI and KWOK regression have completed their relevant checks. **Real ACK runtime, migration, and upgrade/rollback acceptance remain pending.** Simulated nodes do not establish actual ECS or ACK behavior. See [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md).
+Offline CI covers the Kubernetes minimum. KWOK results must be read with each run's actual Kubernetes baseline; pinning a new baseline alone does not establish a complete regression pass. **Real ACK runtime, migration, and upgrade/rollback acceptance remain pending.** Simulated nodes do not establish actual ECS or ACK behavior. See [Kubernetes support](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) and [UPGRADING.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/UPGRADING.md).
 
 ## What is being worked on
 
 | Area | Current boundary | Tracking |
 | --- | --- | --- |
 | Karpenter v1.14.1 | Migration merged; real ACK version acceptance pending | [Version milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
-| Kubernetes 1.34+ | Target support policy; version boundary enforcement is still planned | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
+| Kubernetes 1.34+ | Minimum enforced by Helm, controller startup and ACK setup; offline boundary checks; real ACK acceptance pending | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
 | Provider lifecycle and scheduling | Ownership fixes merged; resource accounting, recovery, images, and other fixes remain | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | Dependency security | Go CVE rescans pass; legacy SDK/PDF chain removed; unused OpenPGP advisory remains; container OS scan pending | [SDK migration and audit](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | Alibaba Cloud SDK V2.0 | Remaining legacy calls migrated; unused ALB/NLB cleanup removed; selected modules now 292 (314 before migration); real cloud acceptance pending | [SDK migration and follow-up](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |

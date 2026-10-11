@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
@@ -16,6 +17,7 @@ import (
 )
 
 type ClusterResources struct {
+	KubernetesVersion               string
 	VSwitchIDs                      []string
 	Zones                           []string
 	SecurityGroupIDs                []string
@@ -307,6 +309,9 @@ func DiscoverClusterResources(ctx context.Context, cfg *Config, clusterID string
 	}
 	if resp == nil || resp.Body == nil {
 		return ClusterResources{}, fmt.Errorf("describe ACK cluster detail returned empty body")
+	}
+	if err := kubernetesversion.Validate(tea.StringValue(resp.Body.CurrentVersion)); err != nil {
+		return ClusterResources{}, err
 	}
 	resources := ExtractClusterResources(resp.Body)
 	if len(resources.VSwitchIDs) == 0 {
@@ -664,7 +669,7 @@ func ExtractClusterResources(detail *cs.DescribeClusterDetailResponseBody) Clust
 	if detail == nil {
 		return ClusterResources{}
 	}
-	resources := ClusterResources{}
+	resources := ClusterResources{KubernetesVersion: tea.StringValue(detail.CurrentVersion)}
 	for _, id := range detail.VswitchIds {
 		if id == nil {
 			continue

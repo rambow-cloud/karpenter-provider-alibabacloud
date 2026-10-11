@@ -11,7 +11,9 @@
 
 Alibaba Cloud Karpenter Provider 是一个为 [Karpenter](https://github.com/aws/karpenter) 项目提供的阿里云实现，用于在阿里云上自动管理 Kubernetes 节点。
 
-开发分支已将 Karpenter core 和 AWS 测试依赖固定为 **v1.14.1**，构建需要 **Go 1.26.6+**。Chart 为 **0.3.0-dev**，部署时必须指定从当前提交构建的镜像。升级方法、feature gates 参数迁移和待完成的 ACK 发布验收见 [UPGRADING.md](UPGRADING.md)。
+开发分支已将 Karpenter core 和 AWS 测试依赖固定为 **v1.14.1**，构建需要 **Go 1.26.9**。Chart 为 **0.3.0-dev**，部署时必须指定从当前提交构建的镜像。升级方法、feature gates 参数迁移和待完成的 ACK 发布验收见 [UPGRADING.md](UPGRADING.md)。
+
+最低受支持版本为 **Kubernetes 1.34**，**1.33 及更早版本不受支持**。请先升级集群，再安装本候选版本。最低支持要求与实测版本分别记录；Helm/离线检查不代表真实 ACK 兼容性验收。详见 [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md)。
 
 ## 功能特性
 
@@ -250,7 +252,9 @@ make run
 
 Alibaba Cloud Karpenter Provider is an Alibaba Cloud implementation of the [Karpenter](https://github.com/aws/karpenter) project. It automatically manages Kubernetes nodes on Alibaba Cloud.
 
-The development branch pins Karpenter core and the AWS test harness to **v1.14.1** and requires **Go 1.26.6+**. The chart is **0.3.0-dev**; deploy an image built from the matching commit. See [UPGRADING.md](UPGRADING.md) for migration and the pending ACK release gate.
+The development branch pins Karpenter core and the AWS test harness to **v1.14.1** and requires **Go 1.26.9**. The chart is **0.3.0-dev**; deploy an image built from the matching commit. See [UPGRADING.md](UPGRADING.md) for migration and the pending ACK release gate.
+
+The minimum supported version is **Kubernetes 1.34**; **1.33 and earlier are unsupported**. Upgrade the cluster before installing this candidate. Minimum requirements and tested versions are recorded separately; Helm/offline checks do not establish real ACK compatibility. See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md).
 
 ### Features
 

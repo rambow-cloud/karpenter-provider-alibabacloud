@@ -6,7 +6,7 @@ Read the [current status](../status/index.md), [quick start](https://github.com/
 
 Identify the ACK cluster, region, VPC/vSwitches, security groups, available images, and RAM permissions, and use an isolated test environment. The current candidate requires a controller image built from matching source. Follow the upgrade notes for build requirements and feature-gate migration.
 
-The Kubernetes 1.34+ support policy is tracked in [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7). Relevant milestones track real cloud acceptance. Check the target environment against the documented boundaries first.
+Kubernetes 1.34+ is required; 1.33 and earlier are unsupported. Upgrade the cluster before installing this candidate. Version enforcement is tracked in [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7). Relevant milestones track real cloud acceptance. Check the target environment against the documented boundaries first.
 
 ## Choose a contribution
 

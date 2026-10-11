@@ -624,10 +624,10 @@ func TestPatchRuntimeVersion(t *testing.T) {
 		m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(
 			&cs.DescribeClusterDetailResponse{
 				Body: &cs.DescribeClusterDetailResponseBody{
-					CurrentVersion: tea.String("1.30.1-aliyun.1"),
+					CurrentVersion: tea.String("1.34.10-aliyun.1"),
 				},
 			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.30.1-aliyun.1").Return(
+		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.34.10-aliyun.1").Return(
 			[]*cs.DescribeKubernetesVersionMetadataResponseBody{
 				{
 					Runtimes: []*cs.Runtime{
@@ -657,10 +657,10 @@ func TestPatchRuntimeVersion(t *testing.T) {
 		m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(
 			&cs.DescribeClusterDetailResponse{
 				Body: &cs.DescribeClusterDetailResponseBody{
-					CurrentVersion: tea.String("1.30.1-aliyun.1"),
+					CurrentVersion: tea.String("1.34.10-aliyun.1"),
 				},
 			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.30.1-aliyun.1").Return(
+		m.On("DescribeKubernetesVersionMetadata", mock.Anything, "1.34.10-aliyun.1").Return(
 			[]*cs.DescribeKubernetesVersionMetadataResponseBody{}, nil)
 
 		p := NewProvider("cn-shanghai", m)

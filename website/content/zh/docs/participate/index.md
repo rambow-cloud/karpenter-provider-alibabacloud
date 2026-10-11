@@ -6,7 +6,7 @@
 
 试用前需要明确 ACK 集群、区域、VPC/交换机、安全组、可用镜像与 RAM 权限，并使用隔离测试环境。当前候选版本必须从对应代码构建 controller 镜像；构建条件和 feature gates 迁移以升级说明为准。
 
-本项目的 Kubernetes 1.34+ 支持策略由 [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) 跟踪，真实云端验收由相应 milestone 跟踪。请先确认目标环境与已记录的支持边界。
+本项目要求 Kubernetes 1.34+，1.33 及更早版本不受支持；请先升级集群再安装本候选版本。版本限制由 [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) 跟踪，真实云端验收由相应 milestone 跟踪。请先确认目标环境与已记录的支持边界。
 
 ## 找到下一项工作
 

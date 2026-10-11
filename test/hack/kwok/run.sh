@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${KARPENTER_CORE_DIR:?KARPENTER_CORE_DIR is required}"
 : "${KWOK_CLUSTER_NAME:=karpenter-kwok-e2e}"
+: "${KWOK_NODE_IMAGE:=kindest/node:v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a}"
 : "${KWOK_NODECLASS:?KWOK_NODECLASS is required}"
 : "${KWOK_NODEPOOL:?KWOK_NODEPOOL is required}"
 : "${UPSTREAM_TEST_SUITE:=regression}"
@@ -114,6 +115,7 @@ require kind
 require kubectl
 require helm
 require ko
+require jq
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd "${script_dir}/../../.." && pwd)"
@@ -136,12 +138,15 @@ chmod -R u+w "${core_work_dir}"
 KARPENTER_CORE_DIR="${core_work_dir}"
 
 if ! kind get clusters | grep -qx "${KWOK_CLUSTER_NAME}"; then
-  kind create cluster --name "${KWOK_CLUSTER_NAME}"
+  kind create cluster --name "${KWOK_CLUSTER_NAME}" --image "${KWOK_NODE_IMAGE}"
 fi
 
 trap 'write_report; cleanup' EXIT
 
 kubectl config use-context "kind-${KWOK_CLUSTER_NAME}"
+server_version="$(kubectl version --output=json | jq -r '.serverVersion.gitVersion')"
+GOFLAGS="${E2E_GOFLAGS}" go run ./test/hack/e2e/ackctl validate-versions \
+  --versions "$(jq -cn --arg version "${server_version}" '[$version]')" >/dev/null
 kubectl taint nodes "${KWOK_CLUSTER_NAME}-control-plane" CriticalAddonsOnly:NoSchedule --overwrite
 
 cd "${KARPENTER_CORE_DIR}"

@@ -19,17 +19,18 @@ const (
 )
 
 type Manifest struct {
-	ClusterName    string            `yaml:"clusterName"`
-	ClusterID      string            `yaml:"clusterID"`
-	Region         string            `yaml:"region"`
-	GitRef         string            `yaml:"gitRef,omitempty"`
-	Suite          string            `yaml:"suite,omitempty"`
-	Source         string            `yaml:"source,omitempty"`
-	CreatedAt      time.Time         `yaml:"createdAt"`
-	LeaseExpiresAt time.Time         `yaml:"leaseExpiresAt,omitempty"`
-	KubeconfigPath string            `yaml:"kubeconfigPath,omitempty"`
-	OwnershipTags  map[string]string `yaml:"ownershipTags"`
-	Resources      []Resource        `yaml:"resources"`
+	ClusterName       string            `yaml:"clusterName"`
+	ClusterID         string            `yaml:"clusterID"`
+	KubernetesVersion string            `yaml:"kubernetesVersion,omitempty"`
+	Region            string            `yaml:"region"`
+	GitRef            string            `yaml:"gitRef,omitempty"`
+	Suite             string            `yaml:"suite,omitempty"`
+	Source            string            `yaml:"source,omitempty"`
+	CreatedAt         time.Time         `yaml:"createdAt"`
+	LeaseExpiresAt    time.Time         `yaml:"leaseExpiresAt,omitempty"`
+	KubeconfigPath    string            `yaml:"kubeconfigPath,omitempty"`
+	OwnershipTags     map[string]string `yaml:"ownershipTags"`
+	Resources         []Resource        `yaml:"resources"`
 }
 
 type Resource struct {

@@ -8,9 +8,11 @@
 
 当前开发 chart 为 `0.3.0-dev`，对应 Karpenter core `v1.14.1`。部署时需显式设置 `controller.image.repository` 和 `controller.image.tag`，使用从当前提交构建的镜像。升级已有集群前请阅读 [UPGRADING.md](UPGRADING.md)。
 
+支持边界和离线/实测版本的区别见 [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md)。
+
 ## 前置条件
 
-1. 一个运行中的 Kubernetes 集群 (推荐使用阿里云 ACK)
+1. 一个运行中的 **Kubernetes 1.34 或更新版本**集群（推荐使用阿里云 ACK）。1.33 及更早版本不受支持；先升级集群再安装本候选版本。
 2. 配置好 kubectl 并能够访问集群
 3. 阿里云账号和访问凭证 (AccessKey ID 和 AccessKey Secret)
 4. 集群所在的 VPC、VSwitch 和安全组资源
@@ -233,9 +235,11 @@ This guide explains how to quickly deploy and use Alibaba Cloud Karpenter Provid
 
 The development chart is `0.3.0-dev` with Karpenter core `v1.14.1`. Use an image built from the matching commit and read [UPGRADING.md](UPGRADING.md) before upgrading an existing cluster.
 
+See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md) for the support boundary and the distinction between offline checks and runtime-tested versions.
+
 ### Prerequisites
 
-1. A running Kubernetes cluster (Alibaba Cloud ACK is recommended)
+1. A running **Kubernetes 1.34 or newer** cluster (Alibaba Cloud ACK is recommended). Versions 1.33 and earlier are unsupported; upgrade the cluster before installing this candidate.
 2. A configured `kubectl` that can access the cluster
 3. An Alibaba Cloud account and credentials (AccessKey ID and AccessKey Secret)
 4. VPC, VSwitch, and security group resources for the cluster

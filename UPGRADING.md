@@ -4,6 +4,14 @@ This development change pins `sigs.k8s.io/karpenter` and the AWS E2E harness to 
 
 Upstream references: [release](https://github.com/kubernetes-sigs/karpenter/releases/tag/v1.14.1), [Go dependencies](https://github.com/kubernetes-sigs/karpenter/blob/v1.14.1/go.mod), and [upgrade guide](https://karpenter.sh/docs/upgrading/upgrade-guide/).
 
+## Kubernetes minimum
+
+This candidate requires **Kubernetes 1.34 or newer**; **1.33 and earlier are unsupported**. Upgrade Kubernetes before applying this candidate's CRDs or deploying its controller. Helm rejects old clusters, and controller startup checks the actual API server version. ACK setup requires an explicit supported version and checks the actual ACK version.
+
+最低版本为 **Kubernetes 1.34**，**1.33 及更早版本不受支持**。请先升级 Kubernetes，再应用本候选版本的 CRD 或部署控制器。最低支持要求不等于所有更新版本均已完成实测；真实 ACK/ECS 和升级、回滚验收仍待完成。
+
+See [KUBERNETES_SUPPORT.md](KUBERNETES_SUPPORT.md) for ACK suffix handling, regional version selection, validation and release evidence.
+
 ## Build and offline validation
 
 Use Go 1.26.9 or a newer security-patched toolchain and Helm 3. The container builder and CI are pinned to Go 1.26.9 with local toolchain selection. Kubernetes client libraries use stable 0.35.x versions; controller-runtime is 0.23.1. Production controller builds and the default Makefile/CI checks use `CGO_ENABLED=0`; explicitly enable CGO when using tools that require it, such as `-race`.
@@ -18,7 +26,7 @@ make e2e-parity
 go test -p 1 -tags integration -run '^$' ./test/pkg/... ./test/suites/...
 ```
 
-`make compatibility` checks exact core/harness versions, compares every upstream core CRD byte-for-byte in both vendored directories, renders Helm, and checks its permissions against the matching upstream core ClusterRole. It also verifies that core/provider feature gates render independently. `make sync-core-crds` copies CRDs from the pinned module. `make manifests` regenerates the provider CRD and synchronizes both locations. CI runs provider unit/controller tests with Linux envtest 1.35.0, vet, build, E2E compilation, Helm and dependency consistency. Envtest verifies API/controller behavior, not ACK or ECS runtime compatibility.
+`make compatibility` checks exact core/harness versions, compares every upstream core CRD byte-for-byte in both vendored directories, renders Helm, and checks its permissions against the matching upstream core ClusterRole. It also verifies that core/provider feature gates render independently. `make sync-core-crds` copies CRDs from the pinned module. `make manifests` regenerates the provider CRD and synchronizes both locations. CI runs provider unit/controller tests with Linux envtest 1.35.0 plus minimum-version controller contracts on 1.34.0, vet, build, E2E compilation, Helm and dependency consistency. Envtest verifies API/controller behavior, not ACK or ECS runtime compatibility.
 
 The KWOK regression harness uses `test/hack/kwok/values.yaml` to enable StaticCapacity, CapacityBuffer and NodeRepair. Core v1.14.1's KWOK chart references CapacityBuffer without a default value, so the harness supplies explicit booleans. Compatibility checks render that chart and parse its `FEATURE_GATES` with the pinned core parser before runtime setup.
 
@@ -72,6 +80,7 @@ Do not delete CRDs to perform a rollback: deleting a CRD deletes its custom reso
 
 Offline implementation and ACK runtime acceptance are separate. ACK E2E is deferred for this task and tracked in [release acceptance issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5). Keep the milestone open until a dedicated ACK test environment records:
 
+- The actual ACK/Kubernetes version (>=1.34), region and matching controller digest/chart/git SHA; retain the helper manifest and TEST_KUBERNETES_VERSION evidence.
 - Provisioning and registration for the required amd64/arm64 and spot/on-demand inventory.
 - Consolidation, drift, interruption, NodeRepair and enabled optional core features.
 - Upgrade behavior with existing NodeClaims, matching ownership tags, and validated rollback.
