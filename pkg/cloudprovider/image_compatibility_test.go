@@ -50,7 +50,7 @@ func TestCreateRechecksLegacyImageStatusBeforeInstanceDiscovery(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := (&options.Options{ClusterID: "cluster-a"}).ToContext(context.Background())
-			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Spec: v1alpha1.ECSNodeClassSpec{ClusterID: "cluster-a"}, Status: v1alpha1.ECSNodeClassStatus{Images: []v1alpha1.Image{{ID: tc.id}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
+			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Spec: v1alpha1.ECSNodeClassSpec{ClusterID: "cluster-a", ImageSelectorTerms: []v1alpha1.ImageSelectorTerm{{ID: tea.String(tc.id)}}}, Status: v1alpha1.ECSNodeClassStatus{Images: []v1alpha1.Image{{ID: tc.id}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
 			scheme := runtime.NewScheme()
 			require.NoError(t, v1alpha1.AddToScheme(scheme))
 			ecsClient := &launchCompatibilityECS{os: tc.os}

@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
@@ -20,7 +19,7 @@ type Option func(*Provider)
 type ackCompatibility struct {
 	client            clients.CSClient
 	region, clusterID string
-	mu                sync.Mutex
+	gate              chan struct{}
 	key               string
 	expires           time.Time
 	images            []ecs.DescribeImagesResponseBodyImagesImage
@@ -29,7 +28,9 @@ type ackCompatibility struct {
 
 // WithACKCompatibility enables the production ACK compatibility gate.
 func WithACKCompatibility(client clients.CSClient, region, clusterID string) Option {
-	return func(p *Provider) { p.ack = &ackCompatibility{client: client, region: region, clusterID: clusterID} }
+	return func(p *Provider) {
+		p.ack = &ackCompatibility{client: client, region: region, clusterID: clusterID, gate: make(chan struct{}, 1)}
+	}
 }
 
 func (p *Provider) ACKCompatibilityEnabled() bool { return p.ack != nil }
@@ -54,6 +55,7 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 		return nil, fmt.Errorf("NodeClass clusterID differs from provider ACK cluster")
 	}
 	var result []v1alpha1.Image
+	var incompatible error
 	if nc.Spec.ImageCompatibilityPolicy == "Custom" {
 		for _, term := range nc.Spec.ImageSelectorTerms {
 			if term.ID == nil {
@@ -89,7 +91,15 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 				if !matchesACKSelector(term, img) {
 					continue
 				}
-				result = append(result, resolvedImage(img, types[tea.StringValue(img.ImageId)]))
+				candidate := resolvedImage(img, types[tea.StringValue(img.ImageId)])
+				if err := ValidateBootImages(nc.Spec, []v1alpha1.Image{candidate}); err != nil {
+					if term.ID != nil {
+						return nil, err // An explicit pin is mandatory, never replaced.
+					}
+					incompatible = err
+					continue // Automatic discovery returns viable alternatives only.
+				}
+				result = append(result, candidate)
 				matched = true
 			}
 			if term.ID != nil && !matched {
@@ -98,6 +108,12 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 		}
 	}
 	result = removeDuplicateImages(result)
+	if len(result) == 0 {
+		if incompatible != nil {
+			return nil, fmt.Errorf("no boot-compatible images match the NodeClass selectors: %w", incompatible)
+		}
+		return nil, fmt.Errorf("no boot-compatible images match the NodeClass selectors")
+	}
 	if err := ValidateBootImages(nc.Spec, result); err != nil {
 		return nil, err
 	}
@@ -107,13 +123,32 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 // RevalidateForLaunch checks the concrete status IDs against current cluster
 // metadata, including status written by a previous controller version.
 func (p *Provider) RevalidateForLaunch(ctx context.Context, nc *v1alpha1.ECSNodeClass, images []v1alpha1.Image) ([]v1alpha1.Image, error) {
-	pinned := nc.DeepCopy()
-	pinned.Spec.ImageSelectorTerms = nil
-	for _, img := range images {
-		id := img.ID
-		pinned.Spec.ImageSelectorTerms = append(pinned.Spec.ImageSelectorTerms, v1alpha1.ImageSelectorTerm{ID: &id})
+	current := nc.DeepCopy()
+	if current.Spec.LaunchTemplateID != nil {
+		// Template status represents one concrete template image, not alternatives.
+		if len(images) != 1 {
+			return nil, fmt.Errorf("launch template requires exactly one resolved image")
+		}
+		current.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String(images[0].ID)}}
 	}
-	return p.ResolveForNodeClass(ctx, pinned)
+	resolved, err := p.ResolveForNodeClass(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	statusIDs := make(map[string]bool, len(images))
+	for _, image := range images {
+		statusIDs[image.ID] = true
+	}
+	var result []v1alpha1.Image
+	for _, image := range resolved {
+		if statusIDs[image.ID] {
+			result = append(result, image)
+		}
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no status images remain boot-compatible; reconcile NodeClass status before launching")
+	}
+	return result, nil
 }
 
 func resolvedImage(img ecs.DescribeImagesResponseBodyImagesImage, imageType string) v1alpha1.Image {
@@ -200,8 +235,15 @@ func (p *Provider) ackImages(ctx context.Context) ([]ecs.DescribeImagesResponseB
 		return nil, nil, err
 	}
 	key := strings.Join([]string{a.clusterID, tea.StringValue(request.Region), tea.StringValue(request.ClusterType), tea.StringValue(request.KubernetesVersion), tea.StringValue(request.Profile), tea.StringValue(request.Runtime)}, "/")
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	select {
+	case a.gate <- struct{}{}:
+		defer func() { <-a.gate }()
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	if a.key == key && time.Now().Before(a.expires) {
 		return a.images, a.types, nil
 	}

@@ -19,7 +19,6 @@ package bootstrap
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +56,12 @@ func (m *MockCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, re
 	return args.Get(0).([]*cs.DescribeKubernetesVersionMetadataResponseBody), args.Error(1)
 }
 
+// Existing script/header tests use valid ACK metadata; failure cases are covered separately.
+func configureACKMetadata(m *MockCSClient) {
+	m.On("DescribeClusterDetail", mock.Anything, mock.Anything).Maybe().Return(&cs.DescribeClusterDetailResponse{Body: &cs.DescribeClusterDetailResponseBody{CurrentVersion: tea.String("1.34.10-aliyun.1"), ClusterType: tea.String("ManagedKubernetes")}}, nil)
+	m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.Anything).Maybe().Return([]*cs.DescribeKubernetesVersionMetadataResponseBody{{Version: tea.String("1.34.10-aliyun.1"), Runtimes: []*cs.Runtime{{Name: tea.String("containerd"), Version: tea.String("1.7.2")}}}}, nil)
+}
+
 func TestGenerateUserData(t *testing.T) {
 	customData := "#!/bin/bash\necho custom"
 
@@ -80,7 +85,6 @@ func TestGenerateUserData(t *testing.T) {
 			mockSetup: func(m *MockCSClient) {
 				script := "curl -sSL http://aliacs-k8s.oss.aliyuncs.com/public/pkg/run/attach/1.12.6-aliyunedge.1/attach.sh | bash"
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-test123", mock.Anything).Return(script, nil)
-				m.On("DescribeClusterDetail", mock.Anything, "c-test123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			contains: []string{"#!/bin/bash", "set -ex", "attach.sh", "--taints", "echo custom"},
 			ordered:  []string{"attach.sh", "--taints", "#!/bin/bash\necho custom"},
@@ -95,7 +99,6 @@ func TestGenerateUserData(t *testing.T) {
 			},
 			mockSetup: func(m *MockCSClient) {
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-test123", mock.Anything).Return("", nil)
-				m.On("DescribeClusterDetail", mock.Anything, "c-test123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			expected: customData,
 		},
@@ -108,8 +111,6 @@ func TestGenerateUserData(t *testing.T) {
 			mockSetup: func(m *MockCSClient) {
 				script := "curl -sSL http://aliacs-k8s.oss.aliyuncs.com/public/pkg/run/attach/1.12.6-aliyunedge.1/attach.sh | bash"
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-test123", mock.Anything).Return(script, nil)
-				// patchRuntimeVersion is non-blocking; return error to exercise fallback path
-				m.On("DescribeClusterDetail", mock.Anything, "c-test123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			contains: []string{"#!/bin/bash", "set -ex", "attach.sh"},
 		},
@@ -148,6 +149,7 @@ func TestGenerateUserData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockClient)
 			}
@@ -199,8 +201,6 @@ func TestGetACKBootstrapScriptByCluster(t *testing.T) {
 			mockSetup: func(m *MockCSClient) {
 				script := "curl -sSL http://test.sh | bash"
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-abc123", mock.Anything).Return(script, nil)
-				// patchRuntimeVersion is non-blocking; return error to exercise fallback path
-				m.On("DescribeClusterDetail", mock.Anything, "c-abc123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			expected: "curl -sSL http://test.sh | bash",
 		},
@@ -226,6 +226,7 @@ func TestGetACKBootstrapScriptByCluster(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockClient)
 			}
@@ -263,7 +264,6 @@ func TestGenerateACKBootstrapScript(t *testing.T) {
 			mockSetup: func(m *MockCSClient) {
 				script := "echo test"
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-abc123", mock.Anything).Return(script, nil)
-				m.On("DescribeClusterDetail", mock.Anything, "c-abc123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			contains: []string{"#!/bin/bash", "set -ex", "echo test", "--taints"},
 		},
@@ -275,7 +275,6 @@ func TestGenerateACKBootstrapScript(t *testing.T) {
 			mockSetup: func(m *MockCSClient) {
 				script := "#!/bin/bash\necho test"
 				m.On("DescribeClusterAttachScripts", mock.Anything, "c-abc123", mock.Anything).Return(script, nil)
-				m.On("DescribeClusterDetail", mock.Anything, "c-abc123").Maybe().Return(&cs.DescribeClusterDetailResponse{}, fmt.Errorf("skip patch"))
 			},
 			contains: []string{"#!/bin/bash", "set -ex", "echo test"},
 		},
@@ -284,6 +283,7 @@ func TestGenerateACKBootstrapScript(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockClient)
 			}
@@ -361,6 +361,7 @@ func TestGenerateSelfManagedBootstrapScript(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			provider := NewProvider("cn-hangzhou", mockClient)
 			result, err := provider.generateSelfManagedBootstrapScript(tt.opts)
 
@@ -483,6 +484,7 @@ func TestBuildNodeLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			provider := NewProvider("cn-hangzhou", mockClient)
 			result := provider.buildNodeLabels(tt.opts)
 
@@ -525,6 +527,7 @@ func TestBuildNodeTaints(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := new(MockCSClient)
+			configureACKMetadata(mockClient)
 			provider := NewProvider("cn-hangzhou", mockClient)
 			result := provider.buildNodeTaints(tt.opts)
 			assert.Equal(t, tt.expected, result)
@@ -534,6 +537,7 @@ func TestBuildNodeTaints(t *testing.T) {
 
 func TestCacheOperations(t *testing.T) {
 	mockClient := new(MockCSClient)
+	configureACKMetadata(mockClient)
 	provider := NewProvider("cn-hangzhou", mockClient)
 
 	// Test setCachedValue and getCachedValue
@@ -612,67 +616,6 @@ func TestFormatTaints(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestPatchRuntimeVersion(t *testing.T) {
-	originalScript := "bash attach.sh --runtime containerd --runtime-version 1.5.10 --other-flag"
-
-	t.Run("replaces runtime version from metadata", func(t *testing.T) {
-		m := &MockCSClient{}
-		name := "containerd"
-		ver := "1.7.2"
-		m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(
-			&cs.DescribeClusterDetailResponse{
-				Body: &cs.DescribeClusterDetailResponseBody{
-					CurrentVersion: tea.String("1.34.10-aliyun.1"),
-					ClusterType:    tea.String("ManagedKubernetes"),
-				},
-			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.MatchedBy(func(req *cs.DescribeKubernetesVersionMetadataRequest) bool {
-			return tea.StringValue(req.Region) == "cn-shanghai" && tea.StringValue(req.ClusterType) == "ManagedKubernetes" && tea.StringValue(req.Profile) == "Default" && tea.StringValue(req.Runtime) == "containerd" && tea.StringValue(req.KubernetesVersion) == "1.34.10-aliyun.1"
-		})).Return(
-			[]*cs.DescribeKubernetesVersionMetadataResponseBody{
-				{
-					Runtimes: []*cs.Runtime{
-						{Name: &name, Version: &ver},
-					},
-				},
-			}, nil)
-
-		p := NewProvider("cn-shanghai", m)
-		result := p.patchRuntimeVersion(context.Background(), "c-test", originalScript)
-		assert.Contains(t, result, "--runtime containerd --runtime-version 1.7.2")
-		assert.NotContains(t, result, "1.5.10")
-	})
-
-	t.Run("returns original script on DescribeClusterDetail failure", func(t *testing.T) {
-		m := &MockCSClient{}
-		m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(
-			&cs.DescribeClusterDetailResponse{}, fmt.Errorf("API error"))
-
-		p := NewProvider("cn-shanghai", m)
-		result := p.patchRuntimeVersion(context.Background(), "c-test", originalScript)
-		assert.Equal(t, originalScript, result)
-	})
-
-	t.Run("returns original script on empty runtimes", func(t *testing.T) {
-		m := &MockCSClient{}
-		m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(
-			&cs.DescribeClusterDetailResponse{
-				Body: &cs.DescribeClusterDetailResponseBody{
-					CurrentVersion: tea.String("1.34.10-aliyun.1"),
-					ClusterType:    tea.String("ManagedKubernetes"),
-				},
-			}, nil)
-		m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.MatchedBy(func(req *cs.DescribeKubernetesVersionMetadataRequest) bool {
-			return tea.StringValue(req.Region) == "cn-shanghai" && tea.StringValue(req.ClusterType) == "ManagedKubernetes" && tea.StringValue(req.Profile) == "Default" && tea.StringValue(req.Runtime) == "containerd" && tea.StringValue(req.KubernetesVersion) == "1.34.10-aliyun.1"
-		})).Return(
-			[]*cs.DescribeKubernetesVersionMetadataResponseBody{}, nil)
-
-		p := NewProvider("cn-shanghai", m)
-		result := p.patchRuntimeVersion(context.Background(), "c-test", originalScript)
-		assert.Equal(t, originalScript, result)
-	})
 }
 
 func TestSanitizeBootstrapLabels(t *testing.T) {

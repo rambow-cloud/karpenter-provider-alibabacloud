@@ -72,6 +72,8 @@ Resolve CRD field ownership conflicts deliberately if server-side apply reports 
 
 ## Rollback
 
+ACK bootstrap cache entries now depend on the current cluster version/type/profile/region/runtime. Current cluster detail and exact-version containerd metadata must be available before generating a new script; an API failure no longer silently caches an unpatched fallback. Ensure the existing CS read permissions are effective before rollout. Automatically discovered image alternatives are filtered individually, while explicit IDs remain strict; launch revalidation keeps only valid IDs already present in status. See [ACK_IMAGE_SUPPORT.md](ACK_IMAGE_SUPPORT.md) for the timeout and cancellation boundaries.
+
 Before applying the current provider CRD, check existing image selectors against [ECSNodeClass readiness and image selection](ECSNODECLASS_VALIDATION.md). Admission now rejects empty terms/tags, conflicting IDs, invalid aliases and unsupported owner combinations. Specify `imageOwnerAlias: others` with `imageOwnerID` only for shared images; remove owner filters from `self`, `system` or `marketplace` queries. Existing NodeClasses must reconcile their current generation before new provisioning resumes. Running nodes are unaffected by this readiness gate.
 
 升级前请检查镜像 selector：`imageOwnerID` 必须显式配合 `imageOwnerAlias: others`，空 term、空标签值和 ID 混用条件需修正。先应用对应 CRD，再部署控制器；旧 NodeClass 需解析当前 generation 后才能继续扩容。详细规则见上面的文档。

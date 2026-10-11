@@ -8,7 +8,9 @@
 
 以 ACK 返回的精确公共镜像 ID 查询 ECS，再检查镜像状态、Linux OSType 和架构是否与 ACK 元数据一致。family、name（支持 `*`、`?`）和 tags 在这些已批准的镜像上匹配，因此不会把 ECS 最新 family 镜像自动当作 ACK 支持镜像。多个 selector 是 OR，单个 selector 的条件是 AND。精确 ID 不被替换：不在当前清单或不可用时，NodeClass 不会 Ready，启动请求会被拒绝。
 
-ACK 元数据失败、为空或缺少目标版本时，解析失败，不回退到 ECS 最新镜像。每次解析读取目标集群当前版本，成功的镜像清单最多缓存 5 分钟且只保留一个快照；集群版本/类型/场景变化会更新清单，失败不会缓存。创建前重新校验 status 中的精确 ID，避免旧 controller status 或集群升级绕过约束。元数据缓存期间的云端状态变动仍可能在实际 ECS 创建时被拒绝。
+ACK 元数据失败、为空或缺少目标版本时，解析失败，不回退到 ECS 最新镜像。每次解析读取目标集群当前版本，成功的镜像清单最多缓存 5 分钟且只保留一个快照；集群版本/类型/场景变化会更新清单，失败不会缓存。创建前按原始 selector 重新解析，再与 status 的 ID 取交集：过滤失效的自动候选，保留仍然有效的镜像；尚未进入 status 的新镜像等待 NodeClass 重协调。用户显式 pin 和 LaunchTemplate 镜像仍严格校验，无法满足时拒绝启动。元数据缓存期间的云端状态变动仍可能在实际 ECS 创建时被拒绝。
+
+family、name、tags 或 owner 自动发现多个候选时，每个候选分别校验启动条件。例如宽 `imageOwnerAlias: system` 同时匹配普通 Linux 和 ContainerOS，缺少 ContainerOS 数据盘只会过滤该候选，不阻断普通 Linux；全部候选都不适用才失败。显式 ID 不参与这种自动替代，包含一个无效显式 pin 的 selector 集合仍失败。
 
 LaunchTemplate 的镜像也需要查询和校验，不能仅凭模板中的字符串 ID 标记 ImageResolved。
 
@@ -29,7 +31,7 @@ spec:
 
 ## ContainerOS
 
-ACK 元数据中的 `ContainerOS`、`ContainerOS4` 和 `ContainerOSGPU` 采用受限的单数据盘配置。需要 **恰好一块有效的持久云数据盘**，不支持 ephemeral 数据盘或 `instanceStorePolicy`。缺盘、多盘或无效大小会导致解析和创建失败；controller 不自动增加收费云盘。
+ACK 元数据中的 `ContainerOS`、`ContainerOS4` 和 `ContainerOSGPU` 采用受限的单数据盘配置。需要 **恰好一块有效的持久云数据盘**，不支持 ephemeral 数据盘或 `instanceStorePolicy`。缺盘、多盘或无效大小会使该候选不可用；显式 pin 或没有其他有效候选时解析和创建失败。controller 不自动增加收费云盘。
 
 ```yaml
 spec:
@@ -51,6 +53,10 @@ ContainerOS 3.4 起只读系统盘需要数据盘，且不适用于带本地盘�
 ACK 元数据不是全部部署约束的检查器。阿里云 Linux 4 的 Terway 版本、Ubuntu 的 CPFS/镜像加速/安全加固限制、ContainerOS 的本地盘限制及 GPU 驱动适配仍需按官方说明配置和验收。具体镜像以目标区域、ACK 类型、版本和 runtime 返回的清单为准，不把文档示例 ID 固定为通用最新版。参见[ACK 操作系统与限制](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/overview-of-os-images/)。
 
 ## 升级与权限
+
+ACK bootstrap 在每次读取脚本缓存前查询当前集群上下文，按 cluster、region、type、profile、version、runtime 分区，成功脚本缓存最多 5 分钟。集群升级和 Profile 变化立即刷新；runtime 元数据必须提供精确 Kubernetes 版本的 containerd。查询失败不会缓存未经验证的 fallback 脚本，也不会用旧版本缓存掩盖失败。
+
+生产 ECS/VPC/RAM/CS SDK 的连接和读超时各为 30 秒（配置字段单位毫秒，值为 `30000`），默认 HTTP 总超时为 60 秒。adapter 把调用者 context 绑定到实际 HTTP 请求，兼容清单缓存等待也可取消。SDK 自定义 HTTP client 保持原配置；SDK 内部凭证刷新没有 context 参数，取消无法中断这部分调用，也不能撤销云端已接收的请求。云端创建结果不确定时仍需要资源对账，真实节点验收由 #5/#23 跟踪。
 
 先更新 CRD（Chart 和嵌入 CRD 包含新 spec 字段与 status 的 `osType`/`imageType`），再更新 controller。RAM 策略新增只读 `cs:DescribeKubernetesVersionMetadata`，保留 `cs:DescribeClusterDetail`、`ecs:DescribeImages`。缺少权限会阻止公共镜像解析和启动。
 

@@ -40,19 +40,31 @@ type DefaultCSClient struct {
 
 // NewDefaultCSClient creates a new default CS client adapter
 func NewDefaultCSClient(client *cs.Client) CSClient {
+	copy := *client
+	prepareHTTPClient(&copy.Client)
+	client = &copy
 	return &DefaultCSClient{
 		client: client,
 	}
 }
 
+// withContext copies the SDK configuration so concurrent calls keep their own context.
+func (c *DefaultCSClient) withContext(ctx context.Context) *cs.Client {
+	copy := *c.client
+	copy.HttpClient = contextHTTPClient{ctx: ctx, base: c.client.HttpClient}
+	return &copy
+}
+
 // DescribeClusterAttachScripts implements CSClient interface
 func (c *DefaultCSClient) DescribeClusterAttachScripts(ctx context.Context, clusterID string, request *cs.DescribeClusterAttachScriptsRequest) (string, error) {
-	response, err := c.client.DescribeClusterAttachScripts(&clusterID, request)
+	response, err := callSDK(ctx, func() (*cs.DescribeClusterAttachScriptsResponse, error) {
+		return c.withContext(ctx).DescribeClusterAttachScripts(&clusterID, request)
+	})
 	if err != nil {
 		return "", err
 	}
 
-	if response.Body == nil {
+	if response == nil || response.Body == nil {
 		return "", nil
 	}
 
@@ -60,11 +72,15 @@ func (c *DefaultCSClient) DescribeClusterAttachScripts(ctx context.Context, clus
 }
 
 func (c *DefaultCSClient) GetClusterAddonInstance(ctx context.Context, clusterID, addonName string) (*cs.GetClusterAddonInstanceResponse, error) {
-	return c.client.GetClusterAddonInstance(&clusterID, &addonName)
+	return callSDK(ctx, func() (*cs.GetClusterAddonInstanceResponse, error) {
+		return c.withContext(ctx).GetClusterAddonInstance(&clusterID, &addonName)
+	})
 }
 
 func (c *DefaultCSClient) DescribeClusterDetail(ctx context.Context, clusterID string) (*cs.DescribeClusterDetailResponse, error) {
-	return c.client.DescribeClusterDetail(&clusterID)
+	return callSDK(ctx, func() (*cs.DescribeClusterDetailResponse, error) {
+		return c.withContext(ctx).DescribeClusterDetail(&clusterID)
+	})
 }
 
 func (c *DefaultCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, request *cs.DescribeKubernetesVersionMetadataRequest) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
@@ -74,7 +90,9 @@ func (c *DefaultCSClient) DescribeKubernetesVersionMetadata(ctx context.Context,
 	if request == nil || tea.StringValue(request.Region) == "" || tea.StringValue(request.ClusterType) == "" || tea.StringValue(request.KubernetesVersion) == "" {
 		return nil, fmt.Errorf("ACK version metadata requires Region, ClusterType and KubernetesVersion")
 	}
-	resp, err := c.client.DescribeKubernetesVersionMetadata(request)
+	resp, err := callSDK(ctx, func() (*cs.DescribeKubernetesVersionMetadataResponse, error) {
+		return c.withContext(ctx).DescribeKubernetesVersionMetadata(request)
+	})
 	if err != nil {
 		return nil, err
 	}

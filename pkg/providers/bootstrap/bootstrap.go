@@ -125,36 +125,26 @@ var (
 	labelValueRe   = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9._-]{0,61}[a-zA-Z0-9])?)?$|^[a-zA-Z0-9]$`)
 )
 
-// patchRuntimeVersion calls DescribeClusterDetail and DescribeKubernetesVersionMetadata to
-// find the correct runtime name/version for the cluster's K8s version, then regex-replaces
-// the --runtime and --runtime-version flags in script. On any error, returns script unchanged.
-func (p *Provider) patchRuntimeVersion(ctx context.Context, clusterID, script string) string {
-	detail, err := p.csClient.DescribeClusterDetail(ctx, clusterID)
-	if err != nil || detail == nil || detail.Body == nil || detail.Body.CurrentVersion == nil {
-		klog.V(2).Infof("patchRuntimeVersion: skipping runtime patch, failed to get cluster detail: %v", err)
-		return script
-	}
-	k8sVersion := *detail.Body.CurrentVersion
-	request, err := clients.VersionMetadataRequest(p.region, detail.Body, "containerd")
+// patchRuntimeVersion requires runtime metadata for the exact ACK cluster version.
+// Never persist an unverified fallback script after a metadata failure.
+func (p *Provider) patchRuntimeVersion(ctx context.Context, request *cs.DescribeKubernetesVersionMetadataRequest, script string) (string, error) {
+	metadata, err := p.csClient.DescribeKubernetesVersionMetadata(ctx, request)
 	if err != nil {
-		klog.V(2).Infof("patchRuntimeVersion: invalid cluster metadata context: %v", err)
-		return script
+		return "", fmt.Errorf("describe ACK bootstrap runtime metadata: %w", err)
 	}
-	runtimes, err := p.csClient.DescribeKubernetesVersionMetadata(ctx, request)
-	if err != nil || len(runtimes) == 0 || len(runtimes[0].Runtimes) == 0 {
-		klog.V(2).Infof("patchRuntimeVersion: skipping runtime patch, no runtime metadata for version %s: %v", k8sVersion, err)
-		return script
+	for _, version := range metadata {
+		if version == nil || tea.StringValue(version.Version) != tea.StringValue(request.KubernetesVersion) {
+			continue
+		}
+		for _, runtime := range version.Runtimes {
+			if runtime == nil || tea.StringValue(runtime.Name) != tea.StringValue(request.Runtime) || tea.StringValue(runtime.Version) == "" {
+				continue
+			}
+			replacement := fmt.Sprintf("--runtime %s --runtime-version %s", *runtime.Name, *runtime.Version)
+			return runtimeRe.ReplaceAllString(script, replacement), nil
+		}
 	}
-	rt := runtimes[0].Runtimes[0]
-	if rt.Name == nil || rt.Version == nil {
-		return script
-	}
-	replacement := fmt.Sprintf("--runtime %s --runtime-version %s", *rt.Name, *rt.Version)
-	patched := runtimeRe.ReplaceAllString(script, replacement)
-	if patched != script {
-		klog.Infof("patchRuntimeVersion: patched to --runtime %s --runtime-version %s for k8s %s", *rt.Name, *rt.Version, k8sVersion)
-	}
-	return patched
+	return "", fmt.Errorf("ACK metadata contains no %s runtime for the exact cluster version %s", tea.StringValue(request.Runtime), tea.StringValue(request.KubernetesVersion))
 }
 
 func isValidLabelName(name string) bool {
@@ -264,6 +254,13 @@ func (p *Provider) getCachedValue(key string) (interface{}, bool) {
 func (p *Provider) setCachedValue(key string, value interface{}) {
 	p.cacheMu.Lock()
 	defer p.cacheMu.Unlock()
+	// Context changes produce new keys; retire expired entries even when those
+	// previous versions are never looked up again.
+	for cachedKey, entry := range p.cache {
+		if time.Now().After(entry.ExpiresAt) {
+			delete(p.cache, cachedKey)
+		}
+	}
 
 	p.cache[key] = &CacheEntry{
 		Value:     value,
@@ -319,10 +316,22 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 		return "", fmt.Errorf("cluster ID is required for ACK clusters")
 	}
 
-	// Create cache key from cluster ID
-	cacheKey := fmt.Sprintf("cs-bootstrap-script-%s", opts.ClusterID)
-
-	// Check cache first
+	// Refresh the cluster context before any cache hit, including after upgrades.
+	detail, err := p.csClient.DescribeClusterDetail(ctx, opts.ClusterID)
+	if err != nil {
+		return "", fmt.Errorf("describe ACK cluster for bootstrap: %w", err)
+	}
+	if detail == nil {
+		return "", fmt.Errorf("ACK cluster detail response is nil")
+	}
+	metadataRequest, err := clients.VersionMetadataRequest(p.region, detail.Body, opts.ContainerRuntime)
+	if err != nil {
+		return "", err
+	}
+	cacheKey := strings.Join([]string{"cs-bootstrap-script", opts.ClusterID, tea.StringValue(metadataRequest.Region), tea.StringValue(metadataRequest.ClusterType), tea.StringValue(metadataRequest.KubernetesVersion), tea.StringValue(metadataRequest.Profile), tea.StringValue(metadataRequest.Runtime)}, "/")
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if script, exists := p.getCachedValue(cacheKey); exists {
 		return script.(string), nil
 	}
@@ -339,7 +348,10 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 	}
 
 	// Patch runtime version and sanitize labels before caching
-	script = p.patchRuntimeVersion(ctx, opts.ClusterID, script)
+	script, err = p.patchRuntimeVersion(ctx, metadataRequest, script)
+	if err != nil {
+		return "", err
+	}
 	script = sanitizeBootstrapLabels(ctx, script)
 
 	// Cache the result

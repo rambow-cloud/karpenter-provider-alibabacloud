@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
@@ -19,6 +20,61 @@ type compatibilityCS struct {
 	metadata []*cs.DescribeKubernetesVersionMetadataResponseBody
 	err      error
 	requests []*cs.DescribeKubernetesVersionMetadataRequest
+}
+
+func TestACKAutomaticAlternativesAreFilteredButPinsRemainStrict(t *testing.T) {
+	c, e, p, nc := compatibilityFixture()
+	c.metadata[0].Images = append(c.metadata[0].Images, &cs.DescribeKubernetesVersionMetadataResponseBodyImages{ImageId: tea.String("m-container"), ImageType: tea.String("ContainerOS4"), OsType: tea.String("Linux"), Architecture: tea.String("x86_64")})
+	e.images["m-container"] = e.images["m-approved"]
+	container := e.images["m-container"]
+	container.ImageId = tea.String("m-container")
+	e.images["m-container"] = container
+	nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ImageOwnerAlias: tea.String("system")}}
+	images, err := p.ResolveForNodeClass(context.Background(), nc)
+	require.NoError(t, err)
+	require.Equal(t, []v1alpha1.Image{{ID: "m-approved", Name: "compatible-node", Architecture: "x86_64", OSType: "linux", ImageType: "AliyunLinux3ContainerOptimized"}}, images)
+
+	images, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}, {ID: "m-stale"}})
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	require.Equal(t, "m-approved", images[0].ID)
+	_, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-stale"}})
+	require.ErrorContains(t, err, "no status images remain")
+	nc.Spec.ImageSelectorTerms = append(nc.Spec.ImageSelectorTerms, v1alpha1.ImageSelectorTerm{ID: tea.String("m-container")})
+	_, err = p.ResolveForNodeClass(context.Background(), nc)
+	require.ErrorContains(t, err, "exactly one", "invalid explicit pin remains mandatory even alongside a valid automatic selector")
+	nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-stale")}}
+	_, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}})
+	require.ErrorContains(t, err, "pin is not replaced")
+}
+
+func TestACKRevalidationDoesNotExpandStatus(t *testing.T) {
+	c, e, p, nc := compatibilityFixture()
+	entry := *c.metadata[0].Images[0]
+	entry.ImageId = tea.String("m-ecs-latest")
+	c.metadata[0].Images = append(c.metadata[0].Images, &entry)
+	images, err := p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}})
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	require.Equal(t, "m-approved", images[0].ID)
+	require.Contains(t, e.requested[0], "m-ecs-latest", "new candidate is discovered but must wait for status reconciliation")
+}
+
+func TestACKCacheWaitCanBeCanceled(t *testing.T) {
+	_, _, p, nc := compatibilityFixture()
+	p.ack.gate <- struct{}{}
+	defer func() { <-p.ack.gate }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := p.ResolveForNodeClass(ctx, nc); done <- err }()
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(3 * time.Second):
+		t.Fatal("cache waiter ignored cancellation")
+	}
 }
 
 func (c *compatibilityCS) DescribeClusterDetail(context.Context, string) (*cs.DescribeClusterDetailResponse, error) {
@@ -129,7 +185,7 @@ func TestACKUpgradeReplacesCachedCompatibilityAndRechecksLegacyStatus(t *testing
 	require.Equal(t, "m-ecs-latest", images[0].ID)
 	require.Len(t, c.requests, 2)
 	_, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}})
-	require.ErrorContains(t, err, "pin is not replaced")
+	require.ErrorContains(t, err, "no status images remain")
 }
 func TestCustomImagePolicyRequiresExactSelfSharedLinux(t *testing.T) {
 	for _, test := range []struct {

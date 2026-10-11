@@ -35,10 +35,20 @@ type DefaultRAMClient struct {
 
 // NewDefaultRAMClient creates a new default RAM client
 func NewDefaultRAMClient(client *ram.Client, region string) *DefaultRAMClient {
+	copy := *client
+	prepareHTTPClient(&copy.Client)
+	client = &copy
 	return &DefaultRAMClient{
 		client: client,
 		region: region,
 	}
+}
+
+// withContext copies the SDK configuration so concurrent calls keep their own context.
+func (c *DefaultRAMClient) withContext(ctx context.Context) *ram.Client {
+	copy := *c.client
+	copy.HttpClient = contextHTTPClient{ctx: ctx, base: c.client.HttpClient}
+	return &copy
 }
 
 // GetRole implements RAMClient interface
@@ -46,5 +56,5 @@ func (c *DefaultRAMClient) GetRole(ctx context.Context, roleName string) (*ram.G
 	request := &ram.GetRoleRequest{}
 	request.RoleName = &roleName
 
-	return c.client.GetRole(request)
+	return callSDK(ctx, func() (*ram.GetRoleResponse, error) { return c.withContext(ctx).GetRole(request) })
 }
