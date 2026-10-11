@@ -98,6 +98,8 @@ The minimal ACK/ECS helper retains SLB API-server listener/ACL configuration and
 
 ## ACK image compatibility gate
 
+Apply the CRD update for optional `status.images[].creationTime` before deploying the image-resolution fixes. New launches prefer the newest creation timestamp among known compatible architectures; old status with missing/unknown architecture must reconcile before new provisioning. Positive selector-cache TTL changes from two hours to five minutes, with no empty-result caching and a 256-entry cap. Existing image-membership drift behavior and exact single-ID pins are preserved; see [ECSNODECLASS_VALIDATION.md](ECSNODECLASS_VALIDATION.md).
+
 Update both the CRD and controller and grant `cs:DescribeKubernetesVersionMetadata`. Public images must resolve from the target ACK cluster version/region/profile/containerd image list. Existing pins outside that list fail explicitly; the controller never substitutes another pin. A newer ECS family release can differ from the ACK-approved image. Creation revalidates concrete status IDs, including legacy status missing OS fields.
 
 The provider supports Linux only. Modern ContainerOS requires one explicitly configured persistent data disk; ContainerOS with a launch template is rejected because the current launch path does not propagate its data disks. Existing custom/shared images require `imageCompatibilityPolicy: Custom` with exact IDs; the user must verify their actual OS/runtime/bootstrap compatibility. `Custom` cannot bypass the ACK gate for public images. The new policy participates in drift hashing; implicit/default ACK policies have the same hash.

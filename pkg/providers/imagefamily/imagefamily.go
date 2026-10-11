@@ -18,6 +18,7 @@ package imagefamily
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -65,7 +66,7 @@ func NewProvider(ecsClient clients.ECSClient, opts ...Option) *Provider {
 	p := &Provider{
 		ecsClient: ecsClient,
 		cache:     make(map[string]*CacheEntry),
-		cacheTTL:  2 * time.Hour, // Cache for 2 hours by default
+		cacheTTL:  5 * time.Minute, // Bound discovery staleness; empty results are not cached.
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -75,45 +76,73 @@ func NewProvider(ecsClient clients.ECSClient, opts ...Option) *Provider {
 
 // SetCacheTTL sets the cache TTL duration
 func (p *Provider) SetCacheTTL(ttl time.Duration) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
 	p.cacheTTL = ttl
 }
 
-// getCachedValue retrieves a value from cache if it exists and is not expired
-func (p *Provider) getCachedValue(key string) (interface{}, bool) {
-	p.cacheMu.RLock()
-	entry, exists := p.cache[key]
-	if !exists {
-		p.cacheMu.RUnlock()
-		return nil, false
-	}
+const maxImageCacheEntries = 256
 
-	// Check if cache entry is expired
-	if time.Now().After(entry.ExpiresAt) {
-		p.cacheMu.RUnlock()
-		// Remove expired entry with write lock
-		p.cacheMu.Lock()
-		// Double-check to prevent concurrent deletions
-		if entry2, exists := p.cache[key]; exists && time.Now().After(entry2.ExpiresAt) {
+// pruneExpiredLocked also reclaims entries whose selectors are never reused.
+func (p *Provider) pruneExpiredLocked(now time.Time) {
+	for key, entry := range p.cache {
+		if !now.Before(entry.ExpiresAt) {
 			delete(p.cache, key)
 		}
-		p.cacheMu.Unlock()
-		return nil, false
 	}
-
-	value := entry.Value
-	p.cacheMu.RUnlock()
-	return value, true
 }
 
-// setCachedValue stores a value in cache with expiration
-func (p *Provider) setCachedValue(key string, value interface{}) {
+func (p *Provider) getCachedValue(key string) (interface{}, bool) {
 	p.cacheMu.Lock()
 	defer p.cacheMu.Unlock()
-
-	p.cache[key] = &CacheEntry{
-		Value:     value,
-		ExpiresAt: time.Now().Add(p.cacheTTL),
+	p.pruneExpiredLocked(time.Now())
+	entry, exists := p.cache[key]
+	if !exists {
+		return nil, false
 	}
+	return append([]v1alpha1.Image(nil), entry.Value.([]v1alpha1.Image)...), true
+}
+
+func (p *Provider) setCachedValue(key string, value interface{}) {
+	images := value.([]v1alpha1.Image)
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	now := time.Now()
+	p.pruneExpiredLocked(now)
+	if len(images) == 0 || p.cacheTTL <= 0 {
+		return
+	}
+	if _, exists := p.cache[key]; !exists && len(p.cache) >= maxImageCacheEntries {
+		oldest := ""
+		for candidate, entry := range p.cache {
+			if oldest == "" || entry.ExpiresAt.Before(p.cache[oldest].ExpiresAt) || (entry.ExpiresAt.Equal(p.cache[oldest].ExpiresAt) && candidate < oldest) {
+				oldest = candidate
+			}
+		}
+		delete(p.cache, oldest)
+	}
+	p.cache[key] = &CacheEntry{Value: append([]v1alpha1.Image(nil), images...), ExpiresAt: now.Add(p.cacheTTL)}
+}
+
+// Selectors are OR alternatives. Normalize values, map order, duplicate terms
+// and term order so DeepCopy/reallocation cannot change the cache identity.
+func imageCacheKey(terms []v1alpha1.ImageSelectorTerm) string {
+	unique := map[string]bool{}
+	for _, term := range terms {
+		query := imageQueryFromTerm(term)
+		if len(query.Tags) == 0 {
+			query.Tags = nil
+		}
+		encoded, _ := json.Marshal(query) // Only strings and string maps.
+		unique[string(encoded)] = true
+	}
+	canonical := make([]string, 0, len(unique))
+	for query := range unique {
+		canonical = append(canonical, query)
+	}
+	sort.Strings(canonical)
+	encoded, _ := json.Marshal(canonical)
+	return string(encoded)
 }
 
 // Resolve resolves image selectors to actual images
@@ -123,7 +152,7 @@ func (p *Provider) Resolve(ctx context.Context, terms []v1alpha1.ImageSelectorTe
 	}
 
 	// Create cache key from terms
-	cacheKey := fmt.Sprintf("images-%v", terms)
+	cacheKey := imageCacheKey(terms)
 
 	// Check cache first
 	if images, exists := p.getCachedValue(cacheKey); exists {
@@ -206,6 +235,9 @@ func (p *Provider) getByQuery(ctx context.Context, query ImageQuery) ([]v1alpha1
 			continue
 		}
 		image := v1alpha1.Image{ID: *img.ImageId}
+		if img.CreationTime != nil {
+			image.CreationTime = *img.CreationTime
+		}
 		if img.ImageName != nil {
 			image.Name = *img.ImageName
 		}
@@ -218,24 +250,6 @@ func (p *Provider) getByQuery(ctx context.Context, query ImageQuery) ([]v1alpha1
 		result = append(result, image)
 	}
 	return result, nil
-}
-
-// removeDuplicateImages removes duplicate images from a slice
-func removeDuplicateImages(images []v1alpha1.Image) []v1alpha1.Image {
-	seen := make(map[string]bool)
-	var result []v1alpha1.Image
-
-	for _, img := range images {
-		if img.ID != "" && !seen[img.ID] {
-			seen[img.ID] = true
-			result = append(result, img)
-		}
-	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ID < result[j].ID
-	})
-
-	return result
 }
 
 // ClearCache clears the image cache

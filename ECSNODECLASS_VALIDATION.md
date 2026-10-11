@@ -6,6 +6,14 @@ Existing NodeClasses with conditions written by an older controller must reconci
 
 ## Image selector contract
 
+Resolved images retain ECS `creationTime`. For each instance architecture, new launches prefer the newest valid RFC3339 timestamp among the selected candidates. Missing/invalid timestamps rank last; equal or unknown times use image ID ascending for a stable tie-break. Duplicate IDs retain the entry with the preferred metadata. Selectors remain an unordered OR: a single exact ID pins that image, while multiple IDs or mixed dynamic/pinned terms allow any matching candidate and use the same version ranking. No image outside the selectors or ACK compatibility list is introduced.
+
+Scheduling excludes instance types without a known compatible image architecture, and creation checks the pair again before RunInstances. Known ECS/Kubernetes aliases normalize consistently; unknown or missing image/instance architecture cannot authorize a launch. Reconcile old NodeClass status after upgrading so its architecture metadata is current.
+
+Dynamic discovery prefers newer images for new nodes. Older IDs remain allowed while they still resolve, so a newer release alone does not mark an existing node ImageDrift; removing its image from the resolved set or changing the NodeClass can still cause drift under the existing policy. This deliberately preserves the current membership-based drift behavior rather than adding automatic image rollouts.
+
+The selector cache uses dereferenced field values and normalized tag/OR-term ordering. Positive entries default to 5 minutes, the cache holds at most 256 entries, and reads/writes reclaim all expired entries. Empty results and errors are not cached, and callers receive copied image slices. The ACK compatibility snapshot remains a separate, single 5-minute snapshot keyed by cluster context.
+
 `imageSelectorTerms` is an OR of 1–30 terms. Fields within one term are combined as AND filters. Admission uses the generated CRD schema/CEL rules; runtime resolution validates the entire expression before reading its cache or making any ECS query. The request builder also rejects invalid or unsupported filters instead of silently removing them.
 
 - Each term needs an image ID, family, source alias, name, or a non-empty tag map.

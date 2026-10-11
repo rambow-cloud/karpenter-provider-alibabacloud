@@ -852,8 +852,8 @@ func TestConvertECSInstanceTypeArchitecture(t *testing.T) {
 		{name: "lowercase arm64", cpuArch: strPtr("arm64"), expectedArch: v1alpha1.ArchitectureArm64},
 		{name: "aarch64 alias", cpuArch: strPtr("aarch64"), expectedArch: v1alpha1.ArchitectureArm64},
 		{name: "mixed-case Arm64", cpuArch: strPtr("Arm64"), expectedArch: v1alpha1.ArchitectureArm64},
-		{name: "nil defaults to amd64", cpuArch: nil, expectedArch: v1alpha1.ArchitectureAmd64},
-		{name: "unknown defaults to amd64", cpuArch: strPtr("sw64"), expectedArch: v1alpha1.ArchitectureAmd64},
+		{name: "nil architecture remains unknown", cpuArch: nil, expectedArch: ""},
+		{name: "unknown architecture remains unknown", cpuArch: strPtr("sw64"), expectedArch: ""},
 	}
 
 	provider := NewProvider("cn-hangzhou", new(MockECSClient))

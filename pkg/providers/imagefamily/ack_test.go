@@ -60,6 +60,28 @@ func TestACKRevalidationDoesNotExpandStatus(t *testing.T) {
 	require.Contains(t, e.requested[0], "m-ecs-latest", "new candidate is discovered but must wait for status reconciliation")
 }
 
+func TestACKRetainsCreationTimeAndSortsOnlyApprovedCandidates(t *testing.T) {
+	c, e, p, nc := compatibilityFixture()
+	entry := *c.metadata[0].Images[0]
+	entry.ImageId = tea.String("m-ecs-latest")
+	c.metadata[0].Images = append(c.metadata[0].Images, &entry)
+	old := e.images["m-approved"]
+	old.CreationTime = tea.String("2025-01-01T00:00:00Z")
+	e.images["m-approved"] = old
+	newer := e.images["m-ecs-latest"]
+	newer.CreationTime = tea.String("2026-10-01T00:00:00Z")
+	e.images["m-ecs-latest"] = newer
+	images, err := p.ResolveForNodeClass(context.Background(), nc)
+	require.NoError(t, err)
+	require.Equal(t, []string{"m-ecs-latest", "m-approved"}, imageIDs(images))
+	require.Equal(t, "2026-10-01T00:00:00Z", images[0].CreationTime)
+	// A single explicit older pin stays selected even though a newer approved image exists.
+	nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-approved")}}
+	images, err = p.ResolveForNodeClass(context.Background(), nc)
+	require.NoError(t, err)
+	require.Equal(t, []string{"m-approved"}, imageIDs(images))
+}
+
 func TestACKCacheWaitCanBeCanceled(t *testing.T) {
 	_, _, p, nc := compatibilityFixture()
 	p.ack.gate <- struct{}{}

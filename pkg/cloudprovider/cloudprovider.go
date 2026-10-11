@@ -173,9 +173,9 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	// Filter instance types by NodeClaim requirements
-	filteredTypes := c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements)
+	filteredTypes := filterInstanceTypesByImages(c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements), nodeClass.Status.Images)
 	if len(filteredTypes) == 0 {
-		return nil, fmt.Errorf("no instance types match the requirements")
+		return nil, fmt.Errorf("no instance types match the requirements with a compatible image architecture")
 	}
 
 	// 4. Resolve images from NodeClass
@@ -476,6 +476,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 		instanceTypes,
 		nodePool.Spec.Template.Spec.Requirements,
 	)
+	filteredTypes = filterInstanceTypesByImages(filteredTypes, nodeClass.Status.Images)
 
 	// Log filtered instance types (only at debug level)
 	logger.V(1).Info("Filtered instance types", "count", len(filteredTypes))
@@ -959,6 +960,10 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 	if len(instanceTypes) == 0 || len(images) == 0 || len(vswitches) == 0 || len(securityGroups) == 0 {
 		return "", fmt.Errorf("missing required parameters for instance creation")
 	}
+	instanceTypes = filterInstanceTypesByImages(instanceTypes, images)
+	if len(instanceTypes) == 0 {
+		return "", fmt.Errorf("no instance types have a known compatible image architecture")
+	}
 
 	ramRoleName, err := validateRAMRoleForCreate(nodeClass)
 	if err != nil {
@@ -1012,6 +1017,9 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		// (or vice versa), which ECS rejects. For single-arch NodeClasses
 		// this is a no-op.
 		image := selectImageForArchitecture(images, it.Architecture)
+		if image.ID == "" {
+			continue // Never submit a mismatched architecture to ECS.
+		}
 
 		baseOpts := instance.CreateOptions{
 			InstanceType:     it.Name,
@@ -1174,19 +1182,34 @@ func convertKubeletConfigToBootstrap(config *v1alpha1.KubeletConfiguration) *boo
 	}
 }
 
-// selectImageForArchitecture returns the first image whose architecture matches
-// the target Kubernetes arch value ("amd64"/"arm64"). Image.Architecture holds
-// the raw ECS API value (e.g. "x86_64"/"arm64"), so it is normalized through
-// ecsutil.KubeArchitecture before comparison. If no image matches (e.g. the
-// architecture field is empty on older resolved images), it falls back to the
-// first image to preserve the previous behaviour.
+// selectImageForArchitecture never guesses missing/unknown architectures and
+// returns an empty image when no known compatible candidate is available.
 func selectImageForArchitecture(images []v1alpha1.Image, targetArch string) v1alpha1.Image {
+	target, known := ecsutil.KnownArchitecture(targetArch)
+	if !known {
+		return v1alpha1.Image{}
+	}
+	var selected v1alpha1.Image
 	for _, img := range images {
-		if ecsutil.KubeArchitecture(img.Architecture) == targetArch {
-			return img
+		arch, known := ecsutil.KnownArchitecture(img.Architecture)
+		if !known || arch != target || img.ID == "" {
+			continue
+		}
+		if selected.ID == "" || imagefamily.PreferredImage(img, selected) {
+			selected = img
 		}
 	}
-	return images[0]
+	return selected
+}
+
+func filterInstanceTypesByImages(types []*instancetype.InstanceType, images []v1alpha1.Image) []*instancetype.InstanceType {
+	result := make([]*instancetype.InstanceType, 0, len(types))
+	for _, it := range types {
+		if it != nil && selectImageForArchitecture(images, it.Architecture).ID != "" {
+			result = append(result, it)
+		}
+	}
+	return result
 }
 
 // Drift detection helper functions (from drift.go)

@@ -596,6 +596,11 @@ spec:
                     architecture:
                       description: Architecture is the image architecture
                       type: string
+                    creationTime:
+                      description: |-
+                        CreationTime is the ECS RFC3339 creation timestamp. Missing or invalid
+                        values have unknown age and rank after images with a valid timestamp.
+                      type: string
                     id:
                       description: ID is the image ID
                       type: string

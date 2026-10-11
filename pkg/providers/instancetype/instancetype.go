@@ -233,10 +233,7 @@ func (p *Provider) convertECSInstanceType(ecsInstanceType *ecs.DescribeInstanceT
 	// returns raw values such as "X86"/"X86_64"/"ARM64"; delegate to the single ECS
 	// conversion helper (pkg/utils/ecs) so casing and aliases ("arm64"/"aarch64"/...)
 	// are handled uniformly everywhere instead of an ad-hoc exact-match switch here.
-	architecture := v1alpha1.ArchitectureAmd64
-	if ecsInstanceType.CpuArchitecture != nil {
-		architecture = ecsutil.KubeArchitecture(*ecsInstanceType.CpuArchitecture)
-	}
+	architecture, _ := ecsutil.KnownArchitecture(tea.StringValue(ecsInstanceType.CpuArchitecture))
 
 	// Get GPU information if available with enhanced memory calculation
 	var gpu *GPU
