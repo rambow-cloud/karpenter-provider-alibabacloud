@@ -33,6 +33,7 @@ type Provider struct {
 	cache     map[string]*CacheEntry
 	cacheMu   sync.RWMutex
 	cacheTTL  time.Duration
+	ack       *ackCompatibility
 }
 
 type ImageQuery struct {
@@ -60,12 +61,16 @@ type Image struct {
 }
 
 // NewProvider creates a new image provider
-func NewProvider(ecsClient clients.ECSClient) *Provider {
-	return &Provider{
+func NewProvider(ecsClient clients.ECSClient, opts ...Option) *Provider {
+	p := &Provider{
 		ecsClient: ecsClient,
 		cache:     make(map[string]*CacheEntry),
 		cacheTTL:  2 * time.Hour, // Cache for 2 hours by default
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // SetCacheTTL sets the cache TTL duration
@@ -206,6 +211,9 @@ func (p *Provider) getByQuery(ctx context.Context, query ImageQuery) ([]v1alpha1
 		}
 		if img.Architecture != nil {
 			image.Architecture = *img.Architecture
+		}
+		if img.OSType != nil {
+			image.OSType = *img.OSType
 		}
 		result = append(result, image)
 	}

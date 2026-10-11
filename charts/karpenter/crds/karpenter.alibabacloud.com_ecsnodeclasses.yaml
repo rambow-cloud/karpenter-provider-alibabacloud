@@ -177,6 +177,14 @@ spec:
                   - message: performanceLevel is only supported for cloud_essd disks
                     rule: '!has(self.performanceLevel) || self.category == ''cloud_essd'''
                 type: array
+              imageCompatibilityPolicy:
+                description: |-
+                  ImageCompatibilityPolicy defaults to ACK. Custom permits only explicitly pinned
+                  self/shared Linux images whose ACK compatibility has been verified by the user.
+                enum:
+                - ACK
+                - Custom
+                type: string
               imageSelectorTerms:
                 description: ImageSelectorTerms is a list of image selector requirements
                 items:
@@ -516,6 +524,10 @@ spec:
             - message: spec.imageSelectorTerms is required when launchTemplateID is
                 not specified
               rule: has(self.launchTemplateID) || has(self.imageSelectorTerms)
+            - message: Custom image compatibility requires exact image IDs
+              rule: '!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy
+                != ''Custom'' || has(self.launchTemplateID) || (has(self.imageSelectorTerms)
+                && self.imageSelectorTerms.all(t, has(t.id)))'
           status:
             description: ECSNodeClassStatus defines the observed state of ECSNodeClass
             properties:
@@ -587,8 +599,16 @@ spec:
                     id:
                       description: ID is the image ID
                       type: string
+                    imageType:
+                      description: ImageType is the ACK metadata image_type, when
+                        ACK compatibility is verified.
+                      type: string
                     name:
                       description: Name is the image name
+                      type: string
+                    osType:
+                      description: OSType is obtained from ECS. This provider supports
+                        Linux only.
                       type: string
                   required:
                   - id

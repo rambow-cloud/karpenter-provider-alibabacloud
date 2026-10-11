@@ -51,6 +51,7 @@ type ECSNodeClassList struct {
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.vSwitchSelectorTerms)",message="spec.vSwitchSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.securityGroupSelectorTerms)",message="spec.securityGroupSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.imageSelectorTerms)",message="spec.imageSelectorTerms is required when launchTemplateID is not specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy != 'Custom' || has(self.launchTemplateID) || (has(self.imageSelectorTerms) && self.imageSelectorTerms.all(t, has(t.id)))",message="Custom image compatibility requires exact image IDs"
 type ECSNodeClassSpec struct {
 	// ClusterID is the ACK cluster ID
 	// +optional
@@ -81,6 +82,12 @@ type ECSNodeClassSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=30
 	ImageSelectorTerms []ImageSelectorTerm `json:"imageSelectorTerms"`
+
+	// ImageCompatibilityPolicy defaults to ACK. Custom permits only explicitly pinned
+	// self/shared Linux images whose ACK compatibility has been verified by the user.
+	// +optional
+	// +kubebuilder:validation:Enum=ACK;Custom
+	ImageCompatibilityPolicy string `json:"imageCompatibilityPolicy,omitempty"`
 
 	// Role is the name of the RAM role to use for the instance
 	// +optional
@@ -487,6 +494,14 @@ type Image struct {
 
 	// Architecture is the image architecture
 	Architecture string `json:"architecture,omitempty"`
+
+	// OSType is obtained from ECS. This provider supports Linux only.
+	// +optional
+	OSType string `json:"osType,omitempty"`
+
+	// ImageType is the ACK metadata image_type, when ACK compatibility is verified.
+	// +optional
+	ImageType string `json:"imageType,omitempty"`
 }
 
 // Condition types for ECSNodeClass

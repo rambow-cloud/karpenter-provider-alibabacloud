@@ -35,16 +35,26 @@ type DefaultVPCClient struct {
 
 // NewDefaultVPCClient creates a new default VPC client adapter
 func NewDefaultVPCClient(client *vpc.Client, region string) *DefaultVPCClient {
+	copy := *client
+	prepareHTTPClient(&copy.Client)
+	client = &copy
 	return &DefaultVPCClient{
 		client: client,
 		region: region,
 	}
 }
 
+// withContext copies the SDK configuration so concurrent calls keep their own context.
+func (c *DefaultVPCClient) withContext(ctx context.Context) *vpc.Client {
+	copy := *c.client
+	copy.HttpClient = contextHTTPClient{ctx: ctx, base: c.client.HttpClient}
+	return &copy
+}
+
 // DescribeVSwitches implements VPCClient interface
 func (c *DefaultVPCClient) DescribeVSwitches(ctx context.Context, vSwitchID string, tags map[string]string, zoneID string) (*vpc.DescribeVSwitchesResponse, error) {
 	request := buildDescribeVSwitchesRequest(c.region, vSwitchID, tags, zoneID)
-	response, err := c.client.DescribeVSwitches(request)
+	response, err := callSDK(ctx, func() (*vpc.DescribeVSwitchesResponse, error) { return c.withContext(ctx).DescribeVSwitches(request) })
 	if err != nil {
 		return nil, err
 	}

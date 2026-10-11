@@ -25,6 +25,8 @@ type generationECSClient struct {
 	clients.ECSClient
 	failImages bool
 	imageCalls int
+	imageOS    string
+	unknownOS  bool
 }
 
 func (c *generationECSClient) DescribeImages(_ context.Context, ids []string, _ map[string]string) ([]ecs.DescribeImagesResponseBodyImagesImage, error) {
@@ -32,7 +34,43 @@ func (c *generationECSClient) DescribeImages(_ context.Context, ids []string, _ 
 	if c.failImages {
 		return nil, fmt.Errorf("temporary image resolution failure")
 	}
-	return []ecs.DescribeImagesResponseBodyImagesImage{{ImageId: tea.String(ids[0]), Architecture: tea.String("x86_64")}}, nil
+	osType := "linux"
+	if c.imageOS != "" {
+		osType = c.imageOS
+	}
+	if c.unknownOS {
+		osType = ""
+	}
+	return []ecs.DescribeImagesResponseBodyImagesImage{{ImageId: tea.String(ids[0]), Architecture: tea.String("x86_64"), OSType: tea.String(osType)}}, nil
+}
+
+func TestImageOSFailureKeepsNodeClassNotReady(t *testing.T) {
+	for _, osType := range []string{"windows", "unknown"} {
+		t.Run(osType, func(t *testing.T) {
+			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "os-test", Generation: 1}, Spec: v1alpha1.ECSNodeClassSpec{
+				ImageSelectorTerms:         []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-test")}},
+				VSwitchSelectorTerms:       []v1alpha1.VSwitchSelectorTerm{{ID: tea.String("vsw-test")}},
+				SecurityGroupSelectorTerms: []v1alpha1.SecurityGroupSelectorTerm{{ID: tea.String("sg-test")}},
+			}}
+			scheme := runtime.NewScheme()
+			if err := v1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			kube := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(class).WithObjects(class).Build()
+			ecsClient := &generationECSClient{imageOS: osType, unknownOS: osType == "unknown"}
+			controller := NewController(kube, vswitch.NewProvider("cn-hangzhou", &generationVPCClient{}), securitygroup.NewProvider("cn-hangzhou", ecsClient), imagefamily.NewProvider(ecsClient), nil, nil)
+			request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(class)}
+			if _, err := controller.Reconcile(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			if err := kube.Get(context.Background(), request.NamespacedName, class); err != nil {
+				t.Fatal(err)
+			}
+			if controller.isReady(class) || controller.getCondition(class, v1alpha1.ConditionTypeImageResolved).Status != metav1.ConditionFalse {
+				t.Fatal("unsupported OS became Ready")
+			}
+		})
+	}
 }
 func (c *generationECSClient) DescribeSecurityGroups(context.Context, string, string, map[string]string) (*ecs.DescribeSecurityGroupsResponse, error) {
 	return &ecs.DescribeSecurityGroupsResponse{Body: &ecs.DescribeSecurityGroupsResponseBody{SecurityGroups: &ecs.DescribeSecurityGroupsResponseBodySecurityGroups{SecurityGroup: []*ecs.DescribeSecurityGroupsResponseBodySecurityGroupsSecurityGroup{{SecurityGroupId: tea.String("sg-test")}}}}}, nil

@@ -47,3 +47,11 @@ The current chart is a **0.3.0-dev development candidate**. Real ACK acceptance 
 ### How can I contribute?
 
 Define the problem and acceptance criteria in an issue, work on a `feat/<issue-number>-<description>` branch, then submit a linked PR. See [getting started and contributing](../participate/index.md). The provider uses the [Apache-2.0 license](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/LICENSE).
+
+## ACK image and operating system boundary
+
+Public images come from the target ACK region, actual cluster version and containerd compatibility list, with ECS checks for availability, Linux OS and architecture. The latest ECS family image may differ from the ACK-approved version. Exact pins are never substituted; metadata failures block resolution and creation.
+
+This provider supports Linux only and rejects Windows or unknown OS values. ContainerOS requires exactly one explicitly configured persistent data disk; ContainerOS with a launch template is currently rejected. Custom/shared images require `imageCompatibilityPolicy: Custom` and exact IDs. Users must verify provenance, runtime, GPU drivers and bootstrap compatibility.
+
+Before upgrading, add the read-only RAM action `cs:DescribeKubernetesVersionMetadata` and update the CRD. See [the complete image policy and configuration examples](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md). Read-only API tests do not establish real ACK lifecycle acceptance.

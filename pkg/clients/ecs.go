@@ -76,57 +76,75 @@ type DefaultECSClient struct {
 
 // NewDefaultECSClient creates a new default ECS client.
 func NewDefaultECSClient(client *ecs.Client, region string) ECSClient {
+	copy := *client
+	prepareHTTPClient(&copy.Client)
+	client = &copy
 	return &DefaultECSClient{
 		client: client,
 		region: region,
 	}
 }
 
+// withContext copies the SDK configuration so concurrent calls keep their own context.
+func (c *DefaultECSClient) withContext(ctx context.Context) *ecs.Client {
+	copy := *c.client
+	copy.HttpClient = contextHTTPClient{ctx: ctx, base: c.client.HttpClient}
+	return &copy
+}
+
 // RunInstances implements ECSClient interface
 func (c *DefaultECSClient) RunInstances(ctx context.Context, request *ecs.RunInstancesRequest) (*ecs.RunInstancesResponse, error) {
 
-	return c.client.RunInstances(request)
+	return callSDK(ctx, func() (*ecs.RunInstancesResponse, error) { return c.withContext(ctx).RunInstances(request) })
 }
 
 // DescribeInstances implements ECSClient interface
 func (c *DefaultECSClient) DescribeInstances(ctx context.Context, request *ecs.DescribeInstancesRequest) (*ecs.DescribeInstancesResponse, error) {
 
-	return c.client.DescribeInstances(request)
+	return callSDK(ctx, func() (*ecs.DescribeInstancesResponse, error) { return c.withContext(ctx).DescribeInstances(request) })
 }
 
 // DeleteInstances implements ECSClient interface
 func (c *DefaultECSClient) DeleteInstances(ctx context.Context, request *ecs.DeleteInstancesRequest) (*ecs.DeleteInstancesResponse, error) {
 
-	return c.client.DeleteInstances(request)
+	return callSDK(ctx, func() (*ecs.DeleteInstancesResponse, error) { return c.withContext(ctx).DeleteInstances(request) })
 }
 
 // TagResources implements ECSClient interface
 func (c *DefaultECSClient) TagResources(ctx context.Context, request *ecs.TagResourcesRequest) (*ecs.TagResourcesResponse, error) {
 
-	return c.client.TagResources(request)
+	return callSDK(ctx, func() (*ecs.TagResourcesResponse, error) { return c.withContext(ctx).TagResources(request) })
 }
 
 // CreateLaunchTemplate implements ECSClient interface
 func (c *DefaultECSClient) CreateLaunchTemplate(ctx context.Context, request *ecs.CreateLaunchTemplateRequest) (*ecs.CreateLaunchTemplateResponse, error) {
 
-	return c.client.CreateLaunchTemplate(request)
+	return callSDK(ctx, func() (*ecs.CreateLaunchTemplateResponse, error) {
+		return c.withContext(ctx).CreateLaunchTemplate(request)
+	})
 }
 
 // DescribeLaunchTemplates implements ECSClient interface
 func (c *DefaultECSClient) DescribeLaunchTemplates(ctx context.Context, request *ecs.DescribeLaunchTemplatesRequest) (*ecs.DescribeLaunchTemplatesResponse, error) {
 
-	return c.client.DescribeLaunchTemplates(request)
+	return callSDK(ctx, func() (*ecs.DescribeLaunchTemplatesResponse, error) {
+		return c.withContext(ctx).DescribeLaunchTemplates(request)
+	})
 }
 
 // DescribeLaunchTemplateVersions describes the concrete data for launch template versions.
 func (c *DefaultECSClient) DescribeLaunchTemplateVersions(ctx context.Context, request *ecs.DescribeLaunchTemplateVersionsRequest) (*ecs.DescribeLaunchTemplateVersionsResponse, error) {
-	return c.client.DescribeLaunchTemplateVersions(request)
+	return callSDK(ctx, func() (*ecs.DescribeLaunchTemplateVersionsResponse, error) {
+		return c.withContext(ctx).DescribeLaunchTemplateVersions(request)
+	})
 }
 
 // DeleteLaunchTemplate implements ECSClient interface
 func (c *DefaultECSClient) DeleteLaunchTemplate(ctx context.Context, request *ecs.DeleteLaunchTemplateRequest) (*ecs.DeleteLaunchTemplateResponse, error) {
 
-	return c.client.DeleteLaunchTemplate(request)
+	return callSDK(ctx, func() (*ecs.DeleteLaunchTemplateResponse, error) {
+		return c.withContext(ctx).DeleteLaunchTemplate(request)
+	})
 }
 
 // DescribeInstanceTypes implements ECSClient interface
@@ -143,7 +161,9 @@ func (c *DefaultECSClient) DescribeInstanceTypes(ctx context.Context, instanceTy
 		request.InstanceTypes = instanceTypePointers
 	}
 
-	response, err := c.client.DescribeInstanceTypes(request)
+	response, err := callSDK(ctx, func() (*ecs.DescribeInstanceTypesResponse, error) {
+		return c.withContext(ctx).DescribeInstanceTypes(request)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +173,9 @@ func (c *DefaultECSClient) DescribeInstanceTypes(ctx context.Context, instanceTy
 
 // DescribeAvailableResource implements ECSClient interface
 func (c *DefaultECSClient) DescribeAvailableResource(ctx context.Context, request *ecs.DescribeAvailableResourceRequest) (*ecs.DescribeAvailableResourceResponse, error) {
-	return c.client.DescribeAvailableResource(request)
+	return callSDK(ctx, func() (*ecs.DescribeAvailableResourceResponse, error) {
+		return c.withContext(ctx).DescribeAvailableResource(request)
+	})
 }
 
 // DescribeZones implements ECSClient interface
@@ -163,7 +185,7 @@ func (c *DefaultECSClient) DescribeZones(ctx context.Context) (*ecs.DescribeZone
 		RegionId: tea.String(c.region),
 	}
 
-	response, err := c.client.DescribeZones(request)
+	response, err := callSDK(ctx, func() (*ecs.DescribeZonesResponse, error) { return c.withContext(ctx).DescribeZones(request) })
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +210,7 @@ func (c *DefaultECSClient) DescribeImages(ctx context.Context, imageIDs []string
 	for {
 		request.PageNumber = tea.Int32(int32(pageNumber))
 
-		response, err := c.client.DescribeImages(request)
+		response, err := callSDK(ctx, func() (*ecs.DescribeImagesResponse, error) { return c.withContext(ctx).DescribeImages(request) })
 		if err != nil {
 			return nil, fmt.Errorf("failed to describe images (page %d): %w", pageNumber, err)
 		}
@@ -236,7 +258,9 @@ func (c *DefaultECSClient) DescribeImages(ctx context.Context, imageIDs []string
 func (c *DefaultECSClient) DescribeSecurityGroups(ctx context.Context, id string, name string, tags map[string]string) (*ecs.DescribeSecurityGroupsResponse, error) {
 	request := buildDescribeSecurityGroupsRequest(c.region, id, name, tags)
 
-	response, err := c.client.DescribeSecurityGroups(request)
+	response, err := callSDK(ctx, func() (*ecs.DescribeSecurityGroupsResponse, error) {
+		return c.withContext(ctx).DescribeSecurityGroups(request)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -313,10 +337,10 @@ func buildDescribeImagesRequest(region string, imageIDs []string, filters map[st
 		return nil, fmt.Errorf("invalid image query: %w", err)
 	}
 
-	// ShowExpired is always set to true because the ECS API hides certain system
-	// images (e.g. ContainerOS / LifseaOS) by default. Those images have
-	// Status=Available and are perfectly usable, but the API filters them out
-	// unless ShowExpired=true is explicitly passed. See GH issue #13.
+	// Preserve exact ContainerOS pins: a cn-hangzhou live query confirmed the
+	// Lifsea 20260519 pin is hidden unless ShowExpired=true (#29). This does not
+	// establish launch eligibility for every image or every region. ACK public
+	// compatibility and Linux/disk checks are enforced by the image provider.
 	request := &ecs.DescribeImagesRequest{
 		RegionId:    tea.String(region),
 		ShowExpired: tea.Bool(true),
@@ -373,7 +397,9 @@ func (c *DefaultECSClient) DescribeCapacityReservations(ctx context.Context, id 
 	// Tags are not directly supported in DescribeCapacityReservations request
 	// If needed, we would need to filter results after fetching
 
-	response, err := c.client.DescribeCapacityReservations(request)
+	response, err := callSDK(ctx, func() (*ecs.DescribeCapacityReservationsResponse, error) {
+		return c.withContext(ctx).DescribeCapacityReservations(request)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +416,7 @@ func (c *DefaultECSClient) DescribePrice(ctx context.Context, instanceType strin
 		InstanceType: tea.String(instanceType),
 	}
 
-	response, err := c.client.DescribePrice(request)
+	response, err := callSDK(ctx, func() (*ecs.DescribePriceResponse, error) { return c.withContext(ctx).DescribePrice(request) })
 	if err != nil {
 		return nil, err
 	}

@@ -34,6 +34,7 @@ import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/securitygroup"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/vswitch"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
+	"github.com/alibabacloud-go/tea/tea"
 	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -219,7 +220,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, []string{"aliyun_3_x64_20G_alibase_20231221.vhd"}, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -358,7 +359,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -424,7 +425,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -538,7 +539,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -597,6 +598,7 @@ var _ = Describe("StatusController", func() {
 					ImageId:      &imageId,
 					ImageName:    &imageName,
 					Architecture: &arch,
+					OSType:       tea.String("linux"),
 				},
 			}, nil)
 
@@ -709,7 +711,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -766,7 +768,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			mockRAMClient.On("GetRole", mock.Anything, "KarpenterNodeRole").Return(nil, fmt.Errorf("role not found"))
@@ -827,7 +829,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
@@ -854,6 +856,7 @@ var _ = Describe("StatusController", func() {
 			}
 
 			imageID := "aliyun_3_x64_20G_alibase_20231221.vhd"
+			mockECSClient.On("DescribeImages", mock.Anything, []string{imageID}, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{{ImageId: &imageID, Architecture: tea.String("x86_64"), OSType: tea.String("linux")}}, nil)
 			vswitchID := "vsw-test-123"
 			zoneID := "cn-hangzhou-h"
 			securityGroupID := "sg-test-123"
@@ -909,12 +912,12 @@ var _ = Describe("StatusController", func() {
 
 			updated := &v1alpha1.ECSNodeClass{}
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), updated)).To(Succeed())
-			Expect(updated.Status.Images).To(Equal([]v1alpha1.Image{{ID: imageID}}))
+			Expect(updated.Status.Images).To(Equal([]v1alpha1.Image{{ID: imageID, Architecture: "x86_64", OSType: "linux"}}))
 			Expect(updated.Status.VSwitches).To(Equal([]v1alpha1.VSwitch{{ID: vswitchID, Zone: zoneID, ZoneID: zoneID, AvailableIPAddressCount: 100}}))
 			Expect(updated.Status.SecurityGroups).To(Equal([]v1alpha1.SecurityGroup{{ID: securityGroupID}}))
 			Expect(getCondition(updated, v1alpha1.ConditionTypeReady).Status).To(Equal(metav1.ConditionTrue))
 
-			mockECSClient.AssertNotCalled(GinkgoT(), "DescribeImages", mock.Anything, mock.Anything, mock.Anything)
+			mockECSClient.AssertCalled(GinkgoT(), "DescribeImages", mock.Anything, []string{imageID}, mock.Anything)
 			mockECSClient.AssertNotCalled(GinkgoT(), "DescribeSecurityGroups", mock.Anything, mock.Anything)
 		})
 
@@ -943,7 +946,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"
@@ -1043,7 +1046,7 @@ var _ = Describe("StatusController", func() {
 			imageName := "Alibaba Cloud Linux 3"
 			arch := "x86_64"
 			mockECSClient.On("DescribeImages", mock.Anything, mock.Anything, mock.Anything).Return([]ecs.DescribeImagesResponseBodyImagesImage{
-				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch},
+				{ImageId: &imageId, ImageName: &imageName, Architecture: &arch, OSType: tea.String("linux")},
 			}, nil)
 
 			roleName := "KarpenterNodeRole"

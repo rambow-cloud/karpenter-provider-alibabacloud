@@ -203,7 +203,8 @@ func InitECSClient(region, accessKeyID, accessKeySecret string) (clients.ECSClie
 		ecsClient, err := ecs.NewClient(&client.Config{
 			Credential:     cred,
 			RegionId:       tea.String(region),
-			ConnectTimeout: tea.Int(30),
+			ConnectTimeout: tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:    tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:   tea.Int(100),
 		})
 		if err != nil {
@@ -226,7 +227,8 @@ func InitECSClient(region, accessKeyID, accessKeySecret string) (clients.ECSClie
 			AccessKeyId:     tea.String(accessKeyID),
 			AccessKeySecret: tea.String(accessKeySecret),
 			RegionId:        tea.String(region),
-			ConnectTimeout:  tea.Int(30),
+			ConnectTimeout:  tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:     tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:    tea.Int(100),
 		})
 		if err != nil {
@@ -275,7 +277,8 @@ func InitVPCClient(region, accessKeyID, accessKeySecret string) (clients.VPCClie
 		vpcClient, err := vpc.NewClient(&utils.Config{
 			Credential:     cred,
 			RegionId:       tea.String(region),
-			ConnectTimeout: tea.Int(30),
+			ConnectTimeout: tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:    tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:   tea.Int(100),
 		})
 		if err != nil {
@@ -298,7 +301,8 @@ func InitVPCClient(region, accessKeyID, accessKeySecret string) (clients.VPCClie
 			AccessKeyId:     tea.String(accessKeyID),
 			AccessKeySecret: tea.String(accessKeySecret),
 			RegionId:        tea.String(region),
-			ConnectTimeout:  tea.Int(30),
+			ConnectTimeout:  tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:     tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:    tea.Int(100),
 		})
 		if err != nil {
@@ -347,7 +351,8 @@ func InitRAMClient(region, accessKeyID, accessKeySecret string) (clients.RAMClie
 		ramClient, err := ram.NewClient(&utils.Config{
 			Credential:     cred,
 			RegionId:       tea.String(region),
-			ConnectTimeout: tea.Int(30),
+			ConnectTimeout: tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:    tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:   tea.Int(100),
 		})
 		if err != nil {
@@ -370,7 +375,8 @@ func InitRAMClient(region, accessKeyID, accessKeySecret string) (clients.RAMClie
 			AccessKeyId:     tea.String(accessKeyID),
 			AccessKeySecret: tea.String(accessKeySecret),
 			RegionId:        tea.String(region),
-			ConnectTimeout:  tea.Int(30),
+			ConnectTimeout:  tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:     tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:    tea.Int(100),
 		})
 		if err != nil {
@@ -419,7 +425,8 @@ func InitCSClient(region, accessKeyID, accessKeySecret string) (clients.CSClient
 		csClient, err := cs.NewClient(&utils.Config{
 			Credential:     cred,
 			RegionId:       tea.String(region),
-			ConnectTimeout: tea.Int(30),
+			ConnectTimeout: tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:    tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:   tea.Int(100),
 		})
 		if err != nil {
@@ -442,7 +449,8 @@ func InitCSClient(region, accessKeyID, accessKeySecret string) (clients.CSClient
 			AccessKeyId:     tea.String(accessKeyID),
 			AccessKeySecret: tea.String(accessKeySecret),
 			RegionId:        tea.String(region),
-			ConnectTimeout:  tea.Int(30),
+			ConnectTimeout:  tea.Int(clients.SDKConnectTimeoutMillis),
+			ReadTimeout:     tea.Int(clients.SDKReadTimeoutMillis),
 			MaxIdleConns:    tea.Int(100),
 		})
 		if err != nil {
@@ -512,7 +520,7 @@ func NewOperator(ctx context.Context, coreOp *coreoperator.Operator) (*Operator,
 	instanceProfileProvider := instanceprofile.NewProvider(ramClient, opts.Region)
 	ramProvider := ramrole.NewProvider(ramClient, opts.Region)
 	instanceTypeProvider := instancetype.NewProvider(opts.Region, ecsClient)
-	imageFamilyProvider := imagefamily.NewProvider(ecsClient)
+	imageFamilyProvider := imagefamily.NewProvider(ecsClient, imagefamily.WithACKCompatibility(csClient, opts.Region, opts.ClusterID))
 	instanceProvider := instance.NewProvider(ctx, opts.Region, ecsClient)
 	capacityReservationProvider := capacityreservation.NewProvider(opts.Region, ecsClient)
 

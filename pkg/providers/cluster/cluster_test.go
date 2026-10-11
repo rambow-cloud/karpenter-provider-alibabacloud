@@ -35,7 +35,7 @@ func (m *mockCSClient) DescribeClusterDetail(ctx context.Context, clusterID stri
 
 // DescribeKubernetesVersionMetadata is added in Task 5; stub it here so the cluster test
 // compiles both before and after Task 5. Remove the stub once the real method exists.
-func (m *mockCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, k8sVersion string) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
+func (m *mockCSClient) DescribeKubernetesVersionMetadata(ctx context.Context, request *cs.DescribeKubernetesVersionMetadataRequest) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
 	return nil, nil
 }
 

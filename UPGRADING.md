@@ -72,6 +72,8 @@ Resolve CRD field ownership conflicts deliberately if server-side apply reports 
 
 ## Rollback
 
+ACK bootstrap cache entries now depend on the current cluster version/type/profile/region/runtime. Current cluster detail and exact-version containerd metadata must be available before generating a new script; an API failure no longer silently caches an unpatched fallback. Ensure the existing CS read permissions are effective before rollout. Automatically discovered image alternatives are filtered individually, while explicit IDs remain strict; launch revalidation keeps only valid IDs already present in status. See [ACK_IMAGE_SUPPORT.md](ACK_IMAGE_SUPPORT.md) for the timeout and cancellation boundaries.
+
 Before applying the current provider CRD, check existing image selectors against [ECSNodeClass readiness and image selection](ECSNODECLASS_VALIDATION.md). Admission now rejects empty terms/tags, conflicting IDs, invalid aliases and unsupported owner combinations. Specify `imageOwnerAlias: others` with `imageOwnerID` only for shared images; remove owner filters from `self`, `system` or `marketplace` queries. Existing NodeClasses must reconcile their current generation before new provisioning resumes. Running nodes are unaffected by this readiness gate.
 
 升级前请检查镜像 selector：`imageOwnerID` 必须显式配合 `imageOwnerAlias: others`，空 term、空标签值和 ID 混用条件需修正。先应用对应 CRD，再部署控制器；旧 NodeClass 需解析当前 generation 后才能继续扩容。详细规则见上面的文档。
@@ -93,3 +95,11 @@ Offline implementation and ACK runtime acceptance are separate. ACK E2E is defer
 The existing E2E workflows require explicit dispatch and cloud credentials. Do not dispatch them as part of ordinary PR CI. `E2EUpgrade` currently runs the Drift suite; it is not evidence of a complete old-controller-to-new-controller upgrade rehearsal.
 
 The minimal ACK/ECS helper retains SLB API-server listener/ACL configuration and tagged SLB cleanup. ALB/NLB SDKs and their dedicated resource sweep are removed in [#39](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/39); the helper also omits the explicit ALB cluster-deletion option. ALB/NLB workloads and residual-resource cleanup need separate acceptance coverage before those scenarios are added.
+
+## ACK image compatibility gate
+
+Update both the CRD and controller and grant `cs:DescribeKubernetesVersionMetadata`. Public images must resolve from the target ACK cluster version/region/profile/containerd image list. Existing pins outside that list fail explicitly; the controller never substitutes another pin. A newer ECS family release can differ from the ACK-approved image. Creation revalidates concrete status IDs, including legacy status missing OS fields.
+
+The provider supports Linux only. Modern ContainerOS requires one explicitly configured persistent data disk; ContainerOS with a launch template is rejected because the current launch path does not propagate its data disks. Existing custom/shared images require `imageCompatibilityPolicy: Custom` with exact IDs; the user must verify their actual OS/runtime/bootstrap compatibility. `Custom` cannot bypass the ACK gate for public images. The new policy participates in drift hashing; implicit/default ACK policies have the same hash.
+
+Read [ACK_IMAGE_SUPPORT.md](ACK_IMAGE_SUPPORT.md) for restrictions and examples. Rollback removes these guards and may reintroduce unsupported image selection. Read-only CS/ECS API evidence and offline tests do not replace #5/#23's real ACK provisioning/registration/termination acceptance, which remains deferred.
