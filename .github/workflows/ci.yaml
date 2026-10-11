@@ -23,7 +23,7 @@ jobs:
         name: Determine validation scope
         run: python .github/scripts/ci_changes.py
       - name: Check change routing
-        run: python -m unittest discover -s .github/scripts -p 'test_ci_changes.py'
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Check GitHub workflow syntax without Go
         shell: bash
         run: |
