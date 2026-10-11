@@ -52,6 +52,7 @@ func main() {
 		alibabaOperator.InstanceProvider,
 		alibabaOperator.EventRecorder,
 		alibabaOperator.Manager.GetClient(),
+		alibabaOperator.Manager.GetAPIReader(),
 		alibabaOperator.ImageFamilyProvider,
 		alibabaOperator.SecurityGroupProvider,
 		alibabaOperator.VSwitchProvider,

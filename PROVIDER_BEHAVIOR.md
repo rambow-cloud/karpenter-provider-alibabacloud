@@ -1,5 +1,13 @@
 # 节点漂移、缺货反馈与 E2E 镜像发现
 
+## ECS 创建与恢复
+
+创建前将一次启动的参数摘要、ClientToken 和静态配置哈希持久化到 NodeClaim annotation；不保存启动脚本、密钥或凭据。Token 绑定 NodeClaim UID、尝试编号与参数摘要，首次 RunInstances 明确请求一台按量付费实例。相同参数重试复用 token；结构化缺货或交换机 IP 不足响应确认未创建后，才允许 fallback 使用新参数和新 token。
+
+成功响应的实例 ID 在查询详情前保存。controller 重启、创建后查询失败或响应丢失时，使用记录的 ID，或区域内 managed-by、cluster-id、NodeClaim 名称和 UID 四个标签共同查找原实例。所有权标签优先随首次创建发送，避免大量用户标签将它们挤到后续 TagResources。查询失败、不完整分页、所有权不符或多个匹配实例都停止恢复，禁止把错误当作“实例不存在”继续创建。
+
+结果不明确且暂时查询不到实例时，仅允许相同参数和 token 重试。配置、候选顺序或动态生成的启动脚本变化时会拒绝再次创建，直到原实例可以恢复；这是避免重复付费实例的保守行为。真实 ECS 的一致性、ClientToken 服务端行为和重启恢复仍由 #5/#23 验收。参考 [ECS 官方幂等规则](https://www.alibabacloud.com/help/en/ecs/developer-reference/how-to-ensure-idempotence)。
+
 ## 节点漂移
 
 ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用版本 `v2`。全新部署使用该版本；当前范围不包含旧哈希迁移。
