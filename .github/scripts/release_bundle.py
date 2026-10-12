@@ -233,7 +233,9 @@ def publish(args):
         if len(chart_layers) != 1 or chart_layers[0]["digest"] != "sha256:" + manifest["files"][manifest["chart"]]:
             raise ValueError("A different chart already uses this candidate version")
     if not image_existing:
-        call(args.crane, "push", "--index", str(output / "image-layout"), image_target)
+        # ko's layout has ONE entry: the actual multi-platform controller index.
+        # crane --index would publish the outer layout wrapper with a new digest.
+        call(args.crane, "push", str(output / "image-layout"), image_target)
     if call(args.crane, "digest", image_target) != digest:
         raise ValueError("Published controller digest mismatch")
     if not chart_existing:

@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import release_bundle as bundle
 from ci_changes import needs_go
@@ -65,6 +66,34 @@ class ReleaseContracts(unittest.TestCase):
             blob.write_bytes(b"changed!")
             with self.assertRaises(ValueError):
                 bundle.read_blob(layout, {"digest": "sha256:" + blob.name, "size": 8})
+
+    def test_publish_preserves_ko_index_digest_and_resumes_partial_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            sha, digest = "a" * 40, "sha256:" + "b" * 64
+            chart = "karpenter-0.3.0-dev.sha-" + sha + ".tgz"
+            for name in (chart, "controller.oci.tar", "ack-image.yaml"):
+                (output / name).write_bytes(b"fixture")
+            manifest = {"schema": 1, "git_sha": sha, "image_digest": digest, "image": "ghcr.io/org/image:" + sha + "@" + digest,
+                        "image_repository": "ghcr.io/org/image", "chart_repository": "ghcr.io/org/charts",
+                        "chart_version": "0.3.0-dev.sha-" + sha, "chart": chart,
+                        "files": {name: bundle.checksum(output / name) for name in (chart, "controller.oci.tar")}}
+            args = SimpleNamespace(output=directory, go="go", crane="crane", helm="helm")
+            for existing in (None, digest, "sha256:" + "c" * 64):
+                with self.subTest(existing=existing):
+                    (output / "release.json").write_text(json.dumps(manifest))
+                    with patch.object(bundle, "inspect_layout", return_value=(digest, {})), patch.object(bundle, "existing_digest", side_effect=[existing, None]), patch.object(bundle, "call", return_value=digest) as call:
+                        if existing and existing != digest:
+                            with self.assertRaises(ValueError):
+                                bundle.publish(args)
+                            call.assert_not_called()
+                            continue
+                        bundle.publish(args)
+                        pushes = [item.args for item in call.call_args_list if item.args[:2] == ("crane", "push")]
+                        self.assertEqual(len(pushes), int(existing is None))
+                        for push in pushes:
+                            self.assertNotIn("--index", push)
+                        self.assertTrue(json.loads((output / "release.json").read_text())["published"])
 
     def test_wrong_revision_or_cgo_binary_cannot_be_packaged(self):
         import struct
