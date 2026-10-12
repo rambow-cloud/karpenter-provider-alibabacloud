@@ -42,6 +42,14 @@ ContainerOS 的启动校验与 bootstrap 使用同一规范化磁盘快照；只
 
 参考 [阿里云 DescribePrice](https://help.aliyun.com/zh/ecs/developer-reference/api-ecs-2014-05-26-describeprice)、[AWS offering 报价可用性](https://github.com/aws/karpenter-provider-aws/blob/v1.14.1/pkg/providers/instancetype/offering/base_resolver.go) 和 [Karpenter 替换价格筛选](https://github.com/kubernetes-sigs/karpenter/blob/v1.14.1/pkg/controllers/provisioning/scheduling/nodeclaim.go)。
 
+## ACK 网络发现与 Pod 上限
+
+启动时使用调用者 context 查询已安装 addon，要求恰好一个已知且 active 的 Terway/Flannel 网络，再读取对应配置和集群详情。API 错误、缺失/冲突/升级中的网络、错误的配置身份、未知 IP stack 或无效 Terway JSON 都使初始化失败，不再静默采用默认网络配置。已有 `cs:ListClusterAddonInstances` 权限也用于此发现路径。
+
+Flannel 使用 ACK 实际返回的 IPv4 node CIDR mask 计算每节点地址上限，并受官方 256 Pod 配额约束；查询失败或 mask 缺失/无效时不会假设 `/24`。Terway 允许已知配置中省略 ENITrunking override（使用 addon 默认 false），但拒绝缺失配置、null/string 布尔值和格式错误。网络上限不等于完整 kubelet 可分配资源；预留与文件系统模型由 #16 跟踪，真实网络行为仍由 #5/#23 验收。
+
+参考 [ACK 配额](https://help.aliyun.com/en/ack/product-overview/limits) 和 [Terway/Flannel 上限区别](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/comparison-between-terway-and-flannel)。
+
 ## 缺货反馈
 
 实际 RunInstances 返回结构化 ECS 错误码 `OperationDenied.NoStock`、`Zone.NotOnSale` 或 `InvalidResourceType.NotSupported` 时，将“实例规格＋可用区＋容量类型”标记为暂不可用。缓存由 operator 创建并注入 CloudProvider，TTL 使用现有 `--unavailable-offering-cache-ttl` 配置，默认 5 分钟。调度读取该状态；下一次创建也跳过缓存中的组合，TTL 到期后允许再次尝试。

@@ -19,6 +19,10 @@ type mockCSClient struct {
 
 var _ clients.CSClient = &mockCSClient{}
 
+func (*mockCSClient) ListClusterAddonInstances(context.Context, string) (*cs.ListClusterAddonInstancesResponse, error) {
+	return &cs.ListClusterAddonInstancesResponse{Body: &cs.ListClusterAddonInstancesResponseBody{Addons: []*cs.ListClusterAddonInstancesResponseBodyAddons{{Name: tea.String("terway-eniip"), State: tea.String("active")}}}}, nil
+}
+
 func (m *mockCSClient) DescribeClusterAttachScripts(ctx context.Context, clusterID string, request *cs.DescribeClusterAttachScriptsRequest) (string, error) {
 	return "", nil
 }
@@ -46,7 +50,7 @@ func TestInitializeClusterNetworkConfigDualStack(t *testing.T) {
 	// doesn't proceed to the other addons (which are not mocked).
 	addonResp := &cs.GetClusterAddonInstanceResponse{
 		Body: &cs.GetClusterAddonInstanceResponseBody{
-			Name: tea.String("terway-eniip"),
+			Name: tea.String("terway-eniip"), Config: tea.String("{}"),
 		},
 	}
 	m.On("GetClusterAddonInstance", mock.Anything, "c-test", "terway-eniip").Return(addonResp, nil)
@@ -60,7 +64,7 @@ func TestInitializeClusterNetworkConfigDualStack(t *testing.T) {
 	}
 	m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(detailResp, nil)
 
-	nc, err := InitializeClusterNetworkConfig(m, "c-test")
+	nc, err := InitializeClusterNetworkConfig(context.Background(), m, "c-test")
 	assert.NoError(t, err)
 	assert.True(t, nc.DualStack, "DualStack must be true when IpStack=ipv6")
 }
@@ -70,7 +74,7 @@ func TestInitializeClusterNetworkConfigSingleStack(t *testing.T) {
 
 	addonResp := &cs.GetClusterAddonInstanceResponse{
 		Body: &cs.GetClusterAddonInstanceResponseBody{
-			Name: tea.String("terway-eniip"),
+			Name: tea.String("terway-eniip"), Config: tea.String("{}"),
 		},
 	}
 	m.On("GetClusterAddonInstance", mock.Anything, "c-test", "terway-eniip").Return(addonResp, nil)
@@ -83,7 +87,7 @@ func TestInitializeClusterNetworkConfigSingleStack(t *testing.T) {
 	}
 	m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(detailResp, nil)
 
-	nc, err := InitializeClusterNetworkConfig(m, "c-test")
+	nc, err := InitializeClusterNetworkConfig(context.Background(), m, "c-test")
 	assert.NoError(t, err)
 	assert.False(t, nc.DualStack, "DualStack must be false when IpStack=ipv4")
 }
@@ -96,7 +100,7 @@ func TestInitializeClusterNetworkConfigDualStackDualEnum(t *testing.T) {
 
 	addonResp := &cs.GetClusterAddonInstanceResponse{
 		Body: &cs.GetClusterAddonInstanceResponseBody{
-			Name: tea.String("terway-eniip"),
+			Name: tea.String("terway-eniip"), Config: tea.String("{}"),
 		},
 	}
 	m.On("GetClusterAddonInstance", mock.Anything, "c-test", "terway-eniip").Return(addonResp, nil)
@@ -109,7 +113,7 @@ func TestInitializeClusterNetworkConfigDualStackDualEnum(t *testing.T) {
 	}
 	m.On("DescribeClusterDetail", mock.Anything, "c-test").Return(detailResp, nil)
 
-	nc, err := InitializeClusterNetworkConfig(m, "c-test")
+	nc, err := InitializeClusterNetworkConfig(context.Background(), m, "c-test")
 	assert.NoError(t, err)
 	assert.True(t, nc.DualStack, "DualStack must be true when IpStack=dual")
 }
