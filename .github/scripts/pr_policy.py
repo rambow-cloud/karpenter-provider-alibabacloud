@@ -6,7 +6,10 @@ from pathlib import Path
 import re
 import urllib.request
 
-DEVELOPMENT_BATCH = (5, 15, 16, 18, 20, 23, 29, 51, 52)
+# Accepted implementation checkpoint requested by the maintainer on 2026-10-12.
+# Live ACK acceptance and independent Spot delivery remain separate open work.
+DEVELOPMENT_BATCH = (15, 16, 18, 29, 51, 52, 67, 74, 76, 79, 81)
+DEFERRED_WORK = (5, 20, 23)
 SECTIONS = ("Problem and result", "Linked issues", "Validation", "Compatibility and rollout", "Checklist")
 
 
@@ -53,7 +56,7 @@ def main():
             return json.load(response)
 
     validate_issues(primary, fetch_issue)
-    print("PR policy passed for " + (f"issue #{primary} -> dev" if primary else "completed development batch -> main"))
+    print("PR policy passed for " + (f"issue #{primary} -> dev" if primary else "accepted implementation checkpoint -> main; ACK acceptance remains separate"))
 
 
 if __name__ == "__main__":

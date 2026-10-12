@@ -1,6 +1,6 @@
 import unittest
 
-from pr_policy import DEVELOPMENT_BATCH, SECTIONS, validate_issues, validate_metadata
+from pr_policy import DEVELOPMENT_BATCH, DEFERRED_WORK, SECTIONS, validate_issues, validate_metadata
 
 
 class PolicyTests(unittest.TestCase):
@@ -41,6 +41,17 @@ class PolicyTests(unittest.TestCase):
             raise OSError("API denied")
         with self.assertRaises(OSError):
             validate_issues(None, denied)
+
+    def test_checkpoint_does_not_close_or_require_deferred_cloud_and_spot_work(self):
+        issues = {n: {"state": "closed", "state_reason": "completed"}
+                  for n in DEVELOPMENT_BATCH}
+        issues.update({n: {"state": "open"} for n in DEFERRED_WORK})
+        validate_issues(None, issues.__getitem__)
+        for number in (5, 20, 23):
+            self.assertEqual(issues[number]["state"], "open")
+        issues[16] = {"state": "open"}
+        with self.assertRaisesRegex(AssertionError, "#16"):
+            validate_issues(None, issues.__getitem__)
 
 
 if __name__ == "__main__":

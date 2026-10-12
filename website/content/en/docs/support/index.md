@@ -64,13 +64,13 @@ See [ACK_IMAGE_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-al
 
 ## Native ACK pool and node resources
 
-This section describes the **dev branch** changes in [resource accounting #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) and [network discovery #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76). Use controller, Chart and CRDs from the same dev commit. A dev merge does not mean the change has shipped on main.
+This section describes the **development candidate** changes in [resource accounting #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) and [network discovery #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76). Use controller, Chart and CRDs from the same tested commit. A main merge does not establish a stable release or real ACK acceptance.
 
 `spec.ackNodePoolID` selects an existing active regular ACK ESS/containerd pool. When omitted, exactly one default pool must exist. Grant `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`. Status records the actual pool ID and kubelet settings; attach scripts pin that ID. Creation reads the pool again and waits for a status refresh if settings changed. The provider does not modify the native pool.
 
 **Omit `spec.kubelet`.** ACK attach scripts do not apply its overrides, so CRD admission and runtime reject it, including maxPods, podsPerCore and reservations. Configure supported kubelet parameters on the selected native pool. The API does not expose podsPerCore, so it cannot authorize predicted density. Native userdata, auto mode, CPU/memory manager and soft eviction overrides are unsupported.
 
-| Resource | dev calculation boundary |
+| Resource | Development candidate boundary |
 | --- | --- |
 | Pods | Minimum of native maxPods and network ceiling; Flannel requires the actual valid CIDR mask and is capped at 256; Terway requires known ECS ENI/IP metadata and conservatively excludes trunk expansion |
 | CPU / memory | ACK 1.28+ reservation rules and native kube/system settings; default memory reservation uses the larger network/native limit to avoid under-reserving |
@@ -105,4 +105,4 @@ spec:
 
 The digest covers effective disks, native pool settings and userdata; image ID is matched separately. Capacity must be positive and Allocatable no greater than Capacity, consistent with known reservations/eviction. Capacity cannot exceed any individual launch cloud disk. Do not infer combined disks, unverified RAID or separate imagefs layouts from this example. ContainerOS still requires its single new persistent data disk.
 
-Formulas, API requests and recovery have offline evidence. **Target ACK calibration and actual node-resource agreement remain release acceptance in #5/#23.** This documentation change did not run cloud tests. See [dev resource behavior and limitations](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/dev/PROVIDER_BEHAVIOR.md#ack-节点资源计算) and [ACK's reservation policy](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy).
+Formulas, API requests and recovery have offline evidence. **Target ACK calibration and actual node-resource agreement remain release acceptance in #5/#23.** This documentation change did not run cloud tests. See [resource behavior and limitations](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md#ack-节点资源计算) and [ACK's reservation policy](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy).
