@@ -80,6 +80,9 @@ func (nc *ECSNodeClass) Validate() error {
 }
 
 func ValidateImageCompatibilityPolicy(spec ECSNodeClassSpec) error {
+	if spec.ImageCompatibilityPolicy == "Custom" && !spec.ImagePrerequisitesVerified {
+		return fmt.Errorf("Custom images require imagePrerequisitesVerified=true")
+	}
 	if spec.ImageCompatibilityPolicy != "" && spec.ImageCompatibilityPolicy != "ACK" && spec.ImageCompatibilityPolicy != "Custom" {
 		return fmt.Errorf("imageCompatibilityPolicy must be ACK or Custom")
 	}

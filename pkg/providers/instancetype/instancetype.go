@@ -82,6 +82,9 @@ type CacheEntry struct {
 
 // InstanceType represents an ECS instance type
 type InstanceType struct {
+	LocalDiskKnown              bool
+	LocalDiskCount              int32
+	LocalDiskCapacityGiB        int64
 	Name                        string
 	Architecture                string
 	CPU                         *resource.Quantity
@@ -271,6 +274,9 @@ func (p *Provider) convertECSInstanceType(ecsInstanceType *ecs.DescribeInstanceT
 	}
 
 	return &InstanceType{
+		LocalDiskKnown:              ecsInstanceType.LocalStorageAmount != nil || ecsInstanceType.LocalStorageCapacity != nil,
+		LocalDiskCount:              tea.Int32Value(ecsInstanceType.LocalStorageAmount),
+		LocalDiskCapacityGiB:        tea.Int64Value(ecsInstanceType.LocalStorageCapacity),
 		Name:                        instanceTypeId,
 		Architecture:                architecture,
 		CPU:                         cpu,

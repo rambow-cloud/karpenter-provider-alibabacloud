@@ -196,6 +196,10 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	if err := imagefamily.ValidateBootImages(nodeClass.Spec, nodeClass.Status.Images); err != nil {
 		return nil, err
 	}
+	nodeClass.Status.Images = filterImagesForNodeLabels(nodeClass.Status.Images, nodeClaim.Labels)
+	if len(nodeClass.Status.Images) == 0 {
+		return nil, fmt.Errorf("no image supports the requested node labels; Ubuntu cannot enable image acceleration")
+	}
 	hash, err := nodeClass.Hash()
 	if err != nil {
 		return nil, fmt.Errorf("hash nodeclass: %w", err)
@@ -208,7 +212,7 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	// Filter instance types by NodeClaim requirements
-	filteredTypes := filterInstanceTypesByImages(c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements), nodeClass.Status.Images)
+	filteredTypes := filterBootInstanceTypes(c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements), nodeClass.Status.Images, nodeClass)
 	if len(filteredTypes) == 0 {
 		return nil, fmt.Errorf("no instance types match the requirements with a compatible image architecture")
 	}
@@ -520,7 +524,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 		instanceTypes,
 		nodePool.Spec.Template.Spec.Requirements,
 	)
-	filteredTypes = filterInstanceTypesByImages(filteredTypes, nodeClass.Status.Images)
+	filteredTypes = filterBootInstanceTypes(filteredTypes, filterImagesForNodeLabels(nodeClass.Status.Images, nodePool.Spec.Template.Labels), nodeClass)
 	filteredTypes = filterInstanceTypesByTemplate(filteredTypes, nodeClass)
 
 	// Log filtered instance types (only at debug level)
@@ -1027,7 +1031,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			return "", err
 		}
 	}
-	instanceTypes = filterInstanceTypesByTemplate(filterInstanceTypesByImages(instanceTypes, images), nodeClass)
+	instanceTypes = filterInstanceTypesByTemplate(filterBootInstanceTypes(instanceTypes, images, nodeClass), nodeClass)
 	if len(instanceTypes) == 0 {
 		return "", fmt.Errorf("no instance types have a known compatible image architecture")
 	}
@@ -1083,7 +1087,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		// taking the first one can hand an arm64 instance an x86_64 image
 		// (or vice versa), which ECS rejects. For single-arch NodeClasses
 		// this is a no-op.
-		image := selectImageForArchitecture(images, it.Architecture)
+		image := selectBootImage(images, it, nodeClass)
 		if image.ID == "" {
 			continue // Never submit a mismatched architecture to ECS.
 		}

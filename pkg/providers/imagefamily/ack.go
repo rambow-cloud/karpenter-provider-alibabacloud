@@ -62,7 +62,11 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 	}
 	var result []v1alpha1.Image
 	var incompatible error
+	prerequisites := &addonSnapshot{}
 	if nc.Spec.ImageCompatibilityPolicy == "Custom" {
+		if !nc.Spec.ImagePrerequisitesVerified {
+			return nil, fmt.Errorf("Custom images require imagePrerequisitesVerified=true")
+		}
 		for _, term := range nc.Spec.ImageSelectorTerms {
 			if term.ID == nil {
 				return nil, fmt.Errorf("Custom images require exact IDs")
@@ -104,6 +108,13 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 					}
 					incompatible = err
 					continue // Automatic discovery returns viable alternatives only.
+				}
+				if err := p.validatePrerequisites(ctx, nc.Spec, candidate, prerequisites); err != nil {
+					if term.ID != nil {
+						return nil, err
+					}
+					incompatible = err
+					continue
 				}
 				result = append(result, candidate)
 				matched = true

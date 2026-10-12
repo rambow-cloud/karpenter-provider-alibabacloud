@@ -18,9 +18,13 @@ var _ = Describe("Image selector admission", func() {
 			SecurityGroupSelectorTerms: []v1alpha1.SecurityGroupSelectorTerm{{ID: tea.String("sg-test")}},
 			ImageSelectorTerms:         []v1alpha1.ImageSelectorTerm{{Name: tea.String("custom-*")}},
 			ImageCompatibilityPolicy:   "Custom",
+			ImagePrerequisitesVerified: true,
 		}}
 		Expect(apierrors.IsInvalid(env.Client.Create(ctx, class))).To(BeTrue())
 		class.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-custom")}}
+		class.Spec.ImagePrerequisitesVerified = false
+		Expect(apierrors.IsInvalid(env.Client.Create(ctx, class))).To(BeTrue())
+		class.Spec.ImagePrerequisitesVerified = true
 		Expect(env.Client.Create(ctx, class)).To(Succeed())
 		Expect(env.Client.Delete(ctx, class)).To(Succeed())
 	})

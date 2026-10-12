@@ -217,6 +217,7 @@ func TestCustomImagePolicyRequiresExactSelfSharedLinux(t *testing.T) {
 		t.Run(test.owner+"/"+test.os, func(t *testing.T) {
 			c, e, p, nc := compatibilityFixture()
 			nc.Spec.ImageCompatibilityPolicy = "Custom"
+			nc.Spec.ImagePrerequisitesVerified = true
 			nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-custom")}}
 			img := e.images["m-custom"]
 			img.ImageOwnerAlias, img.OSType = tea.String(test.owner), tea.String(test.os)

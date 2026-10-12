@@ -48,6 +48,14 @@ func NewDefaultCSClient(client *cs.Client) CSClient {
 	}
 }
 
+// ListClusterAddonInstances retains caller cancellation and the common SDK timeouts.
+// Optional interface keeps existing CSClient implementations source-compatible.
+func (c *DefaultCSClient) ListClusterAddonInstances(ctx context.Context, clusterID string) (*cs.ListClusterAddonInstancesResponse, error) {
+	return callSDK(ctx, func() (*cs.ListClusterAddonInstancesResponse, error) {
+		return c.withContext(ctx).ListClusterAddonInstances(tea.String(clusterID))
+	})
+}
+
 // withContext copies the SDK configuration so concurrent calls keep their own context.
 func (c *DefaultCSClient) withContext(ctx context.Context) *cs.Client {
 	copy := *c.client
