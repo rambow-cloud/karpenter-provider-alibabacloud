@@ -17,10 +17,18 @@ type priceHTTP struct {
 	called bool
 	form   url.Values
 	value  interface{}
+	action string
 }
 
 func (f *priceHTTP) Call(r *http.Request, _ *http.Transport) (*http.Response, error) {
 	f.called = true
+	// The SDK's custom transport receives raw lowercase header map keys,
+	// before net/http's normal canonicalization. HTTP field names are case-insensitive.
+	for key, values := range r.Header {
+		if strings.EqualFold(key, "x-acs-action") && len(values) > 0 {
+			f.action = values[0]
+		}
+	}
 	f.form = r.URL.Query()
 	// The native RPC SDK may send a POST whose parameters are all in the
 	// query and whose body is nil. net/http.ParseForm rejects that shape even
@@ -51,7 +59,8 @@ func TestOfferingPricePreservesNativeSDKBillingFieldsAndContext(t *testing.T) {
 	r, err := adapter.DescribeOfferingPrice(ctx, &ecs.DescribePriceRequest{RegionId: tea.String("cn-hangzhou"), ResourceType: tea.String("instance"), InstanceType: tea.String("ecs.g7.large"), ZoneId: tea.String("cn-hangzhou-i"), ImageId: tea.String("m-test"), PriceUnit: tea.String("Hour"), Period: tea.Int32(1), Amount: tea.Int32(1), SpotStrategy: tea.String("SpotAsPriceGo"), SpotDuration: tea.Int32(0), SystemDisk: &ecs.DescribePriceRequestSystemDisk{Category: tea.String("cloud_essd"), Size: tea.Int32(80), PerformanceLevel: tea.String("PL1")}, DataDisk: []*ecs.DescribePriceRequestDataDisk{{Category: tea.String("cloud_ssd"), Size: tea.Int64(100)}}})
 	require.NoError(t, err)
 	require.Equal(t, "present", transport.value)
-	for k, v := range map[string]string{"Action": "DescribePrice", "InstanceType": "ecs.g7.large", "ZoneId": "cn-hangzhou-i", "ImageId": "m-test", "PriceUnit": "Hour", "Period": "1", "Amount": "1", "SpotStrategy": "SpotAsPriceGo", "SpotDuration": "0", "SystemDisk.Category": "cloud_essd", "SystemDisk.Size": "80", "SystemDisk.PerformanceLevel": "PL1", "DataDisk.1.Category": "cloud_ssd", "DataDisk.1.Size": "100"} {
+	require.Equal(t, "DescribePrice", transport.action)
+	for k, v := range map[string]string{"InstanceType": "ecs.g7.large", "ZoneId": "cn-hangzhou-i", "ImageId": "m-test", "PriceUnit": "Hour", "Period": "1", "Amount": "1", "SpotStrategy": "SpotAsPriceGo", "SpotDuration": "0", "SystemDisk.Category": "cloud_essd", "SystemDisk.Size": "80", "SystemDisk.PerformanceLevel": "PL1", "DataDisk.1.Category": "cloud_ssd", "DataDisk.1.Size": "100"} {
 		require.Equal(t, v, transport.form.Get(k), k)
 	}
 	require.EqualValues(t, .75, *r.Body.PriceInfo.Price.TradePrice)
