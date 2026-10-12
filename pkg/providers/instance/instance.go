@@ -320,7 +320,7 @@ func (p *Provider) Create(ctx context.Context, opts CreateOptions) (string, erro
 	// batches are applied after creation via TagResources. See GH issue #14.
 	var deferredTagBatches []map[string]string
 	if len(opts.Tags) > 0 {
-		batches := ecsutil.BatchTagsWithPriority(opts.Tags, v1alpha1.TagManagedBy, v1alpha1.TagClusterID, v1alpha1.TagNodeClaim, v1alpha1.TagNodeClaimUID)
+		batches := ecsutil.BatchTagsWithPriority(opts.Tags, v1alpha1.TagManagedBy, v1alpha1.TagClusterID, v1alpha1.TagNodeClaim, v1alpha1.TagNodeClaimUID, v1alpha1.TagResourceModel)
 		// First batch goes into RunInstances request
 		if len(batches) > 0 {
 			var tags []*ecs.RunInstancesRequestTag

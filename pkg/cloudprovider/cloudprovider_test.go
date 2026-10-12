@@ -528,7 +528,8 @@ func TestConvertInstanceToNodeClaimArchLabels(t *testing.T) {
 					{Name: tt.instanceType, Architecture: tt.authoritativeArch},
 				}
 			}
-			nc := cp.convertInstanceToNodeClaim(context.Background(), inst, &coreapis.NodeClaim{}, instanceTypes, "c-test")
+			nc, err := cp.convertInstanceToNodeClaim(context.Background(), inst, &coreapis.NodeClaim{}, instanceTypes, "c-test")
+			assert.NoError(t, err)
 			assert.Equal(t, tt.wantK8sArch, nc.Labels[corev1.LabelArchStable], "LabelArchStable")
 			assert.Equal(t, "linux", nc.Labels[corev1.LabelOSStable], "LabelOSStable")
 			assert.Equal(t, tt.instanceType, nc.Labels[corev1.LabelInstanceTypeStable], "LabelInstanceTypeStable")
@@ -552,7 +553,8 @@ func TestConvertInstanceToNodeClaimResolvedLabels(t *testing.T) {
 		Memory: resource.NewQuantity(16*1024*1024*1024, resource.BinarySI),
 	}}
 
-	nodeClaim := cp.convertInstanceToNodeClaim(context.Background(), inst, &coreapis.NodeClaim{}, instanceTypes, "c-test")
+	nodeClaim, err := cp.convertInstanceToNodeClaim(context.Background(), inst, &coreapis.NodeClaim{}, instanceTypes, "c-test")
+	assert.NoError(t, err)
 	for key, value := range map[string]string{
 		corev1.LabelTopologyRegion:            "cn-shanghai",
 		v1alpha1.LabelInstanceFamily:          "g7",

@@ -18,7 +18,6 @@ package integration
 
 import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -125,7 +124,7 @@ var _ = Describe("ECSNodeClass Validation", func() {
 			ImageGCLowThresholdPercent:  &low,
 		}
 
-		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("imageGCHighThresholdPercent")))
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
 	It("should error if imageGCHighThresholdPercent or imageGCLowThresholdPercent is negative", Label("validation", "kubelet"), func() {
@@ -133,11 +132,11 @@ var _ = Describe("ECSNodeClass Validation", func() {
 
 		nodeClass := validValidationNodeClass()
 		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{ImageGCHighThresholdPercent: &negative}
-		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("imageGCHighThresholdPercent")))
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 
 		nodeClass = validValidationNodeClass()
 		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{ImageGCLowThresholdPercent: &negative}
-		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("imageGCLowThresholdPercent")))
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
 	It("should validate launch template selector exclusivity and version", Label("validation", "launch-template"), func() {
@@ -174,9 +173,6 @@ func validValidationNodeClass() *v1alpha1.ECSNodeClass {
 			}},
 			SystemDisk: &v1alpha1.SystemDiskSpec{
 				Category: "cloud_essd",
-			},
-			Kubelet: &v1alpha1.KubeletConfiguration{
-				SystemReserved: map[corev1.ResourceName]string{corev1.ResourceCPU: "100m"},
 			},
 		},
 	}

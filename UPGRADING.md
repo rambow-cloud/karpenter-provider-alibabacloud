@@ -101,6 +101,13 @@ Custom/shared images require `imageCompatibilityPolicy: Custom`, exact IDs and `
 
 Offering prices now use ECS hourly transaction quotes with actual image, disks, zone and capacity type; existing `ecs:DescribePrice` permission is required. Missing, pending, expired, mixed-currency or failed quotes are unavailable, not free launch candidates. Quotes refresh with bounded concurrency/rate and failure caching. Template billable context is resolved from its pinned version; unmodeled provisioned disk IOPS/bursting is diagnosed and excluded. Marketplace images require complete same-currency licensing quotes. Baseline hourly prices do not predict future usage fees or retained-resource bills. See [PROVIDER_BEHAVIOR.md](PROVIDER_BEHAVIOR.md).
 
-These policies and resolved template versions/disks participate in the shared v3 drift hash. Fresh installations use matching generated CRDs and controller source; historical hash migration is outside this task.
+These policies and resolved template versions/disks participate in the shared v4 drift hash. Fresh installations use matching generated CRDs and controller source; historical hash migration is outside this task.
 
 Read [ACK_IMAGE_SUPPORT.md](ACK_IMAGE_SUPPORT.md) for restrictions and examples. Read-only CS/ECS API evidence and offline tests do not replace #5/#23's real ACK provisioning/registration/termination acceptance, which remains deferred.
+
+
+### Native ACK resource configuration (dev)
+
+Fresh deployments require access to `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`. Select an existing regular ACK node pool with `spec.ackNodePoolID`, or retain its unique default. Kubelet overrides belong in that native pool: `spec.kubelet` is rejected because ACK attach scripts do not apply it. Provider status snapshots resource settings and launch explicitly pins the pool.
+
+Ephemeral storage is advertised only with an image/configuration-matched `spec.nodeFilesystem` measurement; independent disk sizes are never summed. Read `status.resourceConfigurationHash` and the calibration node's kubelet Capacity/Allocatable. Registered nodes use their actual resource reports after identity verification. See [resource calculation and limits](PROVIDER_BEHAVIOR.md#ack-节点资源计算). Real ACK calibration remains a release gate in #5/#23.

@@ -62,6 +62,26 @@ func configureACKMetadata(m *MockCSClient) {
 	m.On("DescribeKubernetesVersionMetadata", mock.Anything, mock.Anything).Maybe().Return([]*cs.DescribeKubernetesVersionMetadataResponseBody{{Version: tea.String("1.34.10-aliyun.1"), Runtimes: []*cs.Runtime{{Name: tea.String("containerd"), Version: tea.String("1.7.2")}}}}, nil)
 }
 
+func TestACKBootstrapPinsPoolAndPartitionsResourceSettings(t *testing.T) {
+	m := &MockCSClient{}
+	configureACKMetadata(m)
+	for _, pool := range []string{"np-a", "np-b"} {
+		m.On("DescribeClusterAttachScripts", mock.Anything, "c-test", mock.MatchedBy(func(r *cs.DescribeClusterAttachScriptsRequest) bool { return tea.StringValue(r.NodepoolId) == pool })).Return("attach.sh", nil).Times(2)
+	}
+	p := NewProvider("cn-hangzhou", m)
+	for _, pool := range []string{"np-a", "np-b"} {
+		for _, hash := range []string{"configuration-a", "configuration-b"} {
+			for range 2 {
+				_, err := p.GenerateUserData(context.Background(), BootstrapOptions{ClusterType: ACKClusterType, ClusterID: "c-test", ACKNodePoolID: pool, ACKResourceConfiguration: hash})
+				assert.NoError(t, err)
+			}
+		}
+	}
+	m.AssertExpectations(t)
+	_, err := p.GenerateUserData(context.Background(), BootstrapOptions{ClusterType: ACKClusterType, KubeletConfig: &KubeletConfiguration{}})
+	assert.ErrorContains(t, err, "cannot apply kubelet overrides")
+}
+
 func TestGenerateUserData(t *testing.T) {
 	customData := "#!/bin/bash\necho custom"
 

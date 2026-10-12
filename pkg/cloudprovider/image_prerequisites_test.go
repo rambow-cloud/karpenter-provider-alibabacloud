@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instancetype"
 	"github.com/stretchr/testify/require"
@@ -20,7 +21,7 @@ func TestContainerLocalDiskMetadataControlsActualLaunch(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			e := &imageLaunchECS{}
-			p := &CloudProvider{instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e)}
+			p := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e)}
 			defer p.instanceProvider.Batcher.Close()
 			nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{DataDisks: []v1alpha1.DataDiskSpec{{Category: "cloud_essd", Size: 40}}}}
 			it := &instancetype.InstanceType{Name: "ecs.g7.large", Architecture: "X86_64", LocalDiskKnown: tc.known, LocalDiskCount: tc.count}

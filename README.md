@@ -100,6 +100,8 @@ RRSA (RAM Roles for Service Accounts) 是阿里云提供的一种安全认证方
       "Effect": "Allow",
       "Action": [
         "cs:DescribeClusterAttachScripts",
+        "cs:DescribeClusterNodePools",
+        "cs:DescribeClusterNodePoolDetail",
         "cs:GetClusterAddonInstance",
 		"cs:ListClusterAddonInstances",
         "cs:DescribeClusterDetail",
@@ -341,6 +343,8 @@ Attach the following custom permission policy to the RAM role:
       "Effect": "Allow",
       "Action": [
         "cs:DescribeClusterAttachScripts",
+        "cs:DescribeClusterNodePools",
+        "cs:DescribeClusterNodePoolDetail",
         "cs:GetClusterAddonInstance",
         "cs:DescribeClusterDetail",
         "cs:DescribeKubernetesVersionMetadata"
