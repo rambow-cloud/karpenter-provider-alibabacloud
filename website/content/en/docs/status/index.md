@@ -18,7 +18,7 @@ Offline CI covers the Kubernetes minimum. KWOK results must be read with each ru
 | --- | --- | --- |
 | Karpenter v1.14.1 | Migration merged; real ACK version acceptance pending | [Version milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
 | Kubernetes 1.34+ | Minimum enforced by Helm, controller startup and ACK setup; offline boundary checks; real ACK acceptance pending | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
-| Provider lifecycle and scheduling | Ownership, recovery, template disks, image prerequisites and pricing have implementation/offline evidence; resource accounting #16 and strict network discovery #76 merged to dev; real resource calibration remains #5/#23 acceptance | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
+| Provider lifecycle and scheduling | Ownership, recovery, template disks, image prerequisites and pricing have implementation/offline evidence; resource accounting #16 and strict network discovery #76 have source and offline verification; real resource calibration remains #5/#23 acceptance | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | Dependency security | Go CVE rescans pass; legacy SDK/PDF chain removed; unused OpenPGP advisory remains; container OS scan pending | [SDK migration and audit](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | Alibaba Cloud SDK V2.0 | Remaining legacy calls migrated; unused ALB/NLB cleanup removed; selected modules now 292 (314 before migration); real cloud acceptance pending | [SDK migration and follow-up](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | Minimal ACK/ECS E2E | A one-NodePool, one-Pod, target-one-ECS acceptance entry is being planned | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
@@ -28,7 +28,7 @@ Content reviewed **2026-10-12**. [Issues](https://github.com/rambow-cloud/karpen
 
 ## dev integration workflow
 
-Individual issue PRs target `dev` and merge after review and required CI. After the current development batch is accepted, rebase dev onto the latest main and open an integration PR. A dev merge is neither a main release nor ACK acceptance; online Pages update only after later main integration.
+Individual issue PRs target `dev` and merge after review and required CI. Accepted code batches may be integrated as a development checkpoint: rebase dev onto the latest main, open an integration PR and pass required checks. Run bounded KWOK after main integration; it does not replace real ACK acceptance in #5/#23. Spot interruption #20 remains separate. Pages follow main, while stable controller/chart releases are arranged separately.
 
 ## What completion means
 

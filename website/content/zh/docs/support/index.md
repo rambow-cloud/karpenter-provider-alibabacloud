@@ -64,13 +64,13 @@ Custom 只接受 ECS 返回的 self/others 镜像，并核对 Linux、架构和�
 
 ## 原生 ACK 节点池与资源配置 {#ack-node-resources}
 
-本节描述 **dev 分支** 的 [资源计算修复 #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) 和 [网络发现修复 #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76)。部署时选择同一 dev 提交的 controller、Chart 和 CRD；合入 dev 不代表 main 已发布。
+本节描述当前**开发候选版本**的 [资源计算修复 #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) 和 [网络发现修复 #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76)。部署时选择同一待测提交的 controller、Chart 和 CRD；合入 main 不代表稳定发布或真实 ACK 验收。
 
 `spec.ackNodePoolID` 选择一个已有、active 的普通 ACK ESS/containerd 节点池。省略时必须有且只有一个默认池。controller 需要 `cs:DescribeClusterNodePools` 和 `cs:DescribeClusterNodePoolDetail`，把实际池 ID 和 kubelet 设置写入 `status.ackNodePool`，引导脚本固定该 ID。创建前再次读取池；配置改变后等待 NodeClass status 刷新，不修改原生池。
 
 **不要填写 `spec.kubelet`。** ACK attach script 不应用该字段，因此 CRD 和运行时都会拒绝，包括 maxPods、podsPerCore 和预留设置。请在 ACK 原生节点池配置受支持的 kubelet 参数。API 未提供 podsPerCore，不能据此声明节点容量。含 native userdata、auto mode、CPU/内存 manager 或 soft eviction overrides 的池暂不支持。
 
-| 资源 | dev 的计算边界 |
+| 资源 | 开发候选的计算边界 |
 | --- | --- |
 | Pod | 原生 maxPods 与网络上限取较小值；Flannel 要求实际有效 CIDR mask，最大 256；Terway 要求已知 ECS ENI/IP 数量，保守地不扩大 trunk 容量 |
 | CPU / 内存 | ACK 1.28+ 预留规则与原生 kube/system reservation；默认内存预留按网络与原生上限的较大值计算，避免预留不足 |
@@ -105,4 +105,4 @@ spec:
 
 哈希覆盖有效磁盘配置、原生池 kubelet 设置与 userdata，镜像另外精确匹配。Capacity 必须为正，Allocatable 不大于 Capacity，且符合已知预留/eviction；容量不得超过任一启动云盘大小。多盘累加、未验证的 RAID 或独立 imagefs 布局不能通过此例推算。ContainerOS 仍需符合其单块全新持久数据盘要求。
 
-此功能的公式、API 请求和恢复路径已有离线证据；**目标 ACK 节点的实际资源校准及一致性对比仍属于 #5/#23 的发布验收**，本次文档更新未运行云端测试。详见 [dev 资源模型与限制](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/dev/PROVIDER_BEHAVIOR.md#ack-节点资源计算) 和 [ACK 官方预留策略](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy)。
+此功能的公式、API 请求和恢复路径已有离线证据；**目标 ACK 节点的实际资源校准及一致性对比仍属于 #5/#23 的发布验收**，本次文档更新未运行云端测试。详见 [资源模型与限制](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md#ack-节点资源计算) 和 [ACK 官方预留策略](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy)。
