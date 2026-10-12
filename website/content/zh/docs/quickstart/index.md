@@ -11,7 +11,7 @@ description: 在 Kubernetes 1.34+ 的阿里云 ACK 集群全新安装 Karpenter�
 
 - ACK Kubernetes 版本至少 1.34，`kubectl` 可访问集群，准备 Helm 3。
 - 确认 ACK 集群 ID、区域、VPC、交换机和安全组；节点网络须能访问 API Server。
-- controller 需要 ECS、VPC、RAM、CS 的相关权限，公共镜像查询包括 `cs:DescribeClusterDetail`、`cs:DescribeKubernetesVersionMetadata`、`cs:ListClusterAddonInstances` 和 `ecs:DescribeImages`；报价需要 `ecs:DescribePrice`。
+- controller 需要 ECS、VPC、RAM、CS 的相关权限，公共镜像查询包括 `cs:DescribeClusterDetail`、`cs:DescribeKubernetesVersionMetadata`、`cs:ListClusterAddonInstances` 和 `ecs:DescribeImages`；报价需要 `ecs:DescribePrice`，dev 原生节点池解析还需 `cs:DescribeClusterNodePools` 和 `cs:DescribeClusterNodePoolDetail`。
 - 为 ECS 节点准备 RAM 角色，与 controller 访问云 API 的身份分别配置。
 - controller 固定在已有真实节点上运行，不使用它自身供给的节点作为首次启动依赖。
 
@@ -58,6 +58,9 @@ kubectl rollout status deployment/karpenter -n karpenter
 
 将下面内容保存为 `node-config.yaml`。替换集群 ID、交换机、安全组与节点 RAM 角色。镜像名称模式匹配目标 ACK 清单内的阿里云 Linux 3 amd64 镜像；如果目标环境没有兼容候选，NodeClass 会解析失败，需要根据[镜像支持策略](../support/index.md)调整 selector。
 
+
+选择已有 active 的普通 ACK 原生节点池。下面使用显式 `ackNodePoolID`；若省略，必须有唯一默认池。不要添加 `spec.kubelet`，请在原生池配置 kubelet；需要 ephemeral-storage 时先完成[资源校准](../support/index.md#nodefs-calibration)。这些资源功能目前在 **dev**，请构建同一 dev 提交的镜像、Chart 和 CRD。
+
 ```yaml
 apiVersion: karpenter.alibabacloud.com/v1alpha1
 kind: ECSNodeClass
@@ -65,6 +68,7 @@ metadata:
   name: default
 spec:
   clusterID: YOUR_ACK_CLUSTER_ID
+  ackNodePoolID: np-YOUR_EXISTING_ACK_POOL
   vSwitchSelectorTerms:
     - id: vsw-YOUR_VSWITCH_ID
   securityGroupSelectorTerms:

@@ -61,3 +61,48 @@ Native template versions and disks are recorded in status; RunInstances and boot
 On-demand and Spot use ECS hourly quotes for the actual image and disks. Missing, failed, expired or pending quotes temporarily make an offering unavailable while retaining its drift membership. Quotes use one account currency, CNY or USD, without assumed exchange rates; marketplace images also require complete licensing quotes in the same currency. On-demand quotes last 5 minutes, Spot 1 minute and failures 30 seconds. Refresh concurrency and request rate are bounded; cold catalogs become available as valid quotes arrive. This is not an invoice forecast and excludes later usage charges such as traffic and snapshots. See [provider pricing and lifecycle behavior](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md).
 
 See [ACK_IMAGE_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md) for permissions, ContainerOS examples and detailed behavior, and [KUBERNETES_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) for version evidence. Continue to [core features](../features/index.md) or [status and roadmap](../status/index.md).
+
+## Native ACK pool and node resources
+
+This section describes the **dev branch** changes in [resource accounting #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) and [network discovery #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76). Use controller, Chart and CRDs from the same dev commit. A dev merge does not mean the change has shipped on main.
+
+`spec.ackNodePoolID` selects an existing active regular ACK ESS/containerd pool. When omitted, exactly one default pool must exist. Grant `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`. Status records the actual pool ID and kubelet settings; attach scripts pin that ID. Creation reads the pool again and waits for a status refresh if settings changed. The provider does not modify the native pool.
+
+**Omit `spec.kubelet`.** ACK attach scripts do not apply its overrides, so CRD admission and runtime reject it, including maxPods, podsPerCore and reservations. Configure supported kubelet parameters on the selected native pool. The API does not expose podsPerCore, so it cannot authorize predicted density. Native userdata, auto mode, CPU/memory manager and soft eviction overrides are unsupported.
+
+| Resource | dev calculation boundary |
+| --- | --- |
+| Pods | Minimum of native maxPods and network ceiling; Flannel requires the actual valid CIDR mask and is capped at 256; Terway requires known ECS ENI/IP metadata and conservatively excludes trunk expansion |
+| CPU / memory | ACK 1.28+ reservation rules and native kube/system settings; default memory reservation uses the larger network/native limit to avoid under-reserving |
+| VM / eviction | VM memory loss reduces Capacity once; eviction is separate, with ACK default memory.available of 300Mi; custom hard eviction must explicitly include it |
+| ephemeral-storage | Only image/configuration-matched nodefs measurements authorize new-node storage requests; independent disk sizes are never summed |
+| Registration / recovery | The first ECS request stores an immutable resource snapshot shared by Create/Get/List and recovery; registered kubelet reports require matching NodeClaim UID and ProviderID |
+
+Startup requires exactly one known active Terway/Flannel addon. API errors, missing/conflicting metadata, unknown IP stack or invalid configuration block initialization. Unknown Terway ENI metadata cannot authorize candidates; exclusive ENI and non-default pod-density-mode are unsupported. The conservative limit may be below actual node capacity; real network behavior remains an ACK acceptance item.
+
+## Optional ephemeral-storage calibration
+
+Without `nodeFilesystem`, ordinary CPU/memory workloads can proceed, while ephemeral-storage requests cannot use unmeasured new-node candidates. To enable them, measure an independent calibration node using the same image, disks, native pool and custom userdata. Recalibrate after changing those settings.
+
+1. Resolve an ECSNodeClass without `nodeFilesystem`; read `status.resourceConfigurationHash` and the actual image ID.
+2. Read the matching node's kubelet nodefs Capacity/Allocatable, rather than nominal ECS disk size.
+3. Record those measured values, exact image ID and configuration hash in the NodeClass. Replace every example value below.
+
+```sh
+kubectl get ecsnodeclass default -o jsonpath='{.status.resourceConfigurationHash}{"\n"}'
+kubectl get node YOUR_CALIBRATION_NODE -o jsonpath='{.status.capacity.ephemeral-storage}{"\n"}{.status.allocatable.ephemeral-storage}{"\n"}'
+```
+
+```yaml
+spec:
+  ackNodePoolID: np-YOUR_EXISTING_ACK_POOL
+  nodeFilesystem:
+    configurationHash: REPLACE_WITH_ACTUAL_64_CHARACTER_HASH
+    imageID: REPLACE_WITH_EXACT_MEASURED_IMAGE_ID
+    capacity: 37Gi     # Replace with measured kubelet Capacity
+    allocatable: 32Gi  # Replace with measured kubelet Allocatable
+```
+
+The digest covers effective disks, native pool settings and userdata; image ID is matched separately. Capacity must be positive and Allocatable no greater than Capacity, consistent with known reservations/eviction. Capacity cannot exceed any individual launch cloud disk. Do not infer combined disks, unverified RAID or separate imagefs layouts from this example. ContainerOS still requires its single new persistent data disk.
+
+Formulas, API requests and recovery have offline evidence. **Target ACK calibration and actual node-resource agreement remain release acceptance in #5/#23.** This documentation change did not run cloud tests. See [dev resource behavior and limitations](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/dev/PROVIDER_BEHAVIOR.md#ack-节点资源计算) and [ACK's reservation policy](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy).
