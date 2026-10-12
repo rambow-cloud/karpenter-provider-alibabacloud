@@ -18,13 +18,17 @@ Karpenter core 和 AWS 测试 harness 固定为 **v1.14.1**，chart 为 **0.3.0-
 | --- | --- | --- |
 | Karpenter v1.14.1 | 迁移已合并；真实 ACK 版本验收待完成 | [版本 milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
 | Kubernetes 1.34+ | Helm、控制器启动和 ACK setup 已限制最低版本，覆盖离线边界；真实 ACK 验收待完成 | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
-| Provider 生命周期与调度 | 集群所有权修复已合并；资源计算、失败恢复、镜像等问题继续修复 | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
+| Provider 生命周期与调度 | 所有权、失败恢复、模板磁盘、镜像前置条件与报价已有实现及离线证据；资源计算 #16 与严格网络发现 #76 已完成源码与离线检查；实际节点资源校准待 #5/#23 验收 | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | 依赖安全 | Go CVE 复扫通过；旧 SDK/PDF 链已移除，剩余未导入的 OpenPGP 公告；容器 OS 扫描待完成 | [SDK 迁移与审计](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | 阿里云 SDK V2.0 | 剩余旧调用已迁移，已移除无用 ALB/NLB 清理；当前选中模块数 292（迁移前 314）；真实云验收待完成 | [SDK 迁移与后续精简](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | 最小 ACK/ECS E2E | 一个 NodePool、一个 Pod、目标一台 ECS 的验收入口正在规划 | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |
 | Spot 中断处理 | 独立规划的功能；不能将 Spot 创建等同于完整中断处理 | [Spot milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/5) |
 
-内容复核日期：**2026-10-11**。实时进度以 [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues)、[Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones) 和 [Project](https://github.com/orgs/rambow-cloud/projects/4) 为准。
+内容复核日期：**2026-10-12**。实时进度以 [Issues](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues)、[Milestones](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestones) 和 [Project](https://github.com/orgs/rambow-cloud/projects/4) 为准。
+
+## dev 集成流程
+
+单个 issue 的 PR 先以 `dev` 为目标，经 review 和必要 CI 后合入。已验收的代码批次可先作为开发检查点集成到 main：将 dev rebase 到最新 main，建立集成 PR 并通过必要检查。主干集成后执行小规模 KWOK，仍不能替代 #5/#23 的真实 ACK 验收；#20 的 Spot 中断功能单独推进。Pages 随 main 更新，controller/chart 稳定发布另行安排。
 
 ## 如何判断一项能力已经完成
 

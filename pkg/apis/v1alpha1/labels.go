@@ -69,7 +69,9 @@ const (
 	TagNodePool = Group + "/nodepool"
 
 	// TagNodeClaim is the tag key for nodeclaim name
-	TagNodeClaim = Group + "/nodeclaim"
+	TagNodeClaim            = Group + "/nodeclaim"
+	TagNodeClaimUID         = Group + "/nodeclaim-uid"
+	AnnotationLaunchAttempt = Group + "/launch-attempt"
 
 	// TagManagedBy is the tag key indicating resource is managed by Karpenter
 	TagManagedBy = Group + "/managed-by"
@@ -92,6 +94,7 @@ const (
 
 	// TagKubeletMaxPods records the ECSNodeClass kubelet maxPods setting on launched instances.
 	TagKubeletMaxPods = Group + "/kubelet-max-pods"
+	TagResourceModel  = Group + "/resource-model"
 
 	// LabelInstanceFamily is the legacy label key for instance family
 	LabelInstanceFamily = "node.kubernetes.io/instance-family"

@@ -25,6 +25,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
@@ -47,6 +48,12 @@ const (
 
 // BootstrapOptions contains options for generating bootstrap scripts
 type BootstrapOptions struct {
+	ACKNodePoolID            string
+	ACKResourceConfiguration string
+	// Disks is the exact normalized launch layout. FormatDisk is enabled only
+	// for a validated ContainerOS layout with one newly created persistent disk.
+	Disks      *v1alpha1.NormalizedDisks
+	FormatDisk bool
 	// Cluster type (ACK or self-managed)
 	ClusterType ClusterType
 	// ACK cluster ID (required for ACK clusters)
@@ -282,6 +289,12 @@ func (p *Provider) ClearCache() {
 
 // GenerateUserData generates user data script for bootstrapping nodes
 func (p *Provider) GenerateUserData(ctx context.Context, opts BootstrapOptions) (string, error) {
+	if opts.ClusterType == ACKClusterType && opts.KubeletConfig != nil {
+		return "", fmt.Errorf("ACK attach scripts cannot apply kubelet overrides; configure the selected native node pool")
+	}
+	if opts.FormatDisk && (opts.Disks == nil || len(opts.Disks.DataDisks) != 1 || opts.Disks.DataDisks[0].SnapshotID != "" || strings.Contains(opts.Disks.DataDisks[0].Category, "ephemeral")) {
+		return "", fmt.Errorf("format_disk requires one newly initialized persistent launch data disk")
+	}
 	// Generate bootstrap script based on cluster type
 	switch opts.ClusterType {
 	case ACKClusterType:
@@ -328,7 +341,7 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 	if err != nil {
 		return "", err
 	}
-	cacheKey := strings.Join([]string{"cs-bootstrap-script", opts.ClusterID, tea.StringValue(metadataRequest.Region), tea.StringValue(metadataRequest.ClusterType), tea.StringValue(metadataRequest.KubernetesVersion), tea.StringValue(metadataRequest.Profile), tea.StringValue(metadataRequest.Runtime)}, "/")
+	cacheKey := strings.Join([]string{"cs-bootstrap-script", opts.ClusterID, opts.ACKNodePoolID, opts.ACKResourceConfiguration, tea.StringValue(metadataRequest.Region), tea.StringValue(metadataRequest.ClusterType), tea.StringValue(metadataRequest.KubernetesVersion), tea.StringValue(metadataRequest.Profile), tea.StringValue(metadataRequest.Runtime), fmt.Sprintf("format-disk=%t", opts.FormatDisk)}, "/")
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -338,7 +351,11 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 
 	// Create request to get cluster attach scripts
 	request := &cs.DescribeClusterAttachScriptsRequest{
-		Expired: tea.Int64(1825228800),
+		Expired:    tea.Int64(1825228800),
+		FormatDisk: tea.Bool(opts.FormatDisk),
+	}
+	if opts.ACKNodePoolID != "" {
+		request.NodepoolId = tea.String(opts.ACKNodePoolID)
 	}
 
 	// Execute request

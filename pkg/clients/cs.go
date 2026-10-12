@@ -48,7 +48,27 @@ func NewDefaultCSClient(client *cs.Client) CSClient {
 	}
 }
 
-// withContext copies the SDK configuration so concurrent calls keep their own context.
+// ListClusterAddonInstances retains caller cancellation and the common SDK timeouts.
+// Optional interface keeps existing CSClient implementations source-compatible.
+func (c *DefaultCSClient) ListClusterAddonInstances(ctx context.Context, clusterID string) (*cs.ListClusterAddonInstancesResponse, error) {
+	return callSDK(ctx, func() (*cs.ListClusterAddonInstancesResponse, error) {
+		return c.withContext(ctx).ListClusterAddonInstances(tea.String(clusterID))
+	})
+}
+
+// Native ACK pool discovery uses the same request context as bootstrap.
+func (c *DefaultCSClient) DescribeClusterNodePools(ctx context.Context, clusterID string) (*cs.DescribeClusterNodePoolsResponse, error) {
+	return callSDK(ctx, func() (*cs.DescribeClusterNodePoolsResponse, error) {
+		return c.withContext(ctx).DescribeClusterNodePools(&clusterID, &cs.DescribeClusterNodePoolsRequest{})
+	})
+}
+func (c *DefaultCSClient) DescribeClusterNodePoolDetail(ctx context.Context, clusterID, poolID string) (*cs.DescribeClusterNodePoolDetailResponse, error) {
+	return callSDK(ctx, func() (*cs.DescribeClusterNodePoolDetailResponse, error) {
+		return c.withContext(ctx).DescribeClusterNodePoolDetail(&clusterID, &poolID)
+	})
+}
+
+// withContext copies SDK configuration so calls keep their own context.
 func (c *DefaultCSClient) withContext(ctx context.Context) *cs.Client {
 	copy := *c.client
 	copy.HttpClient = contextHTTPClient{ctx: ctx, base: c.client.HttpClient}

@@ -29,6 +29,19 @@ import (
 // a vSwitch running out of IPs must never block every vSwitch in its zone.
 // Only structured ECS codes are trusted for shared negative cache feedback.
 func IsInstanceTypeCapacityError(err error) bool {
+	switch sdkErrorCode(err) {
+	case ErrCodeNoStock, ErrCodeZoneNotOnSale, ErrCodeResourceTypeNotSupported:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsCreateCapacityRejection(err error) bool {
+	return IsInstanceTypeCapacityError(err) || sdkErrorCode(err) == ErrCodeVSwitchIPNotEnough
+}
+
+func sdkErrorCode(err error) string {
 	var sdkErr *tea.SDKError
 	var daraErr *dara.SDKError
 	var baseErr dara.BaseError
@@ -40,14 +53,9 @@ func IsInstanceTypeCapacityError(err error) bool {
 	} else if stderrors.As(err, &baseErr) {
 		code = tea.StringValue(baseErr.GetCode())
 	} else {
-		return false
+		return ""
 	}
-	switch code {
-	case ErrCodeNoStock, ErrCodeZoneNotOnSale, ErrCodeResourceTypeNotSupported:
-		return true
-	default:
-		return false
-	}
+	return code
 }
 
 // Error codes from Alibaba Cloud ECS API

@@ -210,29 +210,28 @@ func (c *DefaultECSClient) DescribeImages(ctx context.Context, imageIDs []string
 	for {
 		request.PageNumber = tea.Int32(int32(pageNumber))
 
-		response, err := callSDK(ctx, func() (*ecs.DescribeImagesResponse, error) { return c.withContext(ctx).DescribeImages(request) })
+		response, err := callSDK(ctx, func() (*imageAvailabilityResponse, error) { return describeUsableImages(c.withContext(ctx), request) })
 		if err != nil {
 			return nil, fmt.Errorf("failed to describe images (page %d): %w", pageNumber, err)
 		}
 
-		// Check if response body and images are valid
-		if response == nil || response.Body == nil || response.Body.Images == nil || response.Body.Images.Image == nil {
+		if response == nil || response.Body == nil || response.Body.TotalCount == nil || *response.Body.TotalCount < 0 {
+			return nil, fmt.Errorf("incomplete image availability response (page %d)", pageNumber)
+		}
+		if *response.Body.TotalCount == 0 {
 			break
+		}
+		if response.Body.Images == nil || len(response.Body.Images.Image) == 0 {
+			return nil, fmt.Errorf("incomplete image availability page %d", pageNumber)
 		}
 
 		// Convert response images to our format
 		for _, img := range response.Body.Images.Image {
-			// Skip nil images
-			if img == nil {
+			if !launchableImage(img) {
 				continue
 			}
 
-			// Only include available images
-			if img.Status != nil && *img.Status != "Available" {
-				continue
-			}
-
-			allImages = append(allImages, *img)
+			allImages = append(allImages, img.DescribeImagesResponseBodyImagesImage)
 		}
 
 		// Check if there are more pages
@@ -337,13 +336,13 @@ func buildDescribeImagesRequest(region string, imageIDs []string, filters map[st
 		return nil, fmt.Errorf("invalid image query: %w", err)
 	}
 
-	// Preserve exact ContainerOS pins: a cn-hangzhou live query confirmed the
-	// Lifsea 20260519 pin is hidden unless ShowExpired=true (#29). This does not
-	// establish launch eligibility for every image or every region. ACK public
-	// compatibility and Linux/disk checks are enforced by the image provider.
+	// Only explicit pins opt into ShowExpired discovery. A cn-hangzhou live query
+	// needed it for Lifsea 20260519 (#29); family/name/tag discovery must not widen
+	// to expired subscriptions. describeUsableImages also requires Usable=true.
 	request := &ecs.DescribeImagesRequest{
 		RegionId:    tea.String(region),
-		ShowExpired: tea.Bool(true),
+		ShowExpired: tea.Bool(len(imageIDs) > 0),
+		Status:      tea.String("Available"),
 	}
 
 	if len(imageIDs) > 0 {
@@ -407,7 +406,13 @@ func (c *DefaultECSClient) DescribeCapacityReservations(ctx context.Context, id 
 	return response, nil
 }
 
-// DescribePrice implements ECSClient interface
+// DescribeOfferingPrice preserves the complete hourly billing configuration.
+// It is optional on ECSClient so inventory-only adapters need not implement pricing.
+func (c *DefaultECSClient) DescribeOfferingPrice(ctx context.Context, request *ecs.DescribePriceRequest) (*ecs.DescribePriceResponse, error) {
+	return callSDK(ctx, func() (*ecs.DescribePriceResponse, error) { return c.withContext(ctx).DescribePrice(request) })
+}
+
+// DescribePrice implements the legacy instance-type-only ECSClient operation.
 func (c *DefaultECSClient) DescribePrice(ctx context.Context, instanceType string) (*ecs.DescribePriceResponse, error) {
 
 	request := &ecs.DescribePriceRequest{

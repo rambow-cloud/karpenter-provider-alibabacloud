@@ -5,18 +5,20 @@ Start with an issue using the bug, feature, or compatibility form. Record the pr
 Create one feature branch per primary issue:
 
 ```sh
-git switch main
-git pull --ff-only origin main
+git switch dev
+git pull --ff-only origin dev
 git switch -c feat/123-karpenter-compatibility
 ```
 
-Use `feat/<issue-number>-<short-description>` for all implementation work, including fixes and tooling. Use a conventional PR title such as `feat: support Karpenter v1.14.1` or `fix: scope instance discovery to the current cluster`. Fill the PR template and include `Closes #123` for the primary issue. Additional issues may be linked in the same PR when their acceptance criteria are completed by that change.
+Use `feat/<issue-number>-<short-description>` for all implementation work, including fixes and tooling, and target **dev**. Prefer one issue per PR. Use a conventional PR title such as `feat: support Karpenter v1.14.1` or `fix: scope instance discovery to the current cluster`. Fill the PR template and include `Closes #123` for the primary issue.
 
 Descriptions use lowercase letters and digits separated by hyphens; dots are also allowed for pinned version numbers, for example `feat/123-karpenter-v1.14.1`.
 
-PR policy checks validate the branch, title, closing reference, and required sections. Fork PRs run with read-only permissions. Squash merging keeps one logical change per PR; GitHub closes linked issues when the PR reaches the default branch.
+PR policy checks validate the branch, target, title, closing reference, and required sections. Fork PRs run with read-only permissions. Squash merging keeps one logical change per PR. GitHub only automatically closes linked issues on the default branch; after a reviewed PR passes its required checks and merges into dev, explicitly close its issue as completed and record the PR, dev commit, checks and any remaining release gates. Project Done means that issue's acceptance criteria are complete in dev; it does not claim main delivery or ACK runtime acceptance.
 
-The main branch requires a pull request, linear history, and the `policy` and `validation` checks. Stacked PRs may target their dependency branch until the preceding PR is merged.
+The main branch requires a pull request, linear history, and the `policy` and `validation` checks. Implementation PRs target dev. Once the development batch is complete, rebase dev onto the latest main, resolve conflicts and validate the resulting commit before opening a **dev -> main** integration PR. Preserve main history and use the repository's existing squash merge policy for final delivery. Coordinate any required dev force push and use `--force-with-lease`.
+
+The current main checkpoint contains completed implementation issues #15, #16, #18, #29, #51, #52, #67, #74, #76, #79 and #81. Integration policy requires each tracked issue to be closed as **completed**; API errors and not-planned closures still block integration. On 2026-10-12 the maintainer requested integrating this accepted checkpoint and then running bounded KWOK, before deferred live ACK acceptance. #5/#23 remain separate release/ACK gates, and #20 remains an independent Spot feature. They are not closed or accepted by a main merge or KWOK result. A main checkpoint is a development candidate, not a stable release or proof of actual provider behavior on ACK. See `.github/scripts/pr_policy.py` when defining the next accepted implementation batch.
 
 The project uses Todo, In Progress, and Done. Move an issue to In Progress when its feature branch is created. Keep it there while its PR is open. Move it to Done only after the PR is merged and required validation is complete. The exact upstream stable version is pinned in each compatibility milestone; later releases receive a separate issue and milestone.
 

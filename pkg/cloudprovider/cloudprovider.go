@@ -19,7 +19,6 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instanceprofile"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instancetype"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/launchtemplate"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/pricing"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/securitygroup"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/vswitch"
@@ -44,6 +44,7 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -60,7 +61,8 @@ var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
 // CloudProvider implements the Karpenter CloudProvider interface for Alibaba Cloud.
 type CloudProvider struct {
 	// Kubernetes client for accessing cluster resources
-	kubeClient client.Client
+	kubeClient   client.Client
+	launchReader client.Reader
 
 	// Providers for Alibaba Cloud resources
 	instanceProvider        *instance.Provider
@@ -76,6 +78,7 @@ type CloudProvider struct {
 
 	clusterNetworkConfig *cluster.NetworkConfig
 	unavailableOfferings *cache.UnavailableOfferingsCache
+	ackNodePoolProvider  *nodepool.Provider
 }
 
 // New creates a new CloudProvider with injected dependencies
@@ -84,6 +87,7 @@ func New(
 	instanceProvider *instance.Provider,
 	recorder events.Recorder,
 	kubeClient client.Client,
+	launchReader client.Reader,
 	imageFamilyProvider *imagefamily.Provider,
 	securityGroupProvider *securitygroup.Provider,
 	vswitchProvider *vswitch.Provider,
@@ -93,9 +97,11 @@ func New(
 	bootstrapProvider *bootstrap.Provider,
 	networkConfig *cluster.NetworkConfig,
 	unavailableOfferings *cache.UnavailableOfferingsCache,
+	ackNodePoolProviders ...*nodepool.Provider,
 ) *CloudProvider {
-	return &CloudProvider{
+	c := &CloudProvider{
 		kubeClient:              kubeClient,
+		launchReader:            launchReader,
 		instanceProvider:        instanceProvider,
 		instanceTypeProvider:    instanceTypeProvider,
 		imageFamilyProvider:     imageFamilyProvider,
@@ -108,6 +114,10 @@ func New(
 		clusterNetworkConfig:    networkConfig,
 		unavailableOfferings:    unavailableOfferings,
 	}
+	if len(ackNodePoolProviders) > 0 {
+		c.ackNodePoolProvider = ackNodePoolProviders[0]
+	}
+	return c
 }
 
 const (
@@ -149,11 +159,40 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		return nil, cloudprovider.NewCreateError(err, "ClusterOwnershipInvalid", err.Error())
 	}
 
-	// 2. Verify NodeClass is ready
+	if nodeClaim.UID != "" {
+		if recovered, err := c.recoverLaunch(ctx, nodeClaim, tags); err != nil || recovered != nil {
+			return recovered, err
+		}
+	}
+	// Recover first: core deletes an unlaunched claim on NodeClassNotReady.
 	if err := nodeClassReadinessError(nodeClass); err != nil {
+		if nodeClaim.UID != "" {
+			_, attempt, readErr := c.readLaunch(ctx, nodeClaim)
+			if readErr != nil {
+				return nil, readErr
+			}
+			if attempt.Token != "" && !attempt.Rejected {
+				return nil, fmt.Errorf("unresolved launch waiting for NodeClass: %v", err)
+			}
+		}
 		return nil, err
 	}
 	// Refresh concrete image IDs against the actual ACK version before any launch.
+	launchSpec, err := nodeClass.LaunchSpec()
+	if err != nil {
+		return nil, err
+	}
+	nodeClass = nodeClass.DeepCopy()
+	nodeClass.Spec = launchSpec
+	if c.ackNodePoolProvider != nil {
+		pool, err := c.ackNodePoolProvider.Resolve(ctx, nodeClass)
+		if err != nil {
+			return nil, err
+		}
+		if !equality.Semantic.DeepEqual(pool, nodeClass.Status.ACKNodePool) {
+			return nil, fmt.Errorf("native ACK resource configuration changed; wait for NodeClass status refresh")
+		}
+	}
 	// Old status may lack OS information or have been resolved before an upgrade.
 	if c.imageFamilyProvider != nil && c.imageFamilyProvider.ACKCompatibilityEnabled() {
 		images, err := c.imageFamilyProvider.RevalidateForLaunch(ctx, nodeClass, nodeClass.Status.Images)
@@ -167,6 +206,16 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		nodeClass.Status.Images = images
 	}
 
+	if nodeClaim.UID == "" {
+		return nil, fmt.Errorf("persisted NodeClaim UID is required for creation")
+	}
+	if err := imagefamily.ValidateBootImages(nodeClass.Spec, nodeClass.Status.Images); err != nil {
+		return nil, err
+	}
+	nodeClass.Status.Images = filterImagesForNodeLabels(nodeClass.Status.Images, nodeClaim.Labels)
+	if len(nodeClass.Status.Images) == 0 {
+		return nil, fmt.Errorf("no image supports the requested node labels; Ubuntu cannot enable image acceleration")
+	}
 	hash, err := nodeClass.Hash()
 	if err != nil {
 		return nil, fmt.Errorf("hash nodeclass: %w", err)
@@ -179,7 +228,7 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	// Filter instance types by NodeClaim requirements
-	filteredTypes := filterInstanceTypesByImages(c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements), nodeClass.Status.Images)
+	filteredTypes := filterBootInstanceTypes(c.filterInstanceTypesByRequirements(ctx, instanceTypes, nodeClaim.Spec.Requirements), nodeClass.Status.Images, nodeClass)
 	if len(filteredTypes) == 0 {
 		return nil, fmt.Errorf("no instance types match the requirements with a compatible image architecture")
 	}
@@ -214,6 +263,26 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 		Taints:          convertToCoreTaints(nodeClaim.Spec.Taints),
 		CustomUserData:  lo.ToPtr(getCustomUserData(nodeClass)),
 	}
+	if nodeClass.Status.ACKNodePool == nil {
+		return nil, fmt.Errorf("native ACK bootstrap pool is unresolved")
+	}
+	bootstrapOpts.ClusterType = bootstrap.ACKClusterType
+	bootstrapOpts.ClusterID = nodeClass.Status.ACKNodePool.ClusterID
+	bootstrapOpts.ACKNodePoolID = nodeClass.Status.ACKNodePool.ID
+	bootstrapOpts.ACKResourceConfiguration, err = nodeClass.ResourceConfigurationHash()
+	if err != nil {
+		return nil, err
+	}
+	for _, image := range nodeClass.Status.Images {
+		if strings.HasPrefix(image.ImageType, "ContainerOS") {
+			bootstrapOpts.FormatDisk = true
+		}
+	}
+	diskLayout, err := v1alpha1.NormalizeDisks(nodeClass.Spec)
+	if err != nil {
+		return nil, err
+	}
+	bootstrapOpts.Disks = &diskLayout
 
 	userData, err := c.bootstrapProvider.GenerateUserData(ctx, bootstrapOpts)
 	if err != nil {
@@ -233,7 +302,10 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	// 11. Convert instance to NodeClaim
-	createdNodeClaim := c.convertInstanceToNodeClaim(ctx, inst, nodeClaim, filteredTypes, nodeClass.Spec.ClusterID)
+	createdNodeClaim, err := c.convertInstanceToNodeClaim(ctx, inst, nodeClaim, filteredTypes, nodeClass.Spec.ClusterID)
+	if err != nil {
+		return nil, err
+	}
 
 	// 12. Set NodeClass hash annotation for drift detection
 	setNodeClassHashAnnotation(createdNodeClaim, hash)
@@ -307,18 +379,14 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*coreapis.N
 	}
 
 	// Find matching instance type for capacity information
-	var capacity corev1.ResourceList
-	var allocatable corev1.ResourceList
+	capacity, allocatable, err := c.instanceResources(ctx, inst)
+	if err != nil {
+		return nil, err
+	}
 	var matchedIT *instancetype.InstanceType
 	for _, it := range instanceTypes {
 		if it.Name == inst.InstanceType {
-			var err error
 			matchedIT = it
-			clusterID := inst.Tags[v1alpha1.TagClusterID]
-			capacity, allocatable, err = c.calculateCapacityAndAllocatable(ctx, it, clusterID)
-			if err != nil {
-				return nil, err
-			}
 			break
 		}
 	}
@@ -377,14 +445,11 @@ func (c *CloudProvider) List(ctx context.Context) ([]*coreapis.NodeClaim, error)
 	nodeClaims := make([]*coreapis.NodeClaim, 0, len(instances))
 	for _, inst := range instances {
 		// Find instance type capacity
-		var capacity corev1.ResourceList
-		var allocatable corev1.ResourceList
-		matchedIT := instanceTypeMap[inst.InstanceType]
-		if matchedIT != nil {
-			// Ignore error here, just skip if calculation fails
-			clusterID := inst.Tags[v1alpha1.TagClusterID]
-			capacity, allocatable, _ = c.calculateCapacityAndAllocatable(ctx, matchedIT, clusterID)
+		capacity, allocatable, err := c.instanceResources(ctx, inst)
+		if err != nil {
+			return nil, err
 		}
+		matchedIT := instanceTypeMap[inst.InstanceType]
 
 		// Parse launch time
 		launchTime := parseLaunchTime(ctx, inst.InstanceID, inst.CreationTime)
@@ -481,7 +546,8 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 		instanceTypes,
 		nodePool.Spec.Template.Spec.Requirements,
 	)
-	filteredTypes = filterInstanceTypesByImages(filteredTypes, nodeClass.Status.Images)
+	filteredTypes = filterBootInstanceTypes(filteredTypes, filterImagesForNodeLabels(nodeClass.Status.Images, nodePool.Spec.Template.Labels), nodeClass)
+	filteredTypes = filterInstanceTypesByTemplate(filteredTypes, nodeClass)
 
 	// Log filtered instance types (only at debug level)
 	logger.V(1).Info("Filtered instance types", "count", len(filteredTypes))
@@ -500,11 +566,9 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 	// Log available zones (only at debug level)
 	logger.V(1).Info("Available zones", "zones", availableZones)
 
-	// 6. Update pricing information (if methods exist)
-	// Note: Pricing provider may not have these exact methods, skip for now
-
 	// 7. Convert to core InstanceType format
 	coreInstanceTypes := make([]*cloudprovider.InstanceType, 0, len(filteredTypes))
+	var resourceErr error
 	for _, it := range filteredTypes {
 		// Validate instance type has required fields
 		if it.CPU == nil || it.Memory == nil {
@@ -512,11 +576,19 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 			continue
 		}
 
-		capacity, _, err := c.calculateCapacityAndAllocatable(ctx, it, nodeClass.Spec.ClusterID)
+		launchSpec, err := nodeClass.LaunchSpec()
 		if err != nil {
+			return nil, err
+		}
+		effective := nodeClass.DeepCopy()
+		effective.Spec = launchSpec
+		model, err := c.resourceModel(ctx, it, effective, selectBootImage(nodeClass.Status.Images, it, nodeClass).ID)
+		if err != nil {
+			resourceErr = err
 			logger.Error(err, "failed to calculate capacity", "instanceType", it.Name)
 			continue
 		}
+		capacity := model.Capacity
 
 		// Create one offering per (zone, capacityType) combination.
 		// Offerings are created for ALL known capacity types in each configured zone, including
@@ -539,6 +611,11 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 				capTypeAvailability[ct] = true // has stock
 			}
 			for capType, isAvailable := range capTypeAvailability {
+				quote, quoteErr := c.offeringQuote(nodeClass, it, filterImagesForNodeLabels(nodeClass.Status.Images, nodePool.Spec.Template.Labels), zoneID, capType)
+				isAvailable = isAvailable && quoteErr == nil
+				if quoteErr != nil {
+					logger.V(1).Info("offering awaits a valid hourly quote", "instanceType", it.Name, "zone", zoneID, "capacityType", capType, "error", quoteErr)
+				}
 				if c.unavailableOfferings != nil {
 					isAvailable = isAvailable && c.unavailableOfferings.IsAvailable(it.Name, zoneID, capType)
 				}
@@ -547,7 +624,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zoneID),
 						scheduling.NewRequirement(coreapis.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capType),
 					),
-					Price:     0.0, // Pricing not implemented yet
+					Price:     quote.Hourly,
 					Available: isAvailable,
 				})
 			}
@@ -567,23 +644,6 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 			"instanceType", it.Name,
 			"offerings", len(offerings))
 
-		// Calculate overhead once and distribute appropriately
-		totalOverhead := calculateOverhead(ctx, it)
-		// Split overhead among different components
-		// This is a simplified approach - in production, each should be configurable
-		evictionThreshold := corev1.ResourceList{
-			corev1.ResourceMemory: divideQuantity(totalOverhead[corev1.ResourceMemory], 3),
-			corev1.ResourceCPU:    divideQuantity(totalOverhead[corev1.ResourceCPU], 3),
-		}
-		kubeReserved := corev1.ResourceList{
-			corev1.ResourceMemory: divideQuantity(totalOverhead[corev1.ResourceMemory], 3),
-			corev1.ResourceCPU:    divideQuantity(totalOverhead[corev1.ResourceCPU], 3),
-		}
-		systemReserved := corev1.ResourceList{
-			corev1.ResourceMemory: divideQuantity(totalOverhead[corev1.ResourceMemory], 3),
-			corev1.ResourceCPU:    divideQuantity(totalOverhead[corev1.ResourceCPU], 3),
-		}
-
 		// Collect unique zones and capacity types across all offerings for InstanceType-level Requirements.
 		offeringZones := lo.Keys(lo.SliceToMap(offerings, func(o *cloudprovider.Offering) (string, struct{}) {
 			return o.Requirements.Get(corev1.LabelTopologyZone).Any(), struct{}{}
@@ -599,11 +659,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 			Capacity:     capacity,
 			Offerings:    offerings,
 			Requirements: buildInstanceTypeRequirements(it, options.FromContext(ctx).Region, offeringZones, offeringCapTypes),
-			Overhead: &cloudprovider.InstanceTypeOverhead{
-				EvictionThreshold: evictionThreshold,
-				KubeReserved:      kubeReserved,
-				SystemReserved:    systemReserved,
-			},
+			Overhead:     model.Overhead,
 		}
 
 		coreInstanceTypes = append(coreInstanceTypes, coreIT)
@@ -615,6 +671,9 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 			"totalInstanceTypes", len(instanceTypes),
 			"filteredInstanceTypes", len(filteredTypes),
 			"availableZones", availableZones)
+		if resourceErr != nil {
+			return nil, fmt.Errorf("no instance types available matching requirements: %w", resourceErr)
+		}
 		return nil, fmt.Errorf("no instance types available matching requirements")
 	}
 
@@ -816,9 +875,15 @@ func BuildInstanceTags(nodeClaim *coreapis.NodeClaim, nodeClass *v1alpha1.ECSNod
 		tags[v1alpha1.TagNodeClaim] = nodeClaim.Name
 	}
 
-	// Layer 3: user-defined tags — highest priority, may override layers 1 and 2
+	// Layer 3: user tags. Restore identity even when admission is bypassed.
 	for k, v := range nodeClass.Spec.Tags {
 		tags[k] = v
+	}
+	if nodeClaim.UID != "" {
+		tags[v1alpha1.TagNodeClaimUID] = string(nodeClaim.UID)
+	}
+	if nodeClaim.Name != "" {
+		tags[v1alpha1.TagNodeClaim] = nodeClaim.Name
 	}
 
 	return tags
@@ -976,7 +1041,12 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 	if len(instanceTypes) == 0 || len(images) == 0 || len(vswitches) == 0 || len(securityGroups) == 0 {
 		return "", fmt.Errorf("missing required parameters for instance creation")
 	}
-	instanceTypes = filterInstanceTypesByImages(instanceTypes, images)
+	if nodeClass.Spec.LaunchTemplateID != nil {
+		if err := imagefamily.ValidateBootImages(nodeClass.Spec, images); err != nil {
+			return "", err
+		}
+	}
+	instanceTypes = filterInstanceTypesByTemplate(filterBootInstanceTypes(instanceTypes, images, nodeClass), nodeClass)
 	if len(instanceTypes) == 0 {
 		return "", fmt.Errorf("no instance types have a known compatible image architecture")
 	}
@@ -996,10 +1066,11 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 	}
 	securityGroupIDs = securitygroups.NormalizeIDs(securityGroupIDs)
 
-	// Derive capacity type from NodeClaim requirements (karpenter.sh/capacity-type),
-	// then translate it into the ECS SpotStrategy request parameter. Both steps are
-	// centralized in pkg/utils/ecs so the spot semantics stay consistent everywhere.
-	capacityType := capacityTypeFromRequirements(nodeClaim.Spec.Requirements)
+	// Admit only fresh quotes for compatible capacity types, inventory and zones.
+	candidates, err := c.pricedLaunchCandidates(ctx, nodeClaim, nodeClass, instanceTypes, images, vswitches)
+	if err != nil {
+		return "", err
+	}
 
 	// Build data disks once (independent of instance type).
 	var dataDisks []instance.DataDisk
@@ -1019,20 +1090,15 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		}
 	}
 
-	// Outer loop: iterate instance types in Karpenter's priority order.
-	// For each instance type, try all vSwitches (inner fallback). This mirrors
-	// the upstream AWS provider behaviour — if the first instance type has no
-	// capacity in any zone, we fall back to the next best fit rather than
-	// failing the whole launch.
+	// Try the lowest-priced compatible tuples first, retaining Karpenter's Spot
+	// precedence and the existing capacity/IP feedback and idempotency guards.
 	logger := log.FromContext(ctx)
 	var lastErr error
-	for _, it := range instanceTypes {
-		// Pick an image whose architecture matches this instance type. The
-		// NodeClass may resolve images for multiple architectures; blindly
-		// taking the first one can hand an arm64 instance an x86_64 image
-		// (or vice versa), which ECS rejects. For single-arch NodeClasses
-		// this is a no-op.
-		image := selectImageForArchitecture(images, it.Architecture)
+	for _, candidate := range candidates {
+		it := candidate.instanceType
+		capacityType := candidate.capacityType
+		// The candidate image is the exact compatible image used for its quote.
+		image := candidate.image
 		if image.ID == "" {
 			continue // Never submit a mismatched architecture to ECS.
 		}
@@ -1056,6 +1122,15 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			DataDisks:           dataDisks,
 			SpotStrategy:        ecsutil.SpotStrategyForCapacityType(capacityType, nodeClass.Spec.SpotStrategy),
 		}
+		baseOpts.Tags = make(map[string]string, len(tags)+1)
+		for key, value := range tags {
+			baseOpts.Tags[key] = value
+		}
+		baseOpts.Tags[v1alpha1.TagResourceModel] = candidate.snapshot
+		if nodeClass.Spec.LaunchTemplateID != nil {
+			baseOpts.LaunchTemplateID = *nodeClass.Spec.LaunchTemplateID
+			baseOpts.LaunchTemplateVersion = nodeClass.Spec.LaunchTemplateVersion
+		}
 		if capacityType == v1alpha1.CapacityTypeSpot && nodeClass.Spec.SpotPriceLimit != nil {
 			baseOpts.SpotPriceLimit = *nodeClass.Spec.SpotPriceLimit
 		}
@@ -1065,13 +1140,22 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			baseOpts.Ipv6AddressCount = &one
 		}
 
-		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, c.instanceProvider.Create, c.unavailableOfferings)
+		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, []v1alpha1.VSwitch{candidate.vswitch}, func(ctx context.Context, opts instance.CreateOptions) (string, error) {
+			if nodeClaim.UID == "" {
+				return c.instanceProvider.Create(ctx, opts)
+			}
+			hash, err := nodeClass.Hash()
+			if err != nil {
+				return "", err
+			}
+			return c.launchInstance(ctx, nodeClaim, opts, hash)
+		}, c.unavailableOfferings)
 		if err == nil {
 			return instanceID, nil
 		}
 
 		if errors.IsInsufficientCapacityError(err) {
-			logger.Info("instance type unavailable in all zones, trying next instance type",
+			logger.Info("priced launch candidate unavailable, trying next candidate",
 				"instanceType", it.Name, "error", err)
 			lastErr = err
 			continue
@@ -1080,7 +1164,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		// a different instance type won't fix a bad parameter.
 		return "", fmt.Errorf("failed to create instance: %w", err)
 	}
-	return "", fmt.Errorf("all instance types exhausted across all zones (%d types tried), last error: %w", len(instanceTypes), lastErr)
+	return "", fmt.Errorf("all priced launch candidates exhausted (%d tried), last error: %w", len(candidates), lastErr)
 }
 
 // vswitchFallbackCreate tries vswitches in order, falling back to the next on capacity or IP-exhaustion
@@ -1156,16 +1240,17 @@ func validateRAMRoleForCreate(nodeClass *v1alpha1.ECSNodeClass) (string, error) 
 	return *nodeClass.Status.RAMRole, nil
 }
 
-func (c *CloudProvider) convertInstanceToNodeClaim(ctx context.Context, inst *instance.Instance, original *coreapis.NodeClaim, instanceTypes []*instancetype.InstanceType, clusterID string) *coreapis.NodeClaim {
+func (c *CloudProvider) convertInstanceToNodeClaim(ctx context.Context, inst *instance.Instance, original *coreapis.NodeClaim, instanceTypes []*instancetype.InstanceType, clusterID string) (*coreapis.NodeClaim, error) {
 	// Find instance type info
-	var capacity corev1.ResourceList
-	var allocatable corev1.ResourceList
+	capacity, allocatable, err := c.instanceResources(ctx, inst)
+	if err != nil {
+		return nil, err
+	}
 	var matchedIT *instancetype.InstanceType
 
 	for _, it := range instanceTypes {
 		if it.Name == inst.InstanceType {
 			matchedIT = it
-			capacity, allocatable, _ = c.calculateCapacityAndAllocatable(ctx, it, clusterID)
 			break
 		}
 	}
@@ -1177,7 +1262,7 @@ func (c *CloudProvider) convertInstanceToNodeClaim(ctx context.Context, inst *in
 	nodeClaim.Status.Allocatable = allocatable
 	nodeClaim.Status.ImageID = inst.ImageID
 	nodeClaim.Labels = instanceLabelsFromInstance(inst, matchedIT)
-	return nodeClaim
+	return nodeClaim, nil
 }
 
 func setNodeClassHashAnnotation(nodeClaim *coreapis.NodeClaim, hash string) {
@@ -1266,118 +1351,6 @@ func isSecurityGroupAllowed(instanceSGs []string, allowedSGs []v1alpha1.Security
 		allowedIDs = append(allowedIDs, sg.ID)
 	}
 	return securitygroups.EqualIDs(instanceSGs, allowedIDs)
-}
-
-// calculateOverhead calculates the overhead for a given instance type based on its capacity
-// Following AWS Karpenter's approach with vmMemoryOverheadPercent
-func calculateOverhead(ctx context.Context, instanceType *instancetype.InstanceType) corev1.ResourceList {
-	// Get the options
-	opts := options.FromContext(ctx)
-
-	// Calculate memory overhead based on percentage
-	memoryOverhead := resource.Quantity{}
-	if instanceType.Memory != nil {
-		// Calculate overhead as a percentage of total memory
-		overheadBytes := int64(math.Ceil(float64(instanceType.Memory.Value()) * opts.VMMemoryOverheadPercent))
-		memoryOverhead = *resource.NewQuantity(overheadBytes, resource.BinarySI)
-
-		// Ensure we have at least the fixed overhead as minimum
-		fixedOverhead, err := resource.ParseQuantity(opts.VMMemoryOverhead)
-		if err != nil {
-			// Log error and use a safe default
-			log.FromContext(ctx).V(1).Info("Failed to parse VMMemoryOverhead, using default",
-				"value", opts.VMMemoryOverhead,
-				"error", err)
-			fixedOverhead = resource.MustParse("100Mi")
-		}
-		if memoryOverhead.Cmp(fixedOverhead) < 0 {
-			memoryOverhead = fixedOverhead
-		}
-	}
-
-	// For CPU, we keep a fixed overhead similar to AWS approach
-	cpuOverhead := resource.MustParse("100m")
-
-	return corev1.ResourceList{
-		corev1.ResourceCPU:    cpuOverhead,
-		corev1.ResourceMemory: memoryOverhead,
-	}
-}
-
-// subtractQuantity subtracts b from a, returning zero if result is negative
-func subtractQuantity(a, b resource.Quantity) resource.Quantity {
-	result := a.DeepCopy()
-	result.Sub(b)
-	if result.Sign() < 0 {
-		return *resource.NewQuantity(0, result.Format)
-	}
-	return result
-}
-
-// divideQuantity divides quantity by divisor
-func divideQuantity(q resource.Quantity, divisor int64) resource.Quantity {
-	if divisor == 0 {
-		return *resource.NewQuantity(0, q.Format)
-	}
-	value := q.Value() / divisor
-	return *resource.NewQuantity(value, q.Format)
-}
-
-func resourcesSubtract(lhs, rhs corev1.ResourceList) corev1.ResourceList {
-	result := make(corev1.ResourceList, len(lhs))
-	for k, v := range lhs {
-		result[k] = v.DeepCopy()
-	}
-	for resourceName := range lhs {
-		current := lhs[resourceName]
-		if rhsValue, ok := rhs[resourceName]; ok {
-			current.Sub(rhsValue)
-		}
-		result[resourceName] = current
-	}
-	return result
-}
-
-// calculateCapacityAndAllocatable calculates capacity and allocatable resources for an instance type
-func (c *CloudProvider) calculateCapacityAndAllocatable(ctx context.Context, it *instancetype.InstanceType, clusterID string) (capacity, allocatable corev1.ResourceList, err error) {
-	if it.CPU == nil || it.Memory == nil {
-		return nil, nil, fmt.Errorf("instance type %s has nil CPU or Memory", it.Name)
-	}
-
-	// Create capacity ResourceList
-	capacity = corev1.ResourceList{
-		corev1.ResourceCPU:    *it.CPU,
-		corev1.ResourceMemory: *it.Memory,
-		corev1.ResourcePods:   *resource.NewQuantity(DefaultPodsLimit, resource.DecimalSI),
-	}
-
-	// Add GPU resources if available
-	if it.GPU != nil {
-		if it.GPU.Count != nil && it.GPU.Count.Value() > 0 {
-			capacity[v1alpha1.ResourceGPU] = *it.GPU.Count
-		}
-		if it.GPU.Memory != nil && it.GPU.Memory.Value() > 0 {
-			capacity[v1alpha1.ResourceGPUMemory] = *it.GPU.Memory
-		}
-	}
-
-	// Optimize ResourcePods based on network config
-	if c.clusterNetworkConfig != nil {
-		if c.clusterNetworkConfig.ClusterNetwork == "terway-eniip" {
-			capacity[corev1.ResourcePods] = *resource.NewQuantity(int64((it.EniQuantity-1)*it.EniPrivateIpAddressQuantity+3), resource.DecimalSI)
-			capacity[ResourcePodsForExclusiveEniEnabled] = *resource.NewQuantity(int64(it.EniQuantity)-1+3, resource.DecimalSI)
-		} else if c.clusterNetworkConfig.ClusterNetwork == "kube-flannel-ds" || c.clusterNetworkConfig.ClusterNetwork == "kube-flannel-ds-vxlan" {
-			if c.clusterNetworkConfig.MaxPods > 0 {
-				capacity[corev1.ResourcePods] = *resource.NewQuantity(c.clusterNetworkConfig.MaxPods, resource.DecimalSI)
-			}
-		}
-	}
-
-	// Calculate allocatable by subtracting overhead
-	overhead := calculateOverhead(ctx, it)
-	allocatable = resourcesSubtract(capacity, overhead)
-
-	return capacity, allocatable, nil
 }
 
 // parseLaunchTime parses instance creation time with fallback to current time

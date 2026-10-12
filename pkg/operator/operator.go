@@ -507,14 +507,14 @@ func NewOperator(ctx context.Context, coreOp *coreoperator.Operator) (*Operator,
 	unavailableOfferingsCache := cache.NewUnavailableOfferingsCacheWithTTL(opts.UnavailableOfferingCacheTTL)
 
 	// Initialize cluster network config
-	networkConfig, err := cluster.InitializeClusterNetworkConfig(csClient, opts.ClusterID)
+	networkConfig, err := cluster.InitializeClusterNetworkConfig(ctx, csClient, opts.ClusterID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize cluster network config: %w", err)
 	}
 	// Initialize providers
 	vswitchProvider := vswitch.NewProvider(opts.Region, vpcClient)
 	securityGroupProvider := securitygroup.NewProvider(opts.Region, ecsClient)
-	pricingProvider := pricing.NewProvider(opts.Region, ecsClient)
+	pricingProvider := pricing.NewProvider(opts.Region, ecsClient, pricing.WithContext(ctx))
 	bootstrapProvider := bootstrap.NewProvider(opts.Region, csClient)
 	launchTemplateProvider := launchtemplate.NewProvider(opts.Region, ecsClient)
 	instanceProfileProvider := instanceprofile.NewProvider(ramClient, opts.Region)

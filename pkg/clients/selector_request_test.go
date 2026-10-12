@@ -108,9 +108,7 @@ func TestBuildDescribeImagesRequestRejectsQueriesThatWouldWiden(t *testing.T) {
 	}
 }
 
-func TestBuildDescribeImagesRequestAlwaysSetsShowExpired(t *testing.T) {
-	// ShowExpired must always be true to allow querying ContainerOS / LifseaOS
-	// images that are hidden by default. See GH issue #13.
+func TestBuildDescribeImagesRequestScopesShowExpiredToExplicitPins(t *testing.T) {
 	tests := []struct {
 		name     string
 		imageIDs []string
@@ -141,8 +139,11 @@ func TestBuildDescribeImagesRequestAlwaysSetsShowExpired(t *testing.T) {
 			if req.ShowExpired == nil {
 				t.Fatal("ShowExpired must be set")
 			}
-			if *req.ShowExpired != true {
-				t.Fatalf("ShowExpired must be true, got %v", *req.ShowExpired)
+			if *req.ShowExpired != (len(tt.imageIDs) > 0) {
+				t.Fatalf("ShowExpired must match explicit pin strategy, got %v", *req.ShowExpired)
+			}
+			if req.Status == nil || *req.Status != "Available" {
+				t.Fatal("Usable query requires explicit Available status")
 			}
 		})
 	}

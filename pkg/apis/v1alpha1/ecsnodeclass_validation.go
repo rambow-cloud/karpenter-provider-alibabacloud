@@ -31,6 +31,9 @@ var imageNonWhitespaceRegex = regexp.MustCompile(`[^[:space:]]`)
 
 // Validate validates the ECSNodeClass spec
 func (nc *ECSNodeClass) Validate() error {
+	if err := ValidateNodeResourceConfiguration(nc.Spec); err != nil {
+		return err
+	}
 	if err := ValidateImageCompatibilityPolicy(nc.Spec); err != nil {
 		return err
 	}
@@ -80,6 +83,9 @@ func (nc *ECSNodeClass) Validate() error {
 }
 
 func ValidateImageCompatibilityPolicy(spec ECSNodeClassSpec) error {
+	if spec.ImageCompatibilityPolicy == "Custom" && !spec.ImagePrerequisitesVerified {
+		return fmt.Errorf("Custom images require imagePrerequisitesVerified=true")
+	}
 	if spec.ImageCompatibilityPolicy != "" && spec.ImageCompatibilityPolicy != "ACK" && spec.ImageCompatibilityPolicy != "Custom" {
 		return fmt.Errorf("imageCompatibilityPolicy must be ACK or Custom")
 	}
@@ -125,7 +131,9 @@ func (nc *ECSNodeClass) validateTags() error {
 		TagClusterID:            true,
 		TagNodePool:             true,
 		TagNodeClaim:            true,
+		TagNodeClaimUID:         true,
 		TagKubeletMaxPods:       true,
+		TagResourceModel:        true,
 		"kubernetes.io/cluster": true,
 	}
 	for key := range nc.Spec.Tags {

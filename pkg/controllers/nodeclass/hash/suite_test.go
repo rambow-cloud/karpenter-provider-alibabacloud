@@ -406,7 +406,7 @@ var _ = Describe("HashController", func() {
 			Expect(newHash).ToNot(Equal(originalHash))
 		})
 
-		It("should update hash when Kubelet changes", func() {
+		It("should update hash when native ACK pool selection changes", func() {
 			// Create and get initial hash
 			Expect(env.Client.Create(ctx, nodeClass)).To(Succeed())
 			_, err := hashController.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nodeClass)})
@@ -416,8 +416,9 @@ var _ = Describe("HashController", func() {
 			Expect(env.Client.Get(ctx, client.ObjectKeyFromObject(nodeClass), updated)).To(Succeed())
 			originalHash := updated.Annotations[v1alpha1.AnnotationECSNodeClassHash]
 
-			// Update Kubelet (included in drift hash)
-			updated.Spec.Kubelet = &v1alpha1.KubeletConfiguration{MaxPods: int32Ptr(42)}
+			// Native bootstrap pool selection participates in static drift.
+			poolID := "np-test"
+			updated.Spec.ACKNodePoolID = &poolID
 			Expect(env.Client.Update(ctx, updated)).To(Succeed())
 
 			// Reconcile again

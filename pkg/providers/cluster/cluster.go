@@ -4,147 +4,156 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
-	"k8s.io/klog/v2"
+	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 type NetworkConfig struct {
-	// ClusterNetwork is the network plugin name (e.g., terway, terway-eniip, kube-flannel-ds, kube-flannel-ds-vxlan)
-	ClusterNetwork string
-	// NodeCidrMask is the CIDR mask for node network
-	NodeCidrMask int
-	// MaxPods is the maximum number of pods per node, calculated from NodeCidrMask
-	MaxPods int64
-	// TrunkEniEnabled indicates if trunk ENI is enabled for terway-eniip
-	TrunkEniEnabled bool
-	// ExclusiveEniEnabled indicates if exclusive ENI mode is enabled (managed terway only)
+	ClusterNetwork      string
+	NodeCidrMask        int
+	MaxPods             int64
+	TrunkEniEnabled     bool
 	ExclusiveEniEnabled bool
-	// DualStack is true when cluster IpStack is "dual" (IPv6 dual-stack enabled)
-	DualStack bool
+	DualStack           bool
 }
 
 type ClusterEniConfig struct {
 	ENITrunking bool `json:"ENITrunking"`
 }
 
-// CalculateMaxPods calculates the maximum pods per node based on the CIDR mask
+// CalculateMaxPods uses the returned IPv4 node CIDR, bounded by ACK's Flannel quota.
+// Invalid/unknown masks never authorize density. Discovery reports their cause.
 func (nc *NetworkConfig) CalculateMaxPods() int64 {
-	if nc.NodeCidrMask > 0 && nc.NodeCidrMask < 32 {
-		return int64(math.Pow(2, 32-float64(nc.NodeCidrMask)))
+	if nc.NodeCidrMask <= 0 || nc.NodeCidrMask >= 32 {
+		return 0
 	}
-	return 0 // Default max pods
+	return min(int64(1)<<(32-nc.NodeCidrMask), 256)
 }
 
-// getClusterNetworkAddon retrieves network addon information from cluster
-func getClusterNetworkAddon(csClient clients.CSClient, clusterID string) (addonName string, addonVersion string, addonConfig *string, err error) {
-	addons := []string{"terway-eniip", "terway", "kube-flannel-ds", "kube-flannel-ds-vxlan"}
-	for _, addon := range addons {
-		resp, addonErr := csClient.GetClusterAddonInstance(context.Background(), clusterID, addon)
-		if addonErr != nil {
-			klog.Warningf("GetClusterAddonInstance(%s, %s) error: %v", clusterID, addon, addonErr)
-			continue
-		}
-		if resp.Body == nil {
-			klog.Warningf("GetClusterAddonInstance(%s, %s): response body is nil", clusterID, addon)
-			continue
-		}
-		if resp.Body.Name == nil {
-			klog.Warningf("GetClusterAddonInstance(%s, %s): response body.Name is nil, body=%+v", clusterID, addon, resp.Body)
-			continue
-		}
-		version := ""
-		if resp.Body.Version != nil {
-			version = *resp.Body.Version
-		}
-		return *resp.Body.Name, version, resp.Body.Config, nil
-	}
-	return "", "", nil, fmt.Errorf("no network addon found in cluster %s", clusterID)
+type addonLister interface {
+	ListClusterAddonInstances(context.Context, string) (*cs.ListClusterAddonInstancesResponse, error)
 }
 
-// InitializeClusterNetworkConfig initializes cluster network configuration
-// Implements the same logic as goatscaler's setClusterNetWorkConfig
-func InitializeClusterNetworkConfig(csClient clients.CSClient, clusterID string) (*NetworkConfig, error) {
+func getClusterNetworkAddon(ctx context.Context, csClient clients.CSClient, clusterID string) (string, *string, error) {
+	lister, ok := csClient.(addonLister)
+	if !ok {
+		return "", nil, fmt.Errorf("CS client cannot list installed network addons")
+	}
+	response, err := lister.ListClusterAddonInstances(ctx, clusterID)
+	if err != nil {
+		return "", nil, fmt.Errorf("list installed network addons: %w", err)
+	}
+	if response == nil || response.Body == nil || response.Body.Addons == nil {
+		return "", nil, fmt.Errorf("installed network addon metadata is incomplete")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
+	selected := ""
+	for _, addon := range response.Body.Addons {
+		if addon == nil || tea.StringValue(addon.Name) == "" {
+			return "", nil, fmt.Errorf("installed addon identity is incomplete")
+		}
+		name := *addon.Name
+		switch name {
+		case "terway", "terway-eniip", "kube-flannel-ds", "kube-flannel-ds-vxlan":
+		default:
+			continue
+		}
+		if tea.StringValue(addon.State) != "active" {
+			return "", nil, fmt.Errorf("network addon %s is not active", name)
+		}
+		if selected != "" {
+			return "", nil, fmt.Errorf("conflicting network addons %s and %s", selected, name)
+		}
+		selected = name
+	}
+	if selected == "" {
+		return "", nil, fmt.Errorf("no known active network addon in cluster %s", clusterID)
+	}
+	config, err := csClient.GetClusterAddonInstance(ctx, clusterID, selected)
+	if err != nil {
+		return "", nil, fmt.Errorf("read network addon configuration: %w", err)
+	}
+	if config == nil || config.Body == nil || tea.StringValue(config.Body.Name) != selected {
+		return "", nil, fmt.Errorf("network addon configuration identity is incomplete or mismatched")
+	}
+	if config.Body.State != nil && *config.Body.State != "active" {
+		return "", nil, fmt.Errorf("network addon %s changed activation state during discovery", selected)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
+	return selected, config.Body.Config, nil
+}
+
+// InitializeClusterNetworkConfig requires authoritative ACK metadata; it never
+// substitutes a CIDR or ignores query/configuration errors after startup failure.
+func InitializeClusterNetworkConfig(ctx context.Context, csClient clients.CSClient, clusterID string) (*NetworkConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is empty")
 	}
-
-	networkAddon, _, addonConfig, err := getClusterNetworkAddon(csClient, clusterID)
+	name, config, err := getClusterNetworkAddon(ctx, csClient, clusterID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get cluster network addon: %w", err)
+		return nil, err
 	}
-
-	// Get node CIDR mask and dual-stack setting from a single DescribeClusterDetail call
-	nodeCidrMask := 24 // default
-	dualStack := false
-	detail, err := csClient.DescribeClusterDetail(context.Background(), clusterID)
+	detail, err := csClient.DescribeClusterDetail(ctx, clusterID)
 	if err != nil {
-		klog.Warningf("failed to describe cluster detail for cluster %s: %v, using defaults", clusterID, err)
-	} else if detail != nil && detail.Body != nil {
-		if detail.Body.NodeCidrMask != nil {
-			if mask, err := strconv.Atoi(*detail.Body.NodeCidrMask); err == nil {
-				nodeCidrMask = mask
-			} else {
-				klog.Warningf("failed to parse NodeCidrMask %s for cluster %s, using default 24", *detail.Body.NodeCidrMask, clusterID)
-			}
-		}
-		if detail.Body.IpStack != nil {
-			// A cluster with IPv6 enabled reports IpStack as either "dual" or
-			// "ipv6" depending on the ACK cluster mode; both mean IPv6 is on and
-			// require assigning an IPv6 address to provisioned nodes. Treat both
-			// enum values as dual-stack. Anything else (e.g. "ipv4"/empty) is not.
-			switch strings.ToLower(strings.TrimSpace(*detail.Body.IpStack)) {
-			case "dual", "ipv6":
-				dualStack = true
-			}
-		}
+		return nil, fmt.Errorf("read cluster network detail: %w", err)
 	}
-
-	// Initialize network config with basic info
-	nc := &NetworkConfig{
-		ClusterNetwork:      networkAddon,
-		NodeCidrMask:        nodeCidrMask,
-		DualStack:           dualStack,
-		TrunkEniEnabled:     false,
-		ExclusiveEniEnabled: false,
-		MaxPods:             0,
+	if detail == nil || detail.Body == nil {
+		return nil, fmt.Errorf("cluster network detail is incomplete")
 	}
-
-	// Handle special cases based on network addon type
-	switch networkAddon {
-	case "terway-eniip":
-		// Parse terway-eniip configuration
-		if addonConfig != nil {
-			if err := parseTerwayEniipConfig(addonConfig, nc); err != nil {
-				klog.Warningf("failed to parse terway-eniip config for cluster %s: %v", clusterID, err)
-			} else {
-				klog.Infof("cluster %s has terway-eniip, trunk ENI enabled: %v", clusterID, nc.TrunkEniEnabled)
-			}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	nc := &NetworkConfig{ClusterNetwork: name}
+	switch strings.ToLower(strings.TrimSpace(tea.StringValue(detail.Body.IpStack))) {
+	case "ipv4":
+	case "dual", "ipv6":
+		nc.DualStack = true
+	default:
+		return nil, fmt.Errorf("cluster IP stack is missing or unsupported")
+	}
+	switch name {
+	case "terway-eniip", "terway":
+		if err := parseTerwayEniipConfig(config, nc); err != nil {
+			return nil, err
 		}
-
 	case "kube-flannel-ds", "kube-flannel-ds-vxlan":
-		klog.Infof("cluster %s uses flannel/terway network addon: %s", clusterID, networkAddon)
+		mask, err := strconv.Atoi(tea.StringValue(detail.Body.NodeCidrMask))
+		if err != nil || mask <= 0 || mask >= 32 {
+			return nil, fmt.Errorf("Flannel requires a valid IPv4 node CIDR mask")
+		}
+		nc.NodeCidrMask = mask
 		nc.MaxPods = nc.CalculateMaxPods()
 	}
-
 	return nc, nil
 }
 
-// parseTerwayEniipConfig parses the terway-eniip configuration from addon config string
-func parseTerwayEniipConfig(configStr *string, nc *NetworkConfig) error {
-	if configStr == nil {
-		return fmt.Errorf("config string is nil")
+func parseTerwayEniipConfig(config *string, nc *NetworkConfig) error {
+	if config == nil || *config == "" {
+		return fmt.Errorf("Terway configuration is missing")
 	}
-
-	eniConfig := ClusterEniConfig{}
-
-	if err := json.Unmarshal([]byte(*configStr), &eniConfig); err != nil {
-		return fmt.Errorf("failed to unmarshal terway-eniip config: %w", err)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(*config), &fields); err != nil || fields == nil {
+		return fmt.Errorf("Terway configuration must be a JSON object")
 	}
-
-	nc.TrunkEniEnabled = eniConfig.ENITrunking
+	// An omitted override means the addon's default false. Explicit null,
+	// strings or malformed values do not prove that standard mode is in use.
+	if raw, exists := fields["ENITrunking"]; exists {
+		var enabled *bool
+		if err := json.Unmarshal(raw, &enabled); err != nil || enabled == nil {
+			return fmt.Errorf("Terway ENITrunking must be a boolean")
+		}
+		nc.TrunkEniEnabled = *enabled
+	}
 	return nil
 }

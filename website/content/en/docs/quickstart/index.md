@@ -11,7 +11,7 @@ This guide targets a **fresh provider installation** on an existing ACK cluster.
 
 - ACK Kubernetes 1.34 or newer, working `kubectl` access and Helm 3.
 - Identify the ACK cluster ID, region, VPC, vSwitches and security groups; node networking must reach the API server.
-- The controller needs appropriate ECS, VPC, RAM and CS permissions. Public-image reads include `cs:DescribeClusterDetail`, `cs:DescribeKubernetesVersionMetadata` and `ecs:DescribeImages`.
+- The controller needs appropriate ECS, VPC, RAM and CS permissions. Public-image reads include `cs:DescribeClusterDetail`, `cs:DescribeKubernetesVersionMetadata`, `cs:ListClusterAddonInstances` and `ecs:DescribeImages`; pricing needs `ecs:DescribePrice`; native-pool discovery additionally needs `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`.
 - Prepare an ECS node RAM role separately from the controller's cloud API identity.
 - Keep the controller on an existing real node so its initial startup does not depend on nodes it provisions itself.
 
@@ -58,6 +58,9 @@ Configure the chart's `imagePullSecrets` for a private registry. Create NodeClas
 
 Save the following as `node-config.yaml`. Replace cluster ID, vSwitch, security group and the ECS node RAM role. The image-name pattern matches Alibaba Cloud Linux 3 amd64 images within the target ACK list. If no compatible candidate exists, NodeClass resolution fails; adjust selectors using the [image policy](../support/index.md).
 
+
+Select an existing active regular native ACK pool. The example pins `ackNodePoolID`; omission requires a unique default pool. Omit `spec.kubelet` and configure kubelet on that native pool. For ephemeral-storage, first follow [resource calibration](../support/index.md#optional-ephemeral-storage-calibration). These resource changes are in the **development candidate**; build the image, Chart and CRDs from the same tested commit.
+
 ```yaml
 apiVersion: karpenter.alibabacloud.com/v1alpha1
 kind: ECSNodeClass
@@ -65,6 +68,7 @@ metadata:
   name: default
 spec:
   clusterID: YOUR_ACK_CLUSTER_ID
+  ackNodePoolID: np-YOUR_EXISTING_ACK_POOL
   vSwitchSelectorTerms:
     - id: vsw-YOUR_VSWITCH_ID
   securityGroupSelectorTerms:

@@ -38,6 +38,12 @@ func (p *Provider) ACKCompatibilityEnabled() bool { return p.ack != nil }
 // ResolveForNodeClass resolves selectors using ACK's version-specific public image
 // IDs. ECS image-family queries alone may return an image ACK has not adopted yet.
 func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNodeClass) ([]v1alpha1.Image, error) {
+	spec, err := nc.LaunchSpec()
+	if err != nil {
+		return nil, err
+	}
+	nc = nc.DeepCopy()
+	nc.Spec = spec
 	if err := v1alpha1.ValidateImageSelectorTerms(nc.Spec.ImageSelectorTerms); err != nil {
 		return nil, err
 	}
@@ -56,7 +62,11 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 	}
 	var result []v1alpha1.Image
 	var incompatible error
+	prerequisites := &addonSnapshot{}
 	if nc.Spec.ImageCompatibilityPolicy == "Custom" {
+		if !nc.Spec.ImagePrerequisitesVerified {
+			return nil, fmt.Errorf("Custom images require imagePrerequisitesVerified=true")
+		}
 		for _, term := range nc.Spec.ImageSelectorTerms {
 			if term.ID == nil {
 				return nil, fmt.Errorf("Custom images require exact IDs")
@@ -98,6 +108,13 @@ func (p *Provider) ResolveForNodeClass(ctx context.Context, nc *v1alpha1.ECSNode
 					}
 					incompatible = err
 					continue // Automatic discovery returns viable alternatives only.
+				}
+				if err := p.validatePrerequisites(ctx, nc.Spec, candidate, prerequisites); err != nil {
+					if term.ID != nil {
+						return nil, err
+					}
+					incompatible = err
+					continue
 				}
 				result = append(result, candidate)
 				matched = true
@@ -152,7 +169,7 @@ func (p *Provider) RevalidateForLaunch(ctx context.Context, nc *v1alpha1.ECSNode
 }
 
 func resolvedImage(img ecs.DescribeImagesResponseBodyImagesImage, imageType string) v1alpha1.Image {
-	return v1alpha1.Image{ID: tea.StringValue(img.ImageId), Name: tea.StringValue(img.ImageName), Architecture: tea.StringValue(img.Architecture), OSType: strings.ToLower(tea.StringValue(img.OSType)), ImageType: imageType, CreationTime: tea.StringValue(img.CreationTime)}
+	return v1alpha1.Image{ID: tea.StringValue(img.ImageId), Name: tea.StringValue(img.ImageName), Architecture: tea.StringValue(img.Architecture), OSType: strings.ToLower(tea.StringValue(img.OSType)), OwnerAlias: tea.StringValue(img.ImageOwnerAlias), ImageType: imageType, CreationTime: tea.StringValue(img.CreationTime)}
 }
 
 // ValidateBootImages enforces the implemented bootstrap and disk layout boundary.
@@ -168,11 +185,6 @@ func ValidateBootImages(spec v1alpha1.ECSNodeClassSpec, images []v1alpha1.Image)
 		if !strings.HasPrefix(img.ImageType, "ContainerOS") {
 			continue
 		}
-		// The current launch-template path does not propagate template data disks
-		// to RunInstances. Reject it rather than claiming its disk layout is applied.
-		if spec.LaunchTemplateID != nil {
-			return fmt.Errorf("ContainerOS with launchTemplateID is unsupported; use image selectors and one explicit data disk")
-		}
 		disks, err := v1alpha1.NormalizeDisks(spec)
 		if err != nil {
 			return err
@@ -182,6 +194,9 @@ func ValidateBootImages(spec v1alpha1.ECSNodeClassSpec, images []v1alpha1.Image)
 		}
 		if strings.Contains(disks.DataDisks[0].Category, "ephemeral") {
 			return fmt.Errorf("ContainerOS requires a persistent cloud data disk")
+		}
+		if disks.DataDisks[0].SnapshotID != "" {
+			return fmt.Errorf("ContainerOS data disk must be newly initialized, not restored from a snapshot")
 		}
 	}
 	return nil

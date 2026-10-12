@@ -49,10 +49,20 @@ type ECSNodeClassList struct {
 // +kubebuilder:object:generate=true
 // +kubebuilder:object:root=false
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.vSwitchSelectorTerms)",message="spec.vSwitchSelectorTerms is required when launchTemplateID is not specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.tags) || !('karpenter.alibabacloud.com/resource-model' in self.tags)",message="resource-model is a reserved provider tag"
+// +kubebuilder:validation:XValidation:rule="!has(self.kubelet)",message="ACK attach scripts cannot apply spec.kubelet overrides; configure the selected native ACK node pool"
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.securityGroupSelectorTerms)",message="spec.securityGroupSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.imageSelectorTerms)",message="spec.imageSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy != 'Custom' || has(self.launchTemplateID) || (has(self.imageSelectorTerms) && self.imageSelectorTerms.all(t, has(t.id)))",message="Custom image compatibility requires exact image IDs"
+// +kubebuilder:validation:XValidation:rule="!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy != 'Custom' || (has(self.imagePrerequisitesVerified) && self.imagePrerequisitesVerified)",message="Custom images require explicit prerequisite verification"
 type ECSNodeClassSpec struct {
+	// ACKNodePoolID selects the native ACK bootstrap pool. Omitted selects its unique default.
+	// +optional
+	// +kubebuilder:validation:Pattern="^np[-a-zA-Z0-9]+$"
+	ACKNodePoolID *string `json:"ackNodePoolID,omitempty"`
+	// NodeFilesystem is measured kubelet nodefs data for one exact image and launch layout.
+	// +optional
+	NodeFilesystem *NodeFilesystem `json:"nodeFilesystem,omitempty"`
 	// ClusterID is the ACK cluster ID
 	// +optional
 	ClusterID string `json:"clusterID,omitempty"`
@@ -88,6 +98,11 @@ type ECSNodeClassSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=ACK;Custom
 	ImageCompatibilityPolicy string `json:"imageCompatibilityPolicy,omitempty"`
+	// ImagePrerequisitesVerified confirms user validation of prerequisites that
+	// ACK/ECS metadata cannot prove, such as custom provenance and GPU/Ubuntu integration.
+	// Known incompatibilities and hardware checks are never bypassed.
+	// +optional
+	ImagePrerequisitesVerified bool `json:"imagePrerequisitesVerified,omitempty"`
 
 	// Role is the name of the RAM role to use for the instance
 	// +optional
@@ -122,7 +137,7 @@ type ECSNodeClassSpec struct {
 	// +kubebuilder:validation:MaxProperties=64
 	Tags map[string]string `json:"tags,omitempty"`
 
-	// Kubelet defines Kubelet configuration overrides
+	// Kubelet overrides are rejected for ACK; configure the native ACK node pool.
 	// +optional
 	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 
@@ -429,6 +444,15 @@ type MetadataOptions struct {
 // +kubebuilder:object:generate=true
 // +kubebuilder:object:root=false
 type ECSNodeClassStatus struct {
+	// ACKNodePool is the resolved bootstrap pool and its resource-affecting kubelet settings.
+	// +optional
+	ACKNodePool *ResolvedACKNodePool `json:"ackNodePool,omitempty"`
+	// ResourceConfigurationHash binds nodefs measurements to resolved launch settings.
+	// +optional
+	ResourceConfigurationHash string `json:"resourceConfigurationHash,omitempty"`
+	// LaunchTemplate is the concrete version and disk layout used by launch.
+	// +optional
+	LaunchTemplate *ResolvedLaunchTemplate `json:"launchTemplate,omitempty"`
 	// Ready indicates whether the ECSNodeClass is ready to provision instances
 	// +optional
 	Ready bool `json:"ready,omitempty"`
@@ -452,6 +476,27 @@ type ECSNodeClassStatus struct {
 	// Conditions contains the current conditions of the ECSNodeClass
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// ResolvedLaunchTemplate contains no credentials or template userdata.
+// +kubebuilder:object:generate=true
+type ResolvedLaunchTemplate struct {
+	ID           string                 `json:"id"`
+	Version      int64                  `json:"version"`
+	InstanceType string                 `json:"instanceType,omitempty"`
+	Disks        NormalizedDisks        `json:"disks"`
+	Pricing      *LaunchTemplatePricing `json:"pricing,omitempty"`
+}
+
+// LaunchTemplatePricing records billable template settings without credentials.
+// +kubebuilder:object:generate=true
+type LaunchTemplatePricing struct {
+	InternetChargeType      string `json:"internetChargeType,omitempty"`
+	InternetMaxBandwidthOut int32  `json:"internetMaxBandwidthOut,omitempty"`
+	IoOptimized             string `json:"ioOptimized,omitempty"`
+	SpotDuration            *int32 `json:"spotDuration,omitempty"`
+	// UnsupportedReason prevents quotes that omit inherited billable settings.
+	UnsupportedReason string `json:"unsupportedReason,omitempty"`
 }
 
 // VSwitch represents a resolved VSwitch
@@ -498,6 +543,10 @@ type Image struct {
 	// OSType is obtained from ECS. This provider supports Linux only.
 	// +optional
 	OSType string `json:"osType,omitempty"`
+
+	// OwnerAlias is the ECS image source for pricing.
+	// +optional
+	OwnerAlias string `json:"ownerAlias,omitempty"`
 
 	// ImageType is the ACK metadata image_type, when ACK compatibility is verified.
 	// +optional

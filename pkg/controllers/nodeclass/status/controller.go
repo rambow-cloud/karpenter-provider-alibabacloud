@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/ramrole"
 	"k8s.io/apimachinery/pkg/api/equality"
 
@@ -56,6 +57,7 @@ type Controller struct {
 	imageFamilyProvider    *imagefamily.Provider
 	launchTemplateProvider *launchtemplate.Provider
 	ramProvider            *ramrole.Provider
+	ackNodePoolProvider    *nodepool.Provider
 }
 
 const (
@@ -75,8 +77,9 @@ func NewController(
 	imageFamilyProvider *imagefamily.Provider,
 	launchTemplateProvider *launchtemplate.Provider,
 	ramProvider *ramrole.Provider,
+	ackNodePoolProviders ...*nodepool.Provider,
 ) *Controller {
-	return &Controller{
+	c := &Controller{
 		client:                 client,
 		vswitchProvider:        vswitchProvider,
 		securityGroupProvider:  securityGroupProvider,
@@ -84,6 +87,10 @@ func NewController(
 		launchTemplateProvider: launchTemplateProvider,
 		ramProvider:            ramProvider,
 	}
+	if len(ackNodePoolProviders) > 0 {
+		c.ackNodePoolProvider = ackNodePoolProviders[0]
+	}
+	return c
 }
 
 // Reconcile updates the status of ECSNodeClass by resolving selectors
@@ -98,12 +105,28 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	stored := nodeClass.DeepCopy()
+	var poolErr error
+	if c.ackNodePoolProvider != nil {
+		nodeClass.Status.ResourceConfigurationHash = ""
+		nodeClass.Status.ACKNodePool = nil
+		nodeClass.Status.ACKNodePool, poolErr = c.ackNodePoolProvider.Resolve(ctx, nodeClass)
+	}
 	var resolveErr error
 
 	if nodeClass.Spec.LaunchTemplateID != nil {
 		resolveErr = c.resolveLaunchTemplate(nodeClass, ctx)
 	} else {
+		nodeClass.Status.LaunchTemplate = nil
 		resolveErr = c.resolveSelectorResources(nodeClass, ctx)
+	}
+	if poolErr != nil {
+		resolveErr = poolErr
+	}
+	if resolveErr == nil && c.ackNodePoolProvider != nil {
+		nodeClass.Status.ResourceConfigurationHash, resolveErr = nodeClass.ResourceConfigurationHash()
+		if resolveErr == nil && nodeClass.Spec.NodeFilesystem != nil && nodeClass.Spec.NodeFilesystem.ConfigurationHash != nodeClass.Status.ResourceConfigurationHash {
+			resolveErr = fmt.Errorf("nodeFilesystem measurement uses a different resource configuration")
+		}
 	}
 
 	// Validate RAM Role
@@ -159,6 +182,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 }
 
 func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx context.Context) error {
+	nodeClass.Status.LaunchTemplate = nil
 	if c.launchTemplateProvider == nil {
 		err := fmt.Errorf("launch template provider is required")
 		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
@@ -174,6 +198,7 @@ func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx
 		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
 		return err
 	}
+	nodeClass.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: *nodeClass.Spec.LaunchTemplateID, Version: data.Version, InstanceType: data.InstanceType, Disks: data.Disks, Pricing: &data.Pricing}
 
 	imageClass := nodeClass.DeepCopy()
 	imageClass.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: &data.ImageID}}

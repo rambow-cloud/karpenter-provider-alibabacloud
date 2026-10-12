@@ -422,12 +422,13 @@ var _ = Describe("TaggingController", func() {
 
 			// Instance already has ALL tags
 			mockDescribeInstancesWithTags("i-test123456", map[string]string{
-				v1alpha1.TagManagedBy: v1alpha1.TagManagedByValue,
-				v1alpha1.TagNodeClaim: "test-nodeclaim",
-				v1alpha1.TagNodePool:  "default",
-				v1alpha1.TagClusterID: "test-cluster-123",
-				"Environment":         "test",
-				"Team":                "platform",
+				v1alpha1.TagManagedBy:    v1alpha1.TagManagedByValue,
+				v1alpha1.TagNodeClaim:    "test-nodeclaim",
+				v1alpha1.TagNodeClaimUID: string(nodeClaim.UID),
+				v1alpha1.TagNodePool:     "default",
+				v1alpha1.TagClusterID:    "test-cluster-123",
+				"Environment":            "test",
+				"Team":                   "platform",
 			})
 
 			// TagResources should NOT be called
@@ -791,8 +792,9 @@ var _ = Describe("TaggingController", func() {
 					merged[k] = v
 				}
 			}
-			// 4 karpenter tags + 25 custom = 29
-			Expect(len(merged)).To(Equal(29))
+			// Five ownership/traceability tags plus 25 custom tags.
+			Expect(len(merged)).To(Equal(30))
+			Expect(merged).To(HaveKeyWithValue(v1alpha1.TagNodeClaimUID, string(nodeClaim.UID)))
 			for i := 0; i < 25; i++ {
 				Expect(merged).To(HaveKeyWithValue(fmt.Sprintf("custom-tag-%d", i), fmt.Sprintf("value-%d", i)))
 			}

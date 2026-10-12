@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
@@ -17,15 +18,41 @@ type bootstrapCompatibilityCS struct {
 	detailError, metadataError              error
 	attachCalls, detailCalls, metadataCalls int
 	metadata                                []*cs.DescribeKubernetesVersionMetadataResponseBody
+	formatRequests                          []bool
 }
 
 func (c *bootstrapCompatibilityCS) DescribeClusterDetail(context.Context, string) (*cs.DescribeClusterDetailResponse, error) {
 	c.detailCalls++
 	return &cs.DescribeClusterDetailResponse{Body: &cs.DescribeClusterDetailResponseBody{CurrentVersion: tea.String(c.version), Profile: tea.String(c.profile), ClusterType: tea.String("ManagedKubernetes")}}, c.detailError
 }
-func (c *bootstrapCompatibilityCS) DescribeClusterAttachScripts(context.Context, string, *cs.DescribeClusterAttachScriptsRequest) (string, error) {
+func (c *bootstrapCompatibilityCS) DescribeClusterAttachScripts(_ context.Context, _ string, req *cs.DescribeClusterAttachScriptsRequest) (string, error) {
 	c.attachCalls++
+	c.formatRequests = append(c.formatRequests, tea.BoolValue(req.FormatDisk))
 	return fmt.Sprintf("bash attach-%s-%s.sh --runtime containerd --runtime-version old", c.version, c.profile), nil
+}
+
+func TestACKDiskFormattingIsValidatedAndCachedSeparately(t *testing.T) {
+	c := &bootstrapCompatibilityCS{version: "1.34.10-aliyun.1", profile: "Default"}
+	p := NewProvider("cn-hangzhou", c)
+	opts := BootstrapOptions{ClusterID: "cluster", ClusterType: ACKClusterType}
+	_, err := p.GenerateUserData(context.Background(), opts)
+	require.NoError(t, err)
+	opts.FormatDisk = true
+	_, err = p.GenerateUserData(context.Background(), opts)
+	require.ErrorContains(t, err, "persistent")
+	require.Equal(t, 1, c.attachCalls)
+	disks, err := v1alpha1.NormalizeDisks(v1alpha1.ECSNodeClassSpec{DataDisks: []v1alpha1.DataDiskSpec{{Category: "cloud_essd", Size: 40}}})
+	require.NoError(t, err)
+	opts.Disks = &disks
+	_, err = p.GenerateUserData(context.Background(), opts)
+	require.NoError(t, err)
+	_, err = p.GenerateUserData(context.Background(), opts)
+	require.NoError(t, err)
+	require.Equal(t, []bool{false, true}, c.formatRequests)
+	disks.DataDisks[0].SnapshotID = "s-existing"
+	_, err = p.GenerateUserData(context.Background(), opts)
+	require.Error(t, err)
+	require.Equal(t, 2, c.attachCalls)
 }
 func (c *bootstrapCompatibilityCS) DescribeKubernetesVersionMetadata(context.Context, *cs.DescribeKubernetesVersionMetadataRequest) ([]*cs.DescribeKubernetesVersionMetadataResponseBody, error) {
 	c.metadataCalls++

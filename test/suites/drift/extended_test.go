@@ -17,6 +17,7 @@ limitations under the License.
 package drift
 
 import (
+	. "github.com/onsi/gomega"
 	"os"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
@@ -124,12 +125,11 @@ var _ = Describe("NodeClass Drift Reasons", func() {
 		env.EventuallyExpectHealthyPodCount(selector, 1)
 	})
 
-	It("should detect kubelet hash drift", Label("hash"), func() {
-		nodeClaim, selector := launchDriftSubject("kubelet-hash")
+	It("should reject unapplied kubelet drift overrides", Label("hash"), func() {
+		_, selector := launchDriftSubject("kubelet-hash")
 		maxPods := int32(30)
 		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{MaxPods: &maxPods}
-		env.ExpectUpdated(nodeClass)
-		env.EventuallyExpectDrifted(nodeClaim)
+		Expect(env.Client.Update(env.Context, nodeClass)).ToNot(Succeed())
 		env.EventuallyExpectHealthyPodCount(selector, 1)
 	})
 })

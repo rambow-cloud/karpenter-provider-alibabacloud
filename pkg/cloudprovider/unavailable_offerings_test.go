@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
 	"testing"
 	"time"
 
@@ -42,14 +43,15 @@ func TestActualCreateFeedsSchedulingAvailabilityAndExpires(t *testing.T) {
 	ecsClient := &shortageECS{failCode: "OperationDenied.NoStock"}
 	scheme := runtime.NewScheme()
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
-	class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{
+	class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{ACKNodePool: &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"},
 		Images:     []v1alpha1.Image{{ID: "m-x86", Architecture: "x86_64"}},
 		VSwitches:  []v1alpha1.VSwitch{{ID: "vsw-fail", ZoneID: "cn-hangzhou-i"}},
 		Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}},
 	}}
-	provider := &CloudProvider{kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", ecsClient), instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", ecsClient), unavailableOfferings: unavailable}
+	provider := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", ecsClient), instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", ecsClient), unavailableOfferings: unavailable}
 	defer provider.instanceProvider.Batcher.Close()
 	types := []*instancetype.InstanceType{{Name: "ecs.g7.large", Architecture: "x86_64"}}
+	provider.pricingProvider = warmOfflinePricing(t, ctx, class, types, class.Status.Images, class.Status.VSwitches)
 	claim := &coreapis.NodeClaim{Spec: coreapis.NodeClaimSpec{Requirements: []coreapis.NodeSelectorRequirementWithMinValues{{Key: coreapis.CapacityTypeLabelKey, Operator: corev1.NodeSelectorOpIn, Values: []string{"spot"}}}}}
 	launch := func() error {
 		_, err := provider.createInstanceWithRetry(ctx, claim.DeepCopy(), class, types, class.Status.Images, class.Status.VSwitches, []v1alpha1.SecurityGroup{{ID: "sg-1"}}, "", nil)
@@ -82,9 +84,14 @@ func TestCapacityFeedbackClassificationAndZoneIsolation(t *testing.T) {
 			defer cancel()
 			ecsClient := &shortageECS{failCode: code}
 			unavailable := cache.NewUnavailableOfferingsCache()
-			provider := &CloudProvider{instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", ecsClient), unavailableOfferings: unavailable}
+			provider := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", ecsClient), unavailableOfferings: unavailable}
 			defer provider.instanceProvider.Batcher.Close()
-			_, err := provider.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, &v1alpha1.ECSNodeClass{}, []*instancetype.InstanceType{{Name: "ecs.g7.large", Architecture: "x86_64"}}, []v1alpha1.Image{{ID: "m-x86", Architecture: "x86_64"}}, []v1alpha1.VSwitch{{ID: "vsw-fail", Zone: "zone-a", AvailableIPAddressCount: 100}, {ID: "vsw-same-zone", Zone: "zone-a", AvailableIPAddressCount: 90}, {ID: "vsw-other-zone", Zone: "zone-b", AvailableIPAddressCount: 80}}, []v1alpha1.SecurityGroup{{ID: "sg-1"}}, "", nil)
+			nc := &v1alpha1.ECSNodeClass{}
+			types := []*instancetype.InstanceType{{Name: "ecs.g7.large", Architecture: "x86_64"}}
+			images := []v1alpha1.Image{{ID: "m-x86", Architecture: "x86_64"}}
+			vs := []v1alpha1.VSwitch{{ID: "vsw-fail", Zone: "zone-a", AvailableIPAddressCount: 100}, {ID: "vsw-same-zone", Zone: "zone-a", AvailableIPAddressCount: 90}, {ID: "vsw-other-zone", Zone: "zone-b", AvailableIPAddressCount: 80}}
+			provider.pricingProvider = warmOfflinePricing(t, ctx, nc, types, images, vs)
+			_, err := provider.createInstanceWithRetry(ctx, onDemandClaim(), nc, types, images, vs, []v1alpha1.SecurityGroup{{ID: "sg-1"}}, "", nil)
 			cached := code == "OperationDenied.NoStock" || code == "Zone.NotOnSale" || code == "InvalidResourceType.NotSupported"
 			require.Equal(t, !cached, unavailable.IsAvailable("ecs.g7.large", "zone-a", "on-demand"))
 			require.True(t, unavailable.IsAvailable("ecs.g7.large", "zone-b", "on-demand"))

@@ -10,13 +10,20 @@ import (
 
 // ECSNodeClassHashVersion must change when the static drift contract changes.
 // Current deployment scope is a fresh installation; legacy hashes are not migrated.
-const ECSNodeClassHashVersion = "v2"
+const ECSNodeClassHashVersion = "v4"
 
 // Hash is shared by the NodeClass controller and CloudProvider. Resource selectors
 // are dynamic: drift checks membership of the resolved images, vSwitches and
 // security groups instead of replacing nodes when selector syntax changes.
 func (n *ECSNodeClass) Hash() (string, error) {
 	spec := *n.Spec.DeepCopy()
+	if n.Spec.LaunchTemplateID != nil && n.Status.LaunchTemplate != nil {
+		var err error
+		spec, err = n.LaunchSpec()
+		if err != nil {
+			return "", err
+		}
+	}
 	spec.VSwitchSelectorTerms = nil
 	spec.SecurityGroupSelectorTerms = nil
 	spec.ImageSelectorTerms = nil
@@ -51,10 +58,11 @@ func (n *ECSNodeClass) Hash() (string, error) {
 	}
 	spec.CapacityReservationSelectorTerms = nil
 	data, err := json.Marshal(struct {
-		Spec         ECSNodeClassSpec  `json:"spec"`
-		Disks        NormalizedDisks   `json:"disks"`
-		Reservations []json.RawMessage `json:"reservations,omitempty"`
-	}{spec, disks, reservations})
+		Spec         ECSNodeClassSpec     `json:"spec"`
+		Disks        NormalizedDisks      `json:"disks"`
+		Reservations []json.RawMessage    `json:"reservations,omitempty"`
+		ACKNodePool  *ResolvedACKNodePool `json:"ackNodePool,omitempty"`
+	}{spec, disks, reservations, n.Status.ACKNodePool})
 	if err != nil {
 		return "", fmt.Errorf("marshal drift configuration: %w", err)
 	}

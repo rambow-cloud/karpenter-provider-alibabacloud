@@ -32,7 +32,7 @@ func TestACKAutomaticAlternativesAreFilteredButPinsRemainStrict(t *testing.T) {
 	nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ImageOwnerAlias: tea.String("system")}}
 	images, err := p.ResolveForNodeClass(context.Background(), nc)
 	require.NoError(t, err)
-	require.Equal(t, []v1alpha1.Image{{ID: "m-approved", Name: "compatible-node", Architecture: "x86_64", OSType: "linux", ImageType: "AliyunLinux3ContainerOptimized"}}, images)
+	require.Equal(t, []v1alpha1.Image{{ID: "m-approved", Name: "compatible-node", Architecture: "x86_64", OSType: "linux", OwnerAlias: "system", ImageType: "AliyunLinux3ContainerOptimized"}}, images)
 
 	images, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}, {ID: "m-stale"}})
 	require.NoError(t, err)
@@ -217,6 +217,7 @@ func TestCustomImagePolicyRequiresExactSelfSharedLinux(t *testing.T) {
 		t.Run(test.owner+"/"+test.os, func(t *testing.T) {
 			c, e, p, nc := compatibilityFixture()
 			nc.Spec.ImageCompatibilityPolicy = "Custom"
+			nc.Spec.ImagePrerequisitesVerified = true
 			nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: tea.String("m-custom")}}
 			img := e.images["m-custom"]
 			img.ImageOwnerAlias, img.OSType = tea.String(test.owner), tea.String(test.os)
@@ -278,5 +279,10 @@ func TestACKContainerOSResolutionRejectsMissingDiskAndLaunchTemplate(t *testing.
 	require.Equal(t, "ContainerOS4", images[0].ImageType)
 	nc.Spec.LaunchTemplateID = tea.String("lt-test")
 	_, err = p.ResolveForNodeClass(context.Background(), nc)
-	require.ErrorContains(t, err, "launchTemplateID is unsupported")
+	require.ErrorContains(t, err, "unresolved")
+	disks, err := v1alpha1.NormalizeDisks(nc.Spec)
+	require.NoError(t, err)
+	nc.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 1, Disks: disks}
+	_, err = p.ResolveForNodeClass(context.Background(), nc)
+	require.NoError(t, err)
 }

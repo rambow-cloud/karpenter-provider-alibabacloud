@@ -16,7 +16,7 @@ LaunchTemplate 的镜像也需要查询和校验，不能仅凭模板中的字�
 
 镜像结果保留 ECS `creationTime`，新建实例在已选择且架构兼容的候选中优先使用创建时间最新的版本；时间缺失/无效排在最后，同时间按 ID 升序稳定选择。多个 selector 是无序 OR，不表示用户指定的优先级。单个精确 ID 固定该镜像；多个 pin 或 pin 与动态 selector 混用时，按上述策略从其并集中选择，不引入集合外的镜像。已有节点的镜像仍在解析结果中时，不会仅因出现新版本触发 ImageDrift。
 
-调度和创建都会排除没有已知兼容镜像架构的实例规格，不再把未知架构猜成 amd64 来授权创建，也不会将第一张镜像作为不匹配时的兜底。架构匹配不等同于 GPU、网络插件或其他硬件约束已通过，#52 仍独立跟踪这些前置条件。
+调度和创建使用同一份镜像/硬件兼容过滤：未知架构不猜成 amd64，未知 ContainerOS 本地盘元数据不猜成“没有本地盘”，不使用不匹配的镜像兜底。GPU 镜像只匹配有 GPU 的规格；GPU 规格只能使用 GPU 镜像或经过用户验证的 Custom 镜像。当前资源模型使用 nvidia.com/gpu，因此未知或非 NVIDIA 机型会被排除。
 
 ## 自定义与共享镜像
 
@@ -25,6 +25,7 @@ LaunchTemplate 的镜像也需要查询和校验，不能仅凭模板中的字�
 ```yaml
 spec:
   imageCompatibilityPolicy: Custom
+  imagePrerequisitesVerified: true # 已完成基础 OS、runtime、驱动、磁盘和集成配置验证
   imageSelectorTerms:
     - id: m-your-verified-custom-image
 ```
@@ -46,7 +47,7 @@ spec:
       size: 40
 ```
 
-**目前拒绝 ContainerOS + LaunchTemplate**：现有启动路径没有将模板的数据盘配置传入 RunInstances，无法证明盘配置会生效。改用 selector 和上述显式数据盘。自定义派生镜像的特殊磁盘/初始化需求必须由用户验证。
+**LaunchTemplate 模式**：controller 将具体版本、实例规格及规范化磁盘配置写入 `status.launchTemplate`。启动时使用这个数字版本，模板磁盘与显式 selector 模式使用相同校验。ContainerOS 仅允许一块全新持久云数据盘，不允许快照盘或未知布局；ACK attach script 明确设置 `format_disk=true` 挂载容器和 kubelet 数据盘。普通 Linux 保留 `format_disk=false`，不替用户格式化数据盘。模板模式继续禁止 NodeClass 磁盘 override，controller 不额外加盘。自定义派生镜像的特殊磁盘/初始化需求必须由用户验证。
 
 ContainerOS 3.4 起只读系统盘需要数据盘，且不适用于带本地盘的实例规格。选择 GPU 变体还需要匹配 GPU 机型和驱动。镜像清单校验并不能替代这些硬件/运行验收。参见[更换操作系统](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/replace-the-operating-system)、[ContainerOS 说明](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/containeros-overview/)。
 
@@ -54,7 +55,13 @@ ContainerOS 3.4 起只读系统盘需要数据盘，且不适用于带本地盘�
 
 本 provider 不支持 Windows bootstrap、Windows 调度与资源预留，明确拒绝 Windows 和未知 OSType。ACK 官方的 Windows 节点池能力不能视为本 provider 的支持承诺。
 
-ACK 元数据不是全部部署约束的检查器。阿里云 Linux 4 的 Terway 版本、Ubuntu 的 CPFS/镜像加速/安全加固限制、ContainerOS 的本地盘限制及 GPU 驱动适配仍需按官方说明配置和验收。具体镜像以目标区域、ACK 类型、版本和 runtime 返回的清单为准，不把文档示例 ID 固定为通用最新版。参见[ACK 操作系统与限制](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/overview-of-os-images/)。
+阿里云 Linux 4 在解析和启动前读取当前已安装网络组件。仅支持已知且 active 的 Flannel，或 Terway `[1.9.18,1.10.0)`、`>=1.16.4`；未知版本、预发布版本、组件升级中、查询失败和多个网络组件均拒绝。权限需要 `cs:ListClusterAddonInstances`。读取结果只在一次解析内复用，启动前重新查询，避免镜像缓存掩盖组件版本变化。
+
+GPU、Ubuntu 和 Custom 镜像默认需要 `imagePrerequisitesVerified: true`，表示使用者已经验证自动元数据无法证明的前置条件；它不会绕过架构、可用状态、GPU 硬件、ContainerOS 本地盘或已知不兼容网络检查。GPU 需要匹配的 NVIDIA 卡、驱动/runtime/CUDA、设备插件以及实际资源注册；不能把普通 Linux 镜像直接用于 GPU 扩容。
+
+Ubuntu 的 ACK 版本及镜像由兼容清单检查；NodePool/NodeClaim 设置 `alibabacloud.com/image-accelerate-enabled: "true"` 时，调度和创建都会排除 Ubuntu。CPFS 工作负载、按节点启用的安全加固和其他启动自定义无法仅凭集群 addon 清单证明，必须由使用者验证未用于这些节点，并设置上述确认字段。不会因为其他节点安装了普通 CSI 或加速组件就推断此 Ubuntu 节点已启用相关功能。ACK 初始化的 DNS 和自动升级行为仍需实际验收。
+
+具体镜像以目标区域、ACK 类型、版本和 runtime 返回的清单为准。参见 [ACK 操作系统与限制](https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/overview-of-os-images/) 和 [已安装组件 API](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/developer-reference/api-cs-2015-12-15-listclusteraddoninstances)。这些检查及用户确认不是实际 ACK 启动、驱动注册或工作负载兼容报告；#5/#23 继续承担运行验收。
 
 ## 全新部署与权限
 
@@ -68,4 +75,4 @@ ACK bootstrap 在每次读取脚本缓存前查询当前集群上下文，按 cl
 
 ## 取证
 
-2026-10-11 本机 OAuth profile 的 cn-hangzhou 只读 API 查询显示，ACK 1.34.10-aliyun.1 的 Linux 3 容器优化镜像为 `20260720`，ECS family 则返回 `20260828`；Ubuntu 也存在类似差异。该证据证明需要 ACK 兼容清单，不能证明创建和加入节点已成功。Issue #47/#48/#49 记录修复；ShowExpired 的订阅/过期镜像调查仍留在 #29。
+2026-10-11 本机 OAuth profile 的 cn-hangzhou 只读 API 查询显示，ACK 1.34.10-aliyun.1 的 Linux 3 容器优化镜像为 `20260720`，ECS family 则返回 `20260828`；Ubuntu 也存在类似差异。该证据证明需要 ACK 兼容清单，不能证明创建和加入节点已成功。Issue #47/#48/#49 记录修复；ShowExpired 的查询策略及证据范围见 [镜像查询策略](PROVIDER_BEHAVIOR.md#镜像查询策略)。

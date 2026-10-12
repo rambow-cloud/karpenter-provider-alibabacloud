@@ -67,47 +67,55 @@ var _ = Describe("ECSNodeClass Additional Integration Contracts", func() {
 		Expect(nodeClass.Validate()).To(Succeed())
 	})
 
-	It("should validate kubelet maxPods", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet maxPods", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.MaxPods = ptr(int32(20))
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate kubelet system reserved CPU", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet system reserved CPU", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.SystemReserved = map[corev1.ResourceName]string{corev1.ResourceCPU: "100m"}
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate kubelet kube reserved memory", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet kube reserved memory", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.KubeReserved = map[corev1.ResourceName]string{corev1.ResourceMemory: "128Mi"}
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate kubelet eviction hard", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet eviction hard", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.EvictionHard = map[string]string{"memory.available": "5%"}
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate kubelet eviction soft", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet eviction soft", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.EvictionSoft = map[string]string{"memory.available": "10%"}
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate kubelet eviction soft grace period", Label("validation", "kubelet"), func() {
+	It("should reject unapplied kubelet eviction soft grace period", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.EvictionSoftGracePeriod = map[string]string{"memory.available": "1m"}
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
-	It("should validate image garbage collection thresholds", Label("validation", "kubelet"), func() {
+	It("should reject unapplied image garbage collection thresholds", Label("validation", "kubelet"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.ImageGCLowThresholdPercent = ptr(int32(40))
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.ImageGCHighThresholdPercent = ptr(int32(70))
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
 	It("should validate nodeclass tags", Label("validation", "tags"), func() {
@@ -213,10 +221,11 @@ var _ = Describe("ECSNodeClass Additional Integration Contracts", func() {
 		Expect(nodeClass.Validate()).To(Succeed())
 	})
 
-	It("should validate CNI maxpods nodeclasses", Label("validation", "cni", "terway", "maxpods"), func() {
+	It("should reject unapplied CNI maxpods nodeclasses", Label("validation", "cni", "terway", "maxpods"), func() {
 		nodeClass := validValidationNodeClass()
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{}
 		nodeClass.Spec.Kubelet.MaxPods = ptr(int32(30))
-		Expect(nodeClass.Validate()).To(Succeed())
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
 	})
 
 	It("should validate block device performance level", Label("validation", "block-device", "disk"), func() {

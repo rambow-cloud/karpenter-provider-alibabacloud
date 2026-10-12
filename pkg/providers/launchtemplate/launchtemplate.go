@@ -44,6 +44,9 @@ type LaunchTemplate struct {
 
 // LaunchTemplateData contains the instance-affecting fields from a launch template version.
 type LaunchTemplateData struct {
+	Version          int64
+	Disks            v1alpha1.NormalizedDisks
+	Pricing          v1alpha1.LaunchTemplatePricing
 	ImageID          string
 	InstanceType     string
 	VSwitchID        string
@@ -194,12 +197,28 @@ func (p *Provider) GetData(ctx context.Context, id string, version *int64) (*Lau
 	}
 	if response == nil || response.Body == nil || response.Body.LaunchTemplateVersionSets == nil ||
 		len(response.Body.LaunchTemplateVersionSets.LaunchTemplateVersionSet) == 0 ||
+		response.Body.LaunchTemplateVersionSets.LaunchTemplateVersionSet[0] == nil ||
 		response.Body.LaunchTemplateVersionSets.LaunchTemplateVersionSet[0].LaunchTemplateData == nil {
 		return nil, fmt.Errorf("launch template version not found")
 	}
 
-	data := response.Body.LaunchTemplateVersionSets.LaunchTemplateVersionSet[0].LaunchTemplateData
-	result := &LaunchTemplateData{}
+	sets := response.Body.LaunchTemplateVersionSets.LaunchTemplateVersionSet
+	if len(sets) != 1 || sets[0] == nil || sets[0].VersionNumber == nil || *sets[0].VersionNumber <= 0 || tea.StringValue(sets[0].LaunchTemplateId) != id {
+		return nil, fmt.Errorf("incomplete or ambiguous launch template version identity")
+	}
+	if version != nil && *sets[0].VersionNumber != *version {
+		return nil, fmt.Errorf("launch template version mismatch")
+	}
+	if response.Body.TotalCount != nil && *response.Body.TotalCount != 1 {
+		return nil, fmt.Errorf("ambiguous launch template version response")
+	}
+	data := sets[0].LaunchTemplateData
+	disks, err := resolveTemplateDisks(data)
+	if err != nil {
+		return nil, err
+	}
+	result := &LaunchTemplateData{Version: *sets[0].VersionNumber, Disks: disks}
+	result.Pricing = resolveTemplatePricing(data)
 	if data.ImageId != nil {
 		result.ImageID = *data.ImageId
 	}

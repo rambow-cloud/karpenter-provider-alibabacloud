@@ -37,6 +37,7 @@ func TestECSNodeClassValidateRejectsRestrictedTags(t *testing.T) {
 		TagNodePool,
 		TagNodeClaim,
 		TagKubeletMaxPods,
+		TagResourceModel,
 		TagCluster,
 	} {
 		nodeClass := validValidationNodeClassForUnit()
@@ -137,13 +138,13 @@ func TestECSNodeClassValidateKubeletImageGCThresholds(t *testing.T) {
 		ImageGCLowThresholdPercent:  &low,
 	}
 
-	require.ErrorContains(t, nodeClass.Validate(), "imageGCHighThresholdPercent")
+	require.ErrorContains(t, nodeClass.Validate(), "overrides cannot be applied")
 
 	negative := int32(-1)
 	nodeClass = validValidationNodeClassForUnit()
 	nodeClass.Spec.Kubelet = &KubeletConfiguration{ImageGCLowThresholdPercent: &negative}
 
-	require.ErrorContains(t, nodeClass.Validate(), "imageGCLowThresholdPercent")
+	require.ErrorContains(t, nodeClass.Validate(), "overrides cannot be applied")
 }
 
 func TestECSNodeClassValidateLaunchTemplate(t *testing.T) {
