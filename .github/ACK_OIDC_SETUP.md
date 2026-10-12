@@ -68,7 +68,7 @@ clients use the new session.
 
 The manual-only `.github/actions/e2e/oidc` composite validates role/provider
 identity before the official SHA-pinned action exchanges OIDC for STS. #23's
-workflow will use it for both setup and cleanup; this composite is not itself
+workflow uses it for both setup and cleanup; this composite is not itself
 a workflow and cannot start a job.
 
 Use `.github/ack-e2e-config.example.yaml` to describe the cluster and separate

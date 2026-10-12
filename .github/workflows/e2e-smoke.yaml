@@ -1,0 +1,113 @@
+name: E2EACKSmoke
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        default: provision
+        options: [provision, cleanup]
+      source_run_id:
+        type: string
+        description: For cleanup-only, the original run containing the ack-smoke report artifact.
+      kubectl_version:
+        type: string
+        default: v1.35.0
+        description: Select a kubectl version within one minor of the target ACK.
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: ack-smoke-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch'
+    environment: ack-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ACK_E2E_ENABLED: ${{ vars.ACK_E2E_ENABLED }}
+      DEPLOY_CONFIG: .e2e/ack-private/config.yaml
+      ACKCTL: .e2e/ack-private/ackctl
+      CGO_ENABLED: '0'
+      GOFLAGS: -p=2
+      GOMEMLIMIT: 2GiB
+    steps:
+      - name: Check manual opt-in and configuration before tool installation
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          CONFIG: ${{ secrets.ALIBABA_CLOUD_E2E_CONFIG }}
+          ROLE: ${{ vars.ALIBABA_CLOUD_ROLE_ARN }}
+          PROVIDER: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
+        run: |
+          set -euo pipefail
+          [[ "${MODE}" == cleanup || "${ACK_E2E_ENABLED}" == true ]] || { echo 'ACK creation is disabled' >&2; exit 1; }
+          [[ "${MODE}" != cleanup || "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]] || { echo 'cleanup requires source_run_id' >&2; exit 1; }
+          [[ -n "${CONFIG//[[:space:]]/}" && -n "${ROLE}" && -n "${PROVIDER}" ]] || { echo 'ACK config and OIDC identifiers are required' >&2; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Prepare private configuration after checkout cleanup
+        shell: bash
+        env:
+          CONFIG: ${{ secrets.ALIBABA_CLOUD_E2E_CONFIG }}
+        run: |
+          set -euo pipefail
+          mkdir -p .e2e/ack-private .e2e/ack-smoke
+          chmod 700 .e2e/ack-private .e2e/ack-smoke
+          printf '%s\n' "${CONFIG}" > "${DEPLOY_CONFIG}"
+          chmod 600 "${DEPLOY_CONFIG}"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
+        with:
+          version: ${{ inputs.kubectl_version }}
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.19.0
+      - name: Build only the ACK smoke CLI
+        run: go build -trimpath -o "${ACKCTL}" ./test/hack/e2e/ackctl
+      - name: Download original ownership manifest for cleanup-only
+        if: inputs.mode == 'cleanup'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ack-smoke-${{ inputs.source_run_id }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: .e2e/ack-smoke
+      - name: Authenticate runner using GitHub OIDC
+        uses: ./.github/actions/e2e/oidc
+        with:
+          role_arn: ${{ vars.ALIBABA_CLOUD_ROLE_ARN }}
+          provider_arn: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
+      - name: Provision two on-demand and one Spot worker
+        if: inputs.mode == 'provision'
+        run: python test/hack/e2e/smoke/runner.py provision --config "${DEPLOY_CONFIG}" --ackctl "${ACKCTL}" --private .e2e/ack-private --report .e2e/ack-smoke
+      - id: manifest
+        name: Locate persisted smoke manifest even after partial setup
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .e2e/ack-smoke/run.json ]]; then
+            echo 'exists=true' >> "${GITHUB_OUTPUT}"
+          fi
+      - id: refresh-identity
+        name: Renew OIDC STS credentials before independent cleanup
+        if: always() && steps.manifest.outputs.exists == 'true'
+        uses: ./.github/actions/e2e/oidc
+        with:
+          role_arn: ${{ vars.ALIBABA_CLOUD_ROLE_ARN }}
+          provider_arn: ${{ vars.ALIBABA_CLOUD_OIDC_PROVIDER_ARN }}
+      - name: Clean only this run and verify cloud residue
+        if: always() && steps.manifest.outputs.exists == 'true' && steps.refresh-identity.outcome == 'success'
+        run: python test/hack/e2e/smoke/runner.py cleanup --config "${DEPLOY_CONFIG}" --ackctl "${ACKCTL}" --private .e2e/ack-private --report .e2e/ack-smoke
+      - name: Upload sanitized ownership and verification report
+        if: always() && steps.manifest.outputs.exists == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ack-smoke-${{ github.run_id }}
+          path: .e2e/ack-smoke
+          if-no-files-found: error

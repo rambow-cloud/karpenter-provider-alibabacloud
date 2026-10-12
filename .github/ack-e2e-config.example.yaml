@@ -14,3 +14,15 @@ controller_rrsa:
   image_repository: REPLACE_CONTROLLER_REPOSITORY
   # The tag must contain the tested full Git SHA and immutable digest.
   image_tag: FULL_GIT_SHA@sha256:IMAGE_DIGEST
+smoke:
+  vswitch_ids: [REPLACE_VSWITCH_ID]
+  security_group_ids: [REPLACE_SECURITY_GROUP_ID]
+  image_id: REPLACE_ACK_COMPATIBLE_IMAGE_ID
+  # Explicit active regular containerd pool without autoscaling/userdata overrides.
+  ack_node_pool_id: REPLACE_NATIVE_ACK_NODEPOOL_ID
+  worker_role: REPLACE_ECS_WORKER_ROLE_NAME
+  # 1..5 confirmed amd64 candidate types with identical vCPU counts.
+  instance_types: [REPLACE_INSTANCE_TYPE]
+  system_disk_category: cloud_essd
+  system_disk_size: 40
+  pod_image: registry.k8s.io/pause@sha256:REPLACE_VERIFIED_DIGEST

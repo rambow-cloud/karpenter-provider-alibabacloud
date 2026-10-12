@@ -29,6 +29,10 @@ func run(args []string) error {
 		return fmt.Errorf("command is required: setup, cleanup, dump, refresh-kubeconfig, ensure-nodepool, ensure-capacity-reservation, nodepools, or tasks")
 	}
 	switch args[0] {
+	case "smoke-config":
+		return runSmokeConfig(args[1:])
+	case "smoke-cloud":
+		return runSmokeCloud(args[1:])
 	case "rrsa-values":
 		return runRRSAValues(args[1:])
 	case "check-rrsa-pod":

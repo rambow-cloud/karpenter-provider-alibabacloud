@@ -1,6 +1,6 @@
 # ACK 三节点、Spot 与双 OIDC E2E 设计
 
-状态：2026-10-12 设计稿，尚未实现或执行。维护者已确认：Karpenter 新建三个 worker（两个按量、一个 Spot），另保留固定系统节点；controller 使用 ACK RRSA，GitHub Actions runner 也使用 OIDC。
+状态：2026-10-12 实现已加入双身份 primitives 和独立三节点 smoke，真实执行/验收仍待专用 ACK。维护者已确认：Karpenter 新建三个 worker（两个按量、一个 Spot），另保留固定系统节点；controller 使用 ACK RRSA，GitHub Actions runner 也使用 OIDC。操作入口、清理和证据限制见 test/hack/e2e/smoke/README.md。
 
 ## 验收目标与资源规模
 
@@ -72,6 +72,8 @@ RRSA 和 GitHub OIDC provider/role/trust、环境分支规则及系统节点均�
 报告记录实际 Kubernetes、core/controller/chart/CRD 版本、三节点与三实例映射、容量类型、三 Pod、身份模式/角色、各阶段耗时和 Kubernetes/云端零残留证据。不得上传 kubeconfig、JWT、临时云凭证或原始 userdata。读取与写入权限、Spot 缺货/抢占、Ready 超时及清理残留都独立标记，不重跑至绿。
 
 ## 现有代码缺口与交付
+
+以下列出原设计时的缺口。#88 / PR #91 已实现完整 STS 客户端、RRSA values/Pod 验证及手动 OIDC composite；#23 的 smoke-cloud/runner/独立 workflow 实现对应生命周期、续期清理及报告。原始 userdata、完整 Pod spec 和原始 controller 日志不上传，改用白名单云属性和事件 reason。区域磁盘/ENI 新增差异若无法归属会保守失败，绝不自动删除。实际集群 IAM/RBAC、RRSA 身份认证、三节点创建及零残留仍需真实运行证据，离线通过不替代这些验收。
 
 - `pkg/operator/operator.go` 已支持 RRSA；Chart 已支持显式 token 投影，需验证全新 RRSA 部署和信任一致性。
 - `test/hack/e2e/ackctl/config.go` 只有 AK/SK 配置；`ack_runtime.go` 的 CS/ECS/VPC 客户端未设置 SecurityToken，不能直接消费 GitHub OIDC action 的 STS 输出。其他 client factory（含 SLB 等）需要一并盘点，避免仅修部分路径。

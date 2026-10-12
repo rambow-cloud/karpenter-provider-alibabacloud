@@ -18,6 +18,7 @@ type Config struct {
 	GPUDiscovery   GPUDiscoveryConfig    `yaml:"gpu_discovery"`
 	Autoscaling    AutoscalingConfig     `yaml:"autoscaling"`
 	ControllerRRSA *ControllerRRSAConfig `yaml:"controller_rrsa,omitempty"`
+	Smoke          *SmokeConfig          `yaml:"smoke,omitempty"`
 }
 
 type CloudConfig struct {
@@ -166,7 +167,7 @@ func defaultIPv6ServiceCIDR() string {
 
 func SaveConfig(path string, cfg *Config) error {
 	saved := *cfg
-	if saved.AlibabaCloud.Authentication == "sts" {
+	if saved.AlibabaCloud.Authentication == "sts" || saved.AlibabaCloud.SecurityToken != "" {
 		saved.AlibabaCloud.AccessKeyID = ""
 		saved.AlibabaCloud.AccessKeySecret = ""
 	}
