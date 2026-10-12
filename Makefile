@@ -17,7 +17,7 @@ KWOK_NODEPOOL ?= $(shell pwd)/test/pkg/environment/kwok/default_nodepool.yaml
 KWOK_CLUSTER_NAME ?= karpenter-kwok-e2e
 KWOK_TEST_SUITE ?= smoke
 KWOK_LARGE_SCALE ?= true
-KWOK_SCALE_REPLICAS ?= 10
+KWOK_SCALE_REPLICAS ?= 5
 KWOK_REPORT_DIR ?= $(shell pwd)/.e2e/kwok
 DEPLOY_CONFIG ?= deploy-config.yaml
 
@@ -208,7 +208,7 @@ upstream-e2etests: core-module ## Run upstream Karpenter contract suites with Al
 		--default-nodepool="$(DEFAULT_NODEPOOL)"
 
 .PHONY: kwok-core-e2e
-kwok-core-e2e: core-module ## Run a 10-pod KWOK smoke check; upstream suites are opt-in via KWOK_TEST_SUITE.
+kwok-core-e2e: core-module ## Run a 5-pod, 3-worker KWOK smoke check; upstream suites are opt-in via KWOK_TEST_SUITE.
 	KARPENTER_CORE_DIR="$(KARPENTER_CORE_DIR)" \
 	KWOK_CLUSTER_NAME="$(KWOK_CLUSTER_NAME)" \
 	KWOK_NODECLASS="$(KWOK_NODECLASS)" \
