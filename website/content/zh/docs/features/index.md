@@ -15,13 +15,14 @@ description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNod
 | 声明式容量配置 | NodePool 约束规格、架构、可用区与容量类型；支持按需和 Spot 创建路径 | [实例类型 provider](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/pkg/providers/instancetype/instancetype.go)；Spot 中断见下文 |
 | 真实报价与成本排序 | 按实际镜像、磁盘、规格、zone 与容量类型查询小时成交价；有效报价参与调度、创建排序和 core 替换候选筛选 | [报价实现 #18](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/18)；[报价边界](../support/index.md) |
 | 阿里云资源配置 | ECSNodeClass 选择镜像、交换机、安全组和磁盘；引导配置将实例接入目标集群 | [API 定义](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/tree/main/pkg/apis)；[Provider](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/tree/main/pkg/providers) |
-| 生命周期与所有权 | 实例创建、发现、删除与 Drift 接入；所有权限制避免误操作其他集群资源 | [所有权修复 #2](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/2)；[待修复问题](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
+| ACK 资源一致性 | dev 读取实际原生池配置，分开计算 VM/预留/eviction；实测 nodefs 支持临时存储，首次创建快照保持恢复一致 | [资源模型 #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16)；[配置与校准](../support/index.md#ack-node-resources) |
+| 生命周期与所有权 | 实例创建、发现、删除与 Drift 接入；所有权限制避免误操作其他集群资源 | [所有权修复 #2](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/2)；[修复记录](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | 版本边界 | core 固定 v1.14.1；Helm、controller 和 ACK 配置要求 Kubernetes >=1.34 | [支持策略](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md)；[已完成 #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
 | 可维护性与验证 | 阿里云 SDK V2.0、CGO 关闭构建、单元/控制器测试、Go 漏洞扫描和 KWOK 验证入口 | [SDK 审计](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md)；[CI 记录](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/actions) |
 
 ## 实现与验收的边界
 
-当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；全新部署的真实 ACK/ECS 生命周期验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。失败恢复、镜像前置条件和报价已有实现与离线证据；资源计算仍由 #16 跟踪。
+当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；全新部署的真实 ACK/ECS 生命周期验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。失败恢复、镜像前置条件和报价已有实现与离线证据；资源计算与严格网络发现已合入 dev，目标 ACK 节点的实际校准仍待验收。
 
 Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功能**，见 [Issue #20](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/20)。不能将实例创建支持视为完整的中断通知、排空与替换支持。
 

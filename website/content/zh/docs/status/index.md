@@ -18,7 +18,7 @@ Karpenter core 和 AWS 测试 harness 固定为 **v1.14.1**，chart 为 **0.3.0-
 | --- | --- | --- |
 | Karpenter v1.14.1 | 迁移已合并；真实 ACK 版本验收待完成 | [版本 milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/1) |
 | Kubernetes 1.34+ | Helm、控制器启动和 ACK setup 已限制最低版本，覆盖离线边界；真实 ACK 验收待完成 | [Issue #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
-| Provider 生命周期与调度 | 所有权、失败恢复、模板磁盘、镜像前置条件与报价已有实现及离线证据；资源计算 #16 待完成 | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
+| Provider 生命周期与调度 | 所有权、失败恢复、模板磁盘、镜像前置条件与报价已有实现及离线证据；资源计算 #16 与严格网络发现 #76 已合入 dev；实际节点资源校准待 #5/#23 验收 | [Provider milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | 依赖安全 | Go CVE 复扫通过；旧 SDK/PDF 链已移除，剩余未导入的 OpenPGP 公告；容器 OS 扫描待完成 | [SDK 迁移与审计](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | 阿里云 SDK V2.0 | 剩余旧调用已迁移，已移除无用 ALB/NLB 清理；当前选中模块数 292（迁移前 314）；真实云验收待完成 | [SDK 迁移与后续精简](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/SDK_MIGRATION.md) |
 | 最小 ACK/ECS E2E | 一个 NodePool、一个 Pod、目标一台 ECS 的验收入口正在规划 | [E2E milestone](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/4) |

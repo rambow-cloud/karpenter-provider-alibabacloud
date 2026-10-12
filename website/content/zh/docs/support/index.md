@@ -61,3 +61,48 @@ Custom 只接受 ECS 返回的 self/others 镜像，并核对 Linux、架构和�
 按量和 Spot 使用 ECS 小时报价，包括实际镜像和磁盘；缺失、失败、过期或正在刷新的报价令 offering 暂不可用，保留规格记录用于 drift 判断。报价使用同一账号币种 CNY 或 USD，不猜测汇率；市场镜像还要求完整的同币种许可报价。按量报价有效期 5 分钟，Spot 1 分钟，失败缓存 30 秒；刷新并发和频率有上限，冷启动期间逐步开放有效报价。此价格不是最终账单预测，不包括流量、快照等后续用量费用。详见 [Provider 报价与生命周期行为](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md)。
 
 权限、ContainerOS 示例及详细行为见 [ACK_IMAGE_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)；版本证据见 [KUBERNETES_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md)。继续阅读[核心功能](../features/index.md)或[状态与路线图](../status/index.md)。
+
+## 原生 ACK 节点池与资源配置 {#ack-node-resources}
+
+本节描述 **dev 分支** 的 [资源计算修复 #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) 和 [网络发现修复 #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76)。部署时选择同一 dev 提交的 controller、Chart 和 CRD；合入 dev 不代表 main 已发布。
+
+`spec.ackNodePoolID` 选择一个已有、active 的普通 ACK ESS/containerd 节点池。省略时必须有且只有一个默认池。controller 需要 `cs:DescribeClusterNodePools` 和 `cs:DescribeClusterNodePoolDetail`，把实际池 ID 和 kubelet 设置写入 `status.ackNodePool`，引导脚本固定该 ID。创建前再次读取池；配置改变后等待 NodeClass status 刷新，不修改原生池。
+
+**不要填写 `spec.kubelet`。** ACK attach script 不应用该字段，因此 CRD 和运行时都会拒绝，包括 maxPods、podsPerCore 和预留设置。请在 ACK 原生节点池配置受支持的 kubelet 参数。API 未提供 podsPerCore，不能据此声明节点容量。含 native userdata、auto mode、CPU/内存 manager 或 soft eviction overrides 的池暂不支持。
+
+| 资源 | dev 的计算边界 |
+| --- | --- |
+| Pod | 原生 maxPods 与网络上限取较小值；Flannel 要求实际有效 CIDR mask，最大 256；Terway 要求已知 ECS ENI/IP 数量，保守地不扩大 trunk 容量 |
+| CPU / 内存 | ACK 1.28+ 预留规则与原生 kube/system reservation；默认内存预留按网络与原生上限的较大值计算，避免预留不足 |
+| VM / eviction | VM 内存损耗只扣减一次 Capacity；eviction 单独扣减，ACK 默认 memory.available 为 300Mi；自定义 hard eviction 必须显式包含该信号 |
+| ephemeral-storage | 只有匹配镜像与资源配置的实测 nodefs 才参与新节点调度；不把系统盘与独立数据盘大小相加 |
+| 注册与恢复 | 首次 ECS 创建保存不可变资源快照；Create/Get/List 和恢复共用它。节点注册后核对 NodeClaim UID 与 ProviderID，再使用 kubelet 的真实报告 |
+
+启动时必须发现唯一 active 的已知 Terway/Flannel addon；API 错误、缺失/冲突元数据、未知 IP stack 或错误配置阻止初始化。Terway 未知 ENI 元数据不会获得候选；exclusive ENI 和非默认 pod-density-mode 暂不支持。保守上限可能低于节点实际容量，真实网络行为仍待 ACK 验收。
+
+## 可选：校准临时存储 {#nodefs-calibration}
+
+不设置 `nodeFilesystem` 时，普通 CPU/内存工作负载可继续使用；请求 ephemeral-storage 的 Pod 不会获得未测量的新节点候选。若需要该能力，先用匹配镜像、磁盘布局、原生节点池和自定义 userdata 的独立校准节点读取实际资源。修改这些设置后必须重新校准。
+
+1. 创建不含 `nodeFilesystem` 的 ECSNodeClass，等待资源解析，并读取 `status.resourceConfigurationHash` 与实际镜像 ID。
+2. 在由相同启动配置创建的校准节点读取 kubelet 的 nodefs Capacity/Allocatable；不是读取 ECS 云盘标称大小。
+3. 把两个实测值、精确镜像 ID 和哈希写入该 NodeClass。下方值仅演示格式，必须替换。
+
+```sh
+kubectl get ecsnodeclass default -o jsonpath='{.status.resourceConfigurationHash}{"\n"}'
+kubectl get node YOUR_CALIBRATION_NODE -o jsonpath='{.status.capacity.ephemeral-storage}{"\n"}{.status.allocatable.ephemeral-storage}{"\n"}'
+```
+
+```yaml
+spec:
+  ackNodePoolID: np-YOUR_EXISTING_ACK_POOL
+  nodeFilesystem:
+    configurationHash: REPLACE_WITH_ACTUAL_64_CHARACTER_HASH
+    imageID: REPLACE_WITH_EXACT_MEASURED_IMAGE_ID
+    capacity: 37Gi     # 替换为 kubelet 实测 Capacity
+    allocatable: 32Gi  # 替换为 kubelet 实测 Allocatable
+```
+
+哈希覆盖有效磁盘配置、原生池 kubelet 设置与 userdata，镜像另外精确匹配。Capacity 必须为正，Allocatable 不大于 Capacity，且符合已知预留/eviction；容量不得超过任一启动云盘大小。多盘累加、未验证的 RAID 或独立 imagefs 布局不能通过此例推算。ContainerOS 仍需符合其单块全新持久数据盘要求。
+
+此功能的公式、API 请求和恢复路径已有离线证据；**目标 ACK 节点的实际资源校准及一致性对比仍属于 #5/#23 的发布验收**，本次文档更新未运行云端测试。详见 [dev 资源模型与限制](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/dev/PROVIDER_BEHAVIOR.md#ack-节点资源计算) 和 [ACK 官方预留策略](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy)。
