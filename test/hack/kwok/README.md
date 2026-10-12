@@ -17,10 +17,14 @@ workers. Control-plane and other pools do not count as simulated workers.
 `summary.txt` reports both total nodes and `simulated_nodes`; `placement.json`
 records the distribution. Unexpected counts or placements fail the check.
 
-Harness-only changes use dedicated `run_kwok` routing while skipping provider Go
-build/test/security. Only numeric `KWOK_SCALE_REPLICAS` Make defaults and the
-KWOK target help text get that narrow exemption; other Make/build changes and
-all Go/module changes keep full CI. Documentation-only changes do not run KWOK.
+The E2EKWOK workflow runs **only after manual dispatch**, including after harness
+changes. PRs, pushes and schedules do not start a cluster. The selected manual
+run uses dedicated `run_kwok` routing and may build the pinned core controller;
+ordinary provider CI keeps its independent change routing. Use `suite=smoke`
+and `replicas=5` for the bounded check; regression/performance require a separate
+explicit selection. Workflow registrations using older main definitions remain
+disabled until main receives the manual-only change; merging dev alone does not
+restore the Actions manual entry point.
 
 This smoke exercises core provisioning using simulated nodes. It does not run
 real ECS/ACK APIs; live acceptance stays in #5/#23. The upstream implementation

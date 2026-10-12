@@ -16,12 +16,6 @@ on:
       replicas:
         type: string
         default: "5"
-  pull_request:
-    paths:
-      - "test/hack/kwok/**"
-      - "test/pkg/environment/kwok/**"
-      - "Makefile"
-      - ".github/workflows/e2e-kwok.yaml"
 permissions:
   contents: read
 concurrency:
@@ -29,6 +23,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   kwok:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.suite == 'regression' && 240 || inputs.suite == 'performance' && 240 || 30 }}
     steps:
