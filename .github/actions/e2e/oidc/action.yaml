@@ -1,0 +1,36 @@
+name: Authenticate ACK E2E runner with GitHub OIDC
+description: Obtain temporary runner credentials without injecting them into the controller.
+inputs:
+  role_arn:
+    required: true
+  provider_arn:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Validate manual OIDC identity inputs
+      shell: bash
+      env:
+        RUNNER_ROLE: ${{ inputs.role_arn }}
+        RUNNER_PROVIDER: ${{ inputs.provider_arn }}
+      run: |
+        set -euo pipefail
+        [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]] || { echo 'OIDC E2E requires manual dispatch' >&2; exit 1; }
+        [[ "${RUNNER_ROLE}" =~ ^acs:ram::([0-9]+):role/[a-zA-Z0-9._-]+$ ]] || { echo 'Runner role ARN is required' >&2; exit 1; }
+        role_account="${BASH_REMATCH[1]}"
+        [[ "${RUNNER_PROVIDER}" =~ ^acs:ram::([0-9]+):oidc-provider/[a-zA-Z0-9._-]+$ ]] || { echo 'OIDC provider ARN is required' >&2; exit 1; }
+        [[ "${role_account}" == "${BASH_REMATCH[1]}" ]] || { echo 'Runner role/provider account mismatch' >&2; exit 1; }
+    - uses: aliyun/configure-aliyun-credentials-action@1e5248c8d5d93a8781ac344a68e19a43341e79e6 # v1.1.0, Node24
+      with:
+        role-to-assume: ${{ inputs.role_arn }}
+        oidc-provider-arn: ${{ inputs.provider_arn }}
+        audience: sts.aliyuncs.com
+        role-session-expiration: 3600
+        role-session-name: karpenter-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: Require a complete STS session without printing credentials
+      shell: bash
+      run: |
+        set -euo pipefail
+        for name in ALIBABA_CLOUD_ACCESS_KEY_ID ALIBABA_CLOUD_ACCESS_KEY_SECRET ALIBABA_CLOUD_SECURITY_TOKEN; do
+          [[ -n "${!name:-}" ]] || { echo "Missing temporary credential field ${name}" >&2; exit 1; }
+        done

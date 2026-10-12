@@ -1,24 +1,12 @@
 package main
 
 import (
-	"fmt"
-
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	slb "github.com/alibabacloud-go/slb-20140515/v4/client"
-	"github.com/alibabacloud-go/tea/tea"
 )
 
 func loadBalancerClientConfig(cfg *Config) (*openapi.Config, error) {
-	if cfg == nil || cfg.AlibabaCloud.AccessKeyID == "" || cfg.AlibabaCloud.AccessKeySecret == "" || cfg.AlibabaCloud.RegionID == "" {
-		return nil, fmt.Errorf("AlibabaCloud region and access key credentials are required")
-	}
-	return &openapi.Config{
-		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
-		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
-		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(30_000), // Tea SDK timeouts are milliseconds.
-		MaxIdleConns:    tea.Int(100),
-	}, nil
+	return cloudClientConfig(cfg)
 }
 
 // Narrow interfaces allow migration regressions to be tested without cloud calls.

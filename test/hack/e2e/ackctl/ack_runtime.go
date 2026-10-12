@@ -13,7 +13,6 @@ import (
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
-	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
 	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
@@ -512,54 +511,27 @@ func isClusterNotFound(err error) bool {
 const ackConnectTimeoutMilliseconds = 30_000
 
 func newCSClient(cfg *Config) (*cs.Client, error) {
-	if cfg.AlibabaCloud.AccessKeyID == "" || cfg.AlibabaCloud.AccessKeySecret == "" {
-		return nil, fmt.Errorf("AlibabaCloud access key credentials are required")
-	}
-	client, err := cs.NewClient(&openapi.Config{
-		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
-		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
-		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
-		MaxIdleConns:    tea.Int(100),
-	})
+	config, err := cloudClientConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("create CS client: %w", err)
+		return nil, err
 	}
-	return client, nil
+	return cs.NewClient(config)
 }
 
 func newECSClient(cfg *Config) (*ecs.Client, error) {
-	if cfg.AlibabaCloud.AccessKeyID == "" || cfg.AlibabaCloud.AccessKeySecret == "" {
-		return nil, fmt.Errorf("AlibabaCloud access key credentials are required")
-	}
-	client, err := ecs.NewClient(&openapi.Config{
-		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
-		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
-		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
-		MaxIdleConns:    tea.Int(100),
-	})
+	config, err := cloudClientConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("create ECS client: %w", err)
+		return nil, err
 	}
-	return client, nil
+	return ecs.NewClient(config)
 }
 
 func newVPCClient(cfg *Config) (*vpc.Client, error) {
-	if cfg.AlibabaCloud.AccessKeyID == "" || cfg.AlibabaCloud.AccessKeySecret == "" {
-		return nil, fmt.Errorf("AlibabaCloud access key credentials are required")
-	}
-	client, err := vpc.NewClient(&openapi.Config{
-		AccessKeyId:     tea.String(cfg.AlibabaCloud.AccessKeyID),
-		AccessKeySecret: tea.String(cfg.AlibabaCloud.AccessKeySecret),
-		RegionId:        tea.String(cfg.AlibabaCloud.RegionID),
-		ConnectTimeout:  tea.Int(ackConnectTimeoutMilliseconds),
-		MaxIdleConns:    tea.Int(100),
-	})
+	config, err := cloudClientConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("create VPC client: %w", err)
+		return nil, err
 	}
-	return client, nil
+	return vpc.NewClient(config)
 }
 
 type ackClusterDetailClient interface {
@@ -621,11 +593,40 @@ func kubeconfigEndpoint(data []byte) string {
 }
 
 func installController(ctx context.Context, cfg *Config, clusterID, endpoint, kubeconfigPath string) error {
+	var rrsaFile string
+	if cfg.AlibabaCloud.Authentication == "sts" && cfg.ControllerRRSA == nil {
+		return fmt.Errorf("STS runner credentials cannot be installed into a controller; configure controller_rrsa")
+	}
+	if cfg.ControllerRRSA != nil {
+		values, err := controllerRRSAValues(cfg, clusterID, endpoint)
+		if err != nil {
+			return err
+		}
+		data, err := yaml.Marshal(values)
+		if err != nil {
+			return err
+		}
+		file, err := os.CreateTemp("", "karpenter-rrsa-*.yaml")
+		if err != nil {
+			return err
+		}
+		rrsaFile = file.Name()
+		defer os.Remove(rrsaFile)
+		if _, err = file.Write(data); err != nil {
+			file.Close()
+			return err
+		}
+		if err = file.Close(); err != nil {
+			return err
+		}
+	}
+
 	if err := runCommand(ctx, kubeconfigPath, nil, "kubectl", "create", "namespace", "karpenter"); err != nil {
 		// Namespace may already exist on reruns; apply the rest idempotently.
 		_ = err
 	}
-	secretYAML := fmt.Sprintf(`apiVersion: v1
+	if cfg.ControllerRRSA == nil {
+		secretYAML := fmt.Sprintf(`apiVersion: v1
 kind: Secret
 metadata:
   name: alibabacloud-credentials
@@ -635,9 +636,11 @@ stringData:
   access_key_id: %q
   access_key_secret: %q
 `, cfg.AlibabaCloud.AccessKeyID, cfg.AlibabaCloud.AccessKeySecret)
-	if err := runCommand(ctx, kubeconfigPath, []byte(secretYAML), "kubectl", "apply", "-f", "-"); err != nil {
-		return fmt.Errorf("apply controller credentials secret: %w", err)
+		if err := runCommand(ctx, kubeconfigPath, []byte(secretYAML), "kubectl", "apply", "-f", "-"); err != nil {
+			return fmt.Errorf("apply controller credentials secret: %w", err)
+		}
 	}
+
 	imagePullSecretName := strings.TrimSpace(os.Getenv("E2E_CONTROLLER_IMAGE_PULL_SECRET_NAME"))
 	if imagePullSecretName == "" {
 		imagePullSecretName = "e2e-controller-pull"
@@ -667,6 +670,9 @@ data:
 		return fmt.Errorf("apply karpenter CRDs: %w", err)
 	}
 	helmArgs := helmInstallControllerArgs(cfg, clusterID, endpoint, chartPath, imagePullSecretName)
+	if rrsaFile != "" {
+		helmArgs = append(helmArgs, "--reset-values", "--values", rrsaFile)
+	}
 	if err := runCommand(ctx, kubeconfigPath, nil, helmArgs[0], helmArgs[1:]...); err != nil {
 		return fmt.Errorf("install karpenter helm chart: %w", err)
 	}
@@ -682,7 +688,6 @@ func helmInstallControllerArgs(cfg *Config, clusterID, endpoint, chartPath, imag
 	args := []string{
 		"helm", "upgrade", "--install", "karpenter", chartPath,
 		"--namespace", "karpenter",
-		"--set", "controller.credentialsSecretName=alibabacloud-credentials",
 		"--set", "settings.clusterID=" + clusterID,
 		"--set", "settings.clusterEndpoint=" + endpoint,
 		"--set", "settings.region=" + cfg.AlibabaCloud.RegionID,
@@ -690,6 +695,9 @@ func helmInstallControllerArgs(cfg *Config, clusterID, endpoint, chartPath, imag
 		"--set", "controller.tolerations[0].key=karpenter-test",
 		"--set", "controller.tolerations[0].operator=Exists",
 		"--set", "controller.tolerations[0].effect=NoSchedule",
+	}
+	if cfg.ControllerRRSA == nil {
+		args = append(args, "--set", "controller.credentialsSecretName=alibabacloud-credentials")
 	}
 	if repository := strings.TrimSpace(os.Getenv("E2E_CONTROLLER_IMAGE_REPOSITORY")); repository != "" {
 		args = append(args, "--set", "controller.image.repository="+repository)
