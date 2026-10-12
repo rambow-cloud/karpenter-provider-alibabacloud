@@ -1,0 +1,94 @@
+name: PackageCandidate
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+        description: Publish the verified candidate image and chart to GHCR.
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: package-candidate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.event_name == 'workflow_dispatch' && (github.ref_name == 'dev' || github.ref_name == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: '0'
+      GOFLAGS: -p=2
+      GOMEMLIMIT: 2GiB
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.19.0
+      - name: Install checksum-pinned daemonless image tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="${RUNNER_TEMP}/candidate-tools"
+          mkdir -p "${tool_dir}"
+          curl --fail --location --silent --show-error \
+            https://github.com/ko-build/ko/releases/download/v0.19.1/ko_0.19.1_Linux_x86_64.tar.gz \
+            --output "${tool_dir}/ko.tar.gz"
+          echo "635ac6ea3fd376c935fee597fbb29ab2c2449f49ef1655085fe3aa9c25fed7a5  ${tool_dir}/ko.tar.gz" | sha256sum --check -
+          tar -xzf "${tool_dir}/ko.tar.gz" -C "${tool_dir}" ko
+          curl --fail --location --silent --show-error \
+            https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz \
+            --output "${tool_dir}/crane.tar.gz"
+          echo "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0  ${tool_dir}/crane.tar.gz" | sha256sum --check -
+          tar -xzf "${tool_dir}/crane.tar.gz" -C "${tool_dir}" crane
+          echo "${tool_dir}" >> "${GITHUB_PATH}"
+      - name: Build matching Linux images and immutable Helm package
+        run: python .github/scripts/release_bundle.py build --output .e2e/release
+      - name: Authenticate GHCR only for explicitly requested publishing
+        if: inputs.publish
+        shell: bash
+        env:
+          PACKAGE_TOKEN: ${{ github.token }}
+          PACKAGE_USER: ${{ github.actor }}
+          DOCKER_CONFIG: ${{ runner.temp }}/candidate-registry
+          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/candidate-helm/registry.json
+        run: |
+          set -euo pipefail
+          mkdir -p "${DOCKER_CONFIG}" "$(dirname "${HELM_REGISTRY_CONFIG}")"
+          printf '%s' "${PACKAGE_TOKEN}" | crane auth login ghcr.io --username "${PACKAGE_USER}" --password-stdin
+          printf '%s' "${PACKAGE_TOKEN}" | helm registry login ghcr.io --username "${PACKAGE_USER}" --password-stdin
+      - name: Publish the existing bundle without rebuilding it
+        if: inputs.publish
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/candidate-registry
+          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/candidate-helm/registry.json
+        run: python .github/scripts/release_bundle.py publish --output .e2e/release
+      - name: Record artifact references and publication status
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f .e2e/release/release.json ]]; then
+            printf '### Candidate artifacts\n\n```json\n' >> "${GITHUB_STEP_SUMMARY}"
+            cat .e2e/release/release.json >> "${GITHUB_STEP_SUMMARY}"
+            printf '\n```\n\nGHCR packages must be public or configured for authenticated pulls before ACK E2E.\n' >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Preserve bundle even after a partial publish
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-${{ github.sha }}
+          path: |
+            .e2e/release/*.tgz
+            .e2e/release/controller.oci.tar
+            .e2e/release/release.json
+            .e2e/release/ack-image.yaml
+            .e2e/release/SHA256SUMS
+            .e2e/release/sbom/
+          if-no-files-found: warn
