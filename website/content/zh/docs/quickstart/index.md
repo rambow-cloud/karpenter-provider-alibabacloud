@@ -11,7 +11,7 @@ description: 在 Kubernetes 1.34+ 的阿里云 ACK 集群全新安装 Karpenter�
 
 - ACK Kubernetes 版本至少 1.34，`kubectl` 可访问集群，准备 Helm 3。
 - 确认 ACK 集群 ID、区域、VPC、交换机和安全组；节点网络须能访问 API Server。
-- controller 需要 ECS、VPC、RAM、CS 的相关权限，公共镜像查询包括 `cs:DescribeClusterDetail`、`cs:DescribeKubernetesVersionMetadata` 和 `ecs:DescribeImages`。
+- controller 需要 ECS、VPC、RAM、CS 的相关权限，公共镜像查询包括 `cs:DescribeClusterDetail`、`cs:DescribeKubernetesVersionMetadata`、`cs:ListClusterAddonInstances` 和 `ecs:DescribeImages`；报价需要 `ecs:DescribePrice`。
 - 为 ECS 节点准备 RAM 角色，与 controller 访问云 API 的身份分别配置。
 - controller 固定在已有真实节点上运行，不使用它自身供给的节点作为首次启动依赖。
 

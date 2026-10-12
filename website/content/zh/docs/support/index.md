@@ -33,22 +33,31 @@ description: 阿里云 Karpenter 的 Kubernetes 1.34+ 版本要求、ACK 公共�
 | 镜像类型 | 当前行为 |
 | --- | --- |
 | ACK 公共 Linux 镜像 | 按目标 ACK/containerd 清单及 ECS 状态校验 |
-| ContainerOS | 恰好一块显式有效的持久数据盘；不支持 ephemeral 数据盘或 instanceStorePolicy |
-| ContainerOS + LaunchTemplate | 当前拒绝，模板数据盘传递仍由 #51 跟踪 |
-| 自定义/共享镜像 | 显式 Custom 策略，仅支持精确 ID；基础 OS、runtime 和引导兼容性由使用者验证 |
+| ContainerOS | 恰好一块全新有效的持久数据盘；拒绝快照盘、ephemeral、instanceStorePolicy，以及本地盘或本地盘信息未知的规格 |
+| ContainerOS + LaunchTemplate | 解析并固定数字版本，使用模板磁盘快照；布局满足上述要求时由 ACK bootstrap 初始化数据盘，不额外加盘 |
+| 自定义/共享镜像 | 显式 Custom 策略、精确 ID 和 imagePrerequisitesVerified: true；基础 OS、runtime 和引导兼容性由使用者确认 |
 | Windows / 未知 OS | 当前拒绝，不支持对应 bootstrap 与资源预留 |
 
-GPU 驱动、Terway、网络插件及本地盘等前置条件仍需单独配置与验证，见 [Issue #52](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/52)。镜像解析成功不代表节点已成功注册。
+阿里云 Linux 4 需要已知且处于 active 状态的 Flannel，或 Terway 版本 `[1.9.18, 1.10.0)` / `>=1.16.4`；缺失、冲突、升级中或未知网络信息均拒绝。创建前重新查询已安装 addon，不能用旧缓存掩盖版本变化。
+
+GPU 镜像与 GPU 规格必须匹配；当前只开放已知 NVIDIA 硬件，驱动、runtime、device plugin 与资源注册由使用者验证。Ubuntu 的 CPFS、安全加固及初始化限制也需验证；节点标签 `alibabacloud.com/image-accelerate-enabled: "true"` 与 Ubuntu 不兼容。GPU、Ubuntu 和 Custom 使用 `imagePrerequisitesVerified: true` 记录使用者确认，该字段不能绕过已知的网络、架构或硬件限制。见 [已实现的前置条件 #52](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/52)；镜像解析成功不代表节点已成功注册。
 
 ## 自定义镜像配置
 
 ```yaml
 spec:
   imageCompatibilityPolicy: Custom
+  imagePrerequisitesVerified: true # 完成下述验证后再确认
   imageSelectorTerms:
     - id: m-your-verified-custom-image
 ```
 
-Custom 只接受 ECS 返回的 self/others 镜像，并核对 Linux、架构和 Available 状态；不能绕过公共镜像的 ACK 校验，也不支持 name/family/tags 批量发现自定义镜像。
+Custom 只接受 ECS 返回的 self/others 镜像，并核对 Linux、架构和可启动状态；不能绕过公共镜像的 ACK 校验，也不支持 name/family/tags 批量发现自定义镜像。填写确认字段前，验证镜像来源、Swap/系统设置、容器 runtime、ACK bootstrap、驱动及所需插件；这不代表 provider 已认证镜像。
+
+## 模板与报价边界
+
+原生模板的版本和磁盘写入 status，RunInstances 和 bootstrap 使用同一快照；不支持 NodeClass 磁盘 override。模板中的预配置磁盘 IOPS 或 bursting 无法完整报价时，`status.launchTemplate.pricing.unsupportedReason` 给出原因，该配置不参与自动供给。
+
+按量和 Spot 使用 ECS 小时报价，包括实际镜像和磁盘；缺失、失败、过期或正在刷新的报价令 offering 暂不可用，保留规格记录用于 drift 判断。报价使用同一账号币种 CNY 或 USD，不猜测汇率；市场镜像还要求完整的同币种许可报价。按量报价有效期 5 分钟，Spot 1 分钟，失败缓存 30 秒；刷新并发和频率有上限，冷启动期间逐步开放有效报价。此价格不是最终账单预测，不包括流量、快照等后续用量费用。详见 [Provider 报价与生命周期行为](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md)。
 
 权限、ContainerOS 示例及详细行为见 [ACK_IMAGE_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)；版本证据见 [KUBERNETES_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md)。继续阅读[核心功能](../features/index.md)或[状态与路线图](../status/index.md)。
