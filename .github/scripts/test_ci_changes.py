@@ -114,6 +114,34 @@ class GitDiffTests(unittest.TestCase):
     def test_missing_git_object_runs_full(self):
         self.assertTrue(self.push("a" * 40).run_go)
 
+    def test_kwok_harness_runs_kwok_without_provider_go(self):
+        self.write("test/hack/kwok/smoke.py", "print('fixture')\n")
+        result = self.push(self.commit())
+        self.assertFalse(result.run_go)
+        self.assertTrue(result.run_kwok)
+        self.write("pkg/source.go", "package changed\n")
+        self.assertTrue(self.push(self.commit()).run_go)
+
+    def test_numeric_kwok_make_default_keeps_build_changes_conservative(self):
+        self.write("Makefile", "KWOK_SCALE_REPLICAS ?= 10\n")
+        before = self.commit()
+        self.write("Makefile", "KWOK_SCALE_REPLICAS ?= 5\n")
+        result = self.push(self.commit(), before)
+        self.assertFalse(result.run_go)
+        self.assertTrue(result.run_kwok)
+        self.write("Makefile", "KWOK_SCALE_REPLICAS ?= $(shell go build ./cmd/controller)\n")
+        self.assertTrue(self.push(self.commit(), before).run_go)
+
+    def test_go_file_inside_kwok_tree_requires_provider_go(self):
+        self.write("test/hack/kwok/extra.go", "package kwok\n")
+        self.assertTrue(self.push(self.commit()).run_go)
+
+    def test_kwok_docs_remain_light_without_runtime(self):
+        self.write("test/hack/kwok/README.md", "fixture docs\n")
+        result = self.push(self.commit())
+        self.assertFalse(result.run_go)
+        self.assertFalse(result.run_kwok)
+
 
 if __name__ == "__main__":
     unittest.main()

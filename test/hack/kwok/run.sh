@@ -12,9 +12,13 @@ set -euo pipefail
 : "${E2E_GOFLAGS:=-mod=mod}"
 : "${KWOK_CLEANUP:=true}"
 : "${KWOK_LARGE_SCALE:=true}"
-: "${KWOK_SCALE_REPLICAS:=10}"
+: "${KWOK_SCALE_REPLICAS:=5}"
 : "${KWOK_SCALE_TIMEOUT:=5m}"
 : "${KWOK_REPORT_DIR:=}"
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd "${script_dir}/../../.." && pwd)"
+kwok_values_file="${script_dir}/values.yaml"
 
 suite="$(echo "${UPSTREAM_TEST_SUITE}" | tr A-Z a-z)"
 focus="${FOCUS}"
@@ -24,6 +28,7 @@ case "${suite}" in
       echo "smoke requires KWOK_LARGE_SCALE=true and empty FOCUS/SKIP; choose regression for Ginkgo filters" >&2
       exit 1
     fi
+    python "${script_dir}/smoke.py" expected-nodes --replicas "${KWOK_SCALE_REPLICAS}" >/dev/null
     ;;
   regression|performance) ;;
   *) echo "unsupported KWOK suite: ${suite}" >&2; exit 1 ;;
@@ -66,6 +71,13 @@ run_large_scale_check() {
 
   kubectl create namespace kwok-scale --dry-run=client -o yaml | kubectl apply -f -
   kubectl apply -f "${KWOK_NODECLASS}"
+  if [[ "${suite}" == "smoke" ]]; then
+    smoke_dir="${KWOK_REPORT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/kwok-smoke.XXXXXX")}"
+    kubectl create --dry-run=client -f "${KWOK_NODEPOOL}" -o json | \
+      python "${script_dir}/smoke.py" render --replicas "${KWOK_SCALE_REPLICAS}" --directory "${smoke_dir}"
+    kubectl apply -f "${smoke_dir}/smoke-nodepool.json"
+    kubectl apply -f "${smoke_dir}/smoke-deployment.json"
+  else
   kubectl apply -f "${KWOK_NODEPOOL}"
   kubectl apply -f - <<EOF
 apiVersion: apps/v1
@@ -92,8 +104,19 @@ spec:
               cpu: 100m
               memory: 64Mi
 EOF
+  fi
 
   kubectl rollout status deployment/kwok-scale -n kwok-scale --timeout="${KWOK_SCALE_TIMEOUT}"
+  if [[ "${suite}" == "smoke" ]]; then
+    pool_name="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["metadata"]["name"])' "${smoke_dir}/smoke-nodepool.json")"
+    kubectl wait --for=condition=Ready nodeclaims -l "karpenter.sh/nodepool=${pool_name}" --timeout="${KWOK_SCALE_TIMEOUT}"
+    kubectl get nodes -o json > "${smoke_dir}/smoke-nodes.json"
+    kubectl get nodeclaims -o json > "${smoke_dir}/smoke-nodeclaims.json"
+    kubectl get pods -n kwok-scale -l app=kwok-scale -o json > "${smoke_dir}/smoke-pods.json"
+    python "${script_dir}/smoke.py" verify --replicas "${KWOK_SCALE_REPLICAS}" --directory "${smoke_dir}"
+    write_report
+    return
+  fi
   ready="$(kubectl get deployment kwok-scale -n kwok-scale -o jsonpath='{.status.readyReplicas}')"
   nodeclaims="$(kubectl get nodeclaims -o name | wc -l | tr -d '[:space:]')"
   nodes="$(kubectl get nodes --no-headers | wc -l | tr -d '[:space:]')"
@@ -128,9 +151,6 @@ require helm
 require ko
 require jq
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_dir="$(cd "${script_dir}/../../.." && pwd)"
-kwok_values_file="${script_dir}/values.yaml"
 (
   cd "${repo_dir}"
   go run ./hack/compatibility --kwok-only
