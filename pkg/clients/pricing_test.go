@@ -21,10 +21,23 @@ type priceHTTP struct {
 
 func (f *priceHTTP) Call(r *http.Request, _ *http.Transport) (*http.Response, error) {
 	f.called = true
-	if err := r.ParseForm(); err != nil {
-		return nil, err
+	f.form = r.URL.Query()
+	// The native RPC SDK may send a POST whose parameters are all in the
+	// query and whose body is nil. net/http.ParseForm rejects that shape even
+	// though the actual HTTP transport accepts it. Parse an optional body only.
+	if r.Body != nil {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		values, err := url.ParseQuery(string(body))
+		if err != nil {
+			return nil, err
+		}
+		for key, values := range values {
+			f.form[key] = append(f.form[key], values...)
+		}
 	}
-	f.form = r.Form
 	f.value = r.Context().Value(offlineContextKey{})
 	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"PriceInfo":{"Price":{"Currency":"CNY","TradePrice":0.75}}}`))}, nil
 }
