@@ -1,5 +1,12 @@
 # ACK E2E execution controls
 
+The new three-worker OIDC smoke is `.github/workflows/e2e-smoke.yaml`; see
+`test/hack/e2e/smoke/README.md` for dedicated-cluster prerequisites, manual
+provision/cleanup dispatch, ownership reports and conservative residue limits.
+It uses the `ack-e2e` Environment and requires no static AccessKey secrets.
+The legacy suites below keep their historical setup/config contract; they are
+not the new smoke entry and must not be used as a substitute for #23 acceptance.
+
 All E2E workflows, including KWOK and E2EParity, are manual-only under #89.
 Root entry points use `workflow_dispatch`; `workflow_call` is internal reuse
 only and every execution job rejects non-dispatch events. No PR/push/schedule,

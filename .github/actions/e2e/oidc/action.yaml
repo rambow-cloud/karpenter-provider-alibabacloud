@@ -20,6 +20,11 @@ runs:
         role_account="${BASH_REMATCH[1]}"
         [[ "${RUNNER_PROVIDER}" =~ ^acs:ram::([0-9]+):oidc-provider/[a-zA-Z0-9._-]+$ ]] || { echo 'OIDC provider ARN is required' >&2; exit 1; }
         [[ "${role_account}" == "${BASH_REMATCH[1]}" ]] || { echo 'Runner role/provider account mismatch' >&2; exit 1; }
+        # A second invocation must exchange OIDC again, never reuse the session
+        # exported by setup. The next step reads the updated job environment.
+        if [[ -n "${GITHUB_ENV:-}" ]]; then
+          printf '%s\n' 'ALIBABA_CLOUD_ACCESS_KEY_ID=' 'ALIBABA_CLOUD_ACCESS_KEY_SECRET=' 'ALIBABA_CLOUD_SECURITY_TOKEN=' >> "${GITHUB_ENV}"
+        fi
     - uses: aliyun/configure-aliyun-credentials-action@1e5248c8d5d93a8781ac344a68e19a43341e79e6 # v1.1.0, Node24
       with:
         role-to-assume: ${{ inputs.role_arn }}

@@ -39,6 +39,10 @@ func TestSTSCredentialsAreAtomicAndNeverPersisted(t *testing.T) {
 	}
 	require.Error(t, loadCloudCredentials(&CloudConfig{Authentication: "sts", AccessKeyID: "file-id", AccessKeySecret: "file-secret"}))
 	require.Error(t, loadCloudCredentials(&CloudConfig{Authentication: "access_key"}))
+	implicit := CloudConfig{}
+	require.NoError(t, loadCloudCredentials(&implicit))
+	require.Equal(t, "sts", implicit.Authentication)
+	require.Error(t, loadCloudCredentials(&CloudConfig{AccessKeyID: "file-id", AccessKeySecret: "file-secret"}))
 }
 
 func TestEveryACKClientConsumesSTSAndNewSessions(t *testing.T) {
@@ -86,6 +90,7 @@ func TestRRSAValuesRejectBadIdentityAndExcludeRunnerCredentials(t *testing.T) {
 func TestAdmittedRRSAPodRejectsSecretInjectionAndWrongAudience(t *testing.T) {
 	base := `{"metadata":{"namespace":"karpenter"},"spec":{"serviceAccountName":"karpenter","nodeSelector":{"e2e.example/system":"true"},"containers":[{"name":"controller","env":[{"name":"ALIBABA_CLOUD_ROLE_ARN","value":"acs:ram::123:role/controller"},{"name":"ALIBABA_CLOUD_OIDC_PROVIDER_ARN","value":"acs:ram::123:oidc-provider/ack-rrsa-c-test"},{"name":"ALIBABA_CLOUD_OIDC_TOKEN_FILE","value":"/var/run/secrets/ack.alibabacloud.com/rrsa-tokens/token"}],"volumeMounts":[{"name":"rrsa-oidc-token","mountPath":"/var/run/secrets/ack.alibabacloud.com/rrsa-tokens","readOnly":true}]}],"volumes":[{"name":"rrsa-oidc-token","projected":{"sources":[{"serviceAccountToken":{"audience":"sts.aliyuncs.com","path":"token"}}]}}]}}`
 	require.NoError(t, verifyRRSAPod(rrsaTestConfig(), []byte(base)))
+	require.Error(t, verifyRRSAPod(rrsaTestConfig(), []byte(strings.Replace(base, `"serviceAccountName"`, `"initContainers":[{"name":"injected"}],"serviceAccountName"`, 1))))
 	for _, invalid := range []string{strings.Replace(base, "sts.aliyuncs.com", "foreign", 1), strings.Replace(base, `"serviceAccountName":"karpenter"`, `"serviceAccountName":"wrong"`, 1), strings.Replace(base, `"name":"controller"`, `"name":"controller","envFrom":[{"secretRef":{"name":"runner"}}]`, 1), strings.Replace(base, `"name":"ALIBABA_CLOUD_ROLE_ARN"`, `"name":"ALIBABA_CLOUD_ACCESS_KEY_ID"`, 1)} {
 		require.Error(t, verifyRRSAPod(rrsaTestConfig(), []byte(invalid)))
 	}

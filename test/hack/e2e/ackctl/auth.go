@@ -24,6 +24,12 @@ func loadCloudCredentials(c *CloudConfig) error {
 		return fmt.Errorf("sts authentication forbids credentials in config files")
 	}
 	id, secret, token := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"), os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"), os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
+	if c.Authentication == "" && token != "" {
+		c.Authentication = "sts"
+		if c.AccessKeyID != "" || c.AccessKeySecret != "" {
+			return fmt.Errorf("inferred STS authentication forbids config-file credentials")
+		}
+	}
 	if id != "" || secret != "" || token != "" || c.Authentication == "sts" {
 		if strings.TrimSpace(id) == "" || strings.TrimSpace(secret) == "" || (c.Authentication == "sts" && strings.TrimSpace(token) == "") {
 			return fmt.Errorf("incomplete environment cloud credentials; sts requires AccessKeyId, AccessKeySecret and SecurityToken")
@@ -133,9 +139,11 @@ func verifyRRSAPod(cfg *Config, data []byte) error {
 			Namespace string `json:"namespace"`
 		} `json:"metadata"`
 		Spec struct {
-			ServiceAccountName string            `json:"serviceAccountName"`
-			NodeSelector       map[string]string `json:"nodeSelector"`
-			Containers         []struct {
+			InitContainers      []json.RawMessage `json:"initContainers"`
+			EphemeralContainers []json.RawMessage `json:"ephemeralContainers"`
+			ServiceAccountName  string            `json:"serviceAccountName"`
+			NodeSelector        map[string]string `json:"nodeSelector"`
+			Containers          []struct {
 				Name    string        `json:"name"`
 				EnvFrom []interface{} `json:"envFrom"`
 				Env     []struct {
@@ -168,6 +176,9 @@ func verifyRRSAPod(cfg *Config, data []byte) error {
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
 		return err
+	}
+	if len(p.Spec.InitContainers) != 0 || len(p.Spec.EphemeralContainers) != 0 {
+		return fmt.Errorf("RRSA smoke does not allow injected init/ephemeral containers")
 	}
 	if p.Metadata.Namespace != "karpenter" || p.Spec.ServiceAccountName != "karpenter" {
 		return fmt.Errorf("controller service account identity mismatch")

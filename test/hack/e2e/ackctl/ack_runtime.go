@@ -594,7 +594,7 @@ func kubeconfigEndpoint(data []byte) string {
 
 func installController(ctx context.Context, cfg *Config, clusterID, endpoint, kubeconfigPath string) error {
 	var rrsaFile string
-	if cfg.AlibabaCloud.Authentication == "sts" && cfg.ControllerRRSA == nil {
+	if (cfg.AlibabaCloud.Authentication == "sts" || cfg.AlibabaCloud.SecurityToken != "") && cfg.ControllerRRSA == nil {
 		return fmt.Errorf("STS runner credentials cannot be installed into a controller; configure controller_rrsa")
 	}
 	if cfg.ControllerRRSA != nil {
