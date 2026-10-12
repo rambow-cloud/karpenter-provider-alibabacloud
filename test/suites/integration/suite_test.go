@@ -97,21 +97,12 @@ var _ = Describe("ECSNodeClass Integration", func() {
 		Expect(instanceTags(instance)).To(HaveKeyWithValue("integration-test-tag", "tag-value"))
 	})
 
-	It("should launch nodes with kubelet configuration overrides", Label("kubelet-config"), func() {
+	It("should reject unapplied ACK kubelet overrides", Label("kubelet-config"), func() {
 		configureNodeClassAndPool("kubelet")
 		maxPods := int32(20)
-		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{
-			MaxPods: &maxPods,
-		}
-
-		pod := integrationPod()
-		env.ExpectCreated(nodeClass, nodePool, pod)
-		env.EventuallyExpectHealthy(pod)
-		node := env.EventuallyExpectCreatedNodeCount("==", 1)[0]
-		nodeClaims := env.EventuallyExpectCreatedNodeClaimCount("==", 1)
-
-		Expect(env.ExpectExists(nodeClaims[0]).(*karpv1.NodeClaim).Status.Capacity.Pods().Value()).To(BeNumerically("<=", int64(maxPods)))
-		Expect(node.Status.Capacity.Pods().Value()).To(BeNumerically(">", 0))
+		nodeClass.Spec.Kubelet = &v1alpha1.KubeletConfiguration{MaxPods: &maxPods}
+		Expect(nodeClass.Validate()).To(MatchError(ContainSubstring("overrides cannot be applied")))
+		Expect(env.Client.Create(env.Context, nodeClass)).ToNot(Succeed())
 	})
 
 	It("should launch nodes with metadata options configured", Label("metadata-options"), func() {

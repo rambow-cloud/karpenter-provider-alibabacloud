@@ -31,6 +31,9 @@ var imageNonWhitespaceRegex = regexp.MustCompile(`[^[:space:]]`)
 
 // Validate validates the ECSNodeClass spec
 func (nc *ECSNodeClass) Validate() error {
+	if err := ValidateNodeResourceConfiguration(nc.Spec); err != nil {
+		return err
+	}
 	if err := ValidateImageCompatibilityPolicy(nc.Spec); err != nil {
 		return err
 	}
@@ -130,6 +133,7 @@ func (nc *ECSNodeClass) validateTags() error {
 		TagNodeClaim:            true,
 		TagNodeClaimUID:         true,
 		TagKubeletMaxPods:       true,
+		TagResourceModel:        true,
 		"kubernetes.io/cluster": true,
 	}
 	for key := range nc.Spec.Tags {

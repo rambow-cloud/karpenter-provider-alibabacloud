@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
 	"testing"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
@@ -54,8 +55,8 @@ func TestSchedulingOnlyExposesInstanceTypesWithKnownImageArchitecture(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
 			require.NoError(t, v1alpha1.AddToScheme(scheme))
-			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{Images: tc.images, VSwitches: []v1alpha1.VSwitch{{ID: "vsw-offline", ZoneID: "cn-hangzhou-i"}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
-			provider := &CloudProvider{kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", &imageLaunchECS{})}
+			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{ACKNodePool: &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"}, Images: tc.images, VSwitches: []v1alpha1.VSwitch{{ID: "vsw-offline", ZoneID: "cn-hangzhou-i"}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
+			provider := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", &imageLaunchECS{})}
 			types, err := provider.instanceTypeProvider.List(context.Background())
 			require.NoError(t, err)
 			provider.pricingProvider = warmOfflinePricing(t, context.Background(), class, types, tc.images, class.Status.VSwitches)
@@ -91,7 +92,7 @@ func TestActualCreateRejectsMismatchedImagesAndChoosesNewestCompatible(t *testin
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			client := &imageLaunchECS{}
-			provider := &CloudProvider{instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", client)}
+			provider := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", client)}
 			types := []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64"}}
 			nc := &v1alpha1.ECSNodeClass{}
 			vs := []v1alpha1.VSwitch{{ID: "vsw-offline", ZoneID: "cn-hangzhou-i"}}

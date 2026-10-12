@@ -48,6 +48,8 @@ const (
 
 // BootstrapOptions contains options for generating bootstrap scripts
 type BootstrapOptions struct {
+	ACKNodePoolID            string
+	ACKResourceConfiguration string
 	// Disks is the exact normalized launch layout. FormatDisk is enabled only
 	// for a validated ContainerOS layout with one newly created persistent disk.
 	Disks      *v1alpha1.NormalizedDisks
@@ -287,6 +289,9 @@ func (p *Provider) ClearCache() {
 
 // GenerateUserData generates user data script for bootstrapping nodes
 func (p *Provider) GenerateUserData(ctx context.Context, opts BootstrapOptions) (string, error) {
+	if opts.ClusterType == ACKClusterType && opts.KubeletConfig != nil {
+		return "", fmt.Errorf("ACK attach scripts cannot apply kubelet overrides; configure the selected native node pool")
+	}
 	if opts.FormatDisk && (opts.Disks == nil || len(opts.Disks.DataDisks) != 1 || opts.Disks.DataDisks[0].SnapshotID != "" || strings.Contains(opts.Disks.DataDisks[0].Category, "ephemeral")) {
 		return "", fmt.Errorf("format_disk requires one newly initialized persistent launch data disk")
 	}
@@ -336,7 +341,7 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 	if err != nil {
 		return "", err
 	}
-	cacheKey := strings.Join([]string{"cs-bootstrap-script", opts.ClusterID, tea.StringValue(metadataRequest.Region), tea.StringValue(metadataRequest.ClusterType), tea.StringValue(metadataRequest.KubernetesVersion), tea.StringValue(metadataRequest.Profile), tea.StringValue(metadataRequest.Runtime), fmt.Sprintf("format-disk=%t", opts.FormatDisk)}, "/")
+	cacheKey := strings.Join([]string{"cs-bootstrap-script", opts.ClusterID, opts.ACKNodePoolID, opts.ACKResourceConfiguration, tea.StringValue(metadataRequest.Region), tea.StringValue(metadataRequest.ClusterType), tea.StringValue(metadataRequest.KubernetesVersion), tea.StringValue(metadataRequest.Profile), tea.StringValue(metadataRequest.Runtime), fmt.Sprintf("format-disk=%t", opts.FormatDisk)}, "/")
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -348,6 +353,9 @@ func (p *Provider) getACKBootstrapScriptByCluster(ctx context.Context, opts Boot
 	request := &cs.DescribeClusterAttachScriptsRequest{
 		Expired:    tea.Int64(1825228800),
 		FormatDisk: tea.Bool(opts.FormatDisk),
+	}
+	if opts.ACKNodePoolID != "" {
+		request.NodepoolId = tea.String(opts.ACKNodePoolID)
 	}
 
 	// Execute request

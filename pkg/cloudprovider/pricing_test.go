@@ -2,6 +2,8 @@ package cloudprovider
 
 import (
 	"context"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sync"
 	"testing"
 	"time"
@@ -46,6 +48,17 @@ func (f *offlinePriceClient) DescribeOfferingPrice(_ context.Context, r *ecs.Des
 }
 func warmOfflinePricing(t *testing.T, ctx context.Context, nc *v1alpha1.ECSNodeClass, types []*instancetype.InstanceType, images []v1alpha1.Image, vswitches []v1alpha1.VSwitch) *pricing.Provider {
 	t.Helper()
+	if nc.Status.ACKNodePool == nil {
+		nc.Status.ACKNodePool = &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"}
+	}
+	for _, it := range types {
+		if it.CPU == nil {
+			it.CPU = resource.NewQuantity(2, resource.DecimalSI)
+		}
+		if it.Memory == nil {
+			it.Memory = resource.NewQuantity(8<<30, resource.BinarySI)
+		}
+	}
 	p := pricing.NewProvider("cn-hangzhou", &offlinePriceClient{}, pricing.WithContext(ctx))
 	warmQuotes(t, ctx, p, nc, types, images, vswitches)
 	return p
@@ -74,9 +87,9 @@ func onDemandClaim() *coreapis.NodeClaim {
 }
 
 func TestPricedCandidatesNeverUseUnknownPrice(t *testing.T) {
-	p := &CloudProvider{}
-	nc := &v1alpha1.ECSNodeClass{}
-	_, err := p.pricedLaunchCandidates(onDemandClaim(), nc, []*instancetype.InstanceType{{Name: "ecs.g7.large", Architecture: "x86_64"}}, []v1alpha1.Image{{ID: "m-test", Architecture: "x86_64"}}, []v1alpha1.VSwitch{{ID: "vsw-test", ZoneID: "cn-hangzhou-i"}})
+	p := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}}
+	nc := &v1alpha1.ECSNodeClass{Status: v1alpha1.ECSNodeClassStatus{ACKNodePool: &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"}}}
+	_, err := p.pricedLaunchCandidates(context.Background(), onDemandClaim(), nc, []*instancetype.InstanceType{{Name: "ecs.g7.large", Architecture: "x86_64", CPU: resource.NewQuantity(2, resource.DecimalSI), Memory: resource.NewQuantity(8<<30, resource.BinarySI)}}, []v1alpha1.Image{{ID: "m-test", Architecture: "x86_64"}}, []v1alpha1.VSwitch{{ID: "vsw-test", ZoneID: "cn-hangzhou-i"}})
 	require.ErrorContains(t, err, "pricing client is unavailable")
 }
 
@@ -116,8 +129,8 @@ func TestSchedulingLaunchAndConsolidationShareHourlyPrices(t *testing.T) {
 	pricer := pricing.NewProvider("cn-hangzhou", quoteClient, pricing.WithContext(ctx))
 	scheme := runtime.NewScheme()
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
-	nc := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{Images: []v1alpha1.Image{{ID: "m-test", Architecture: "x86_64"}}, VSwitches: []v1alpha1.VSwitch{{ID: "vsw-j", ZoneID: "cn-hangzhou-j", AvailableIPAddressCount: 100}, {ID: "vsw-i", ZoneID: "cn-hangzhou-i", AvailableIPAddressCount: 10}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
-	p := &CloudProvider{kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", e), instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e), pricingProvider: pricer}
+	nc := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{ACKNodePool: &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"}, Images: []v1alpha1.Image{{ID: "m-test", Architecture: "x86_64"}}, VSwitches: []v1alpha1.VSwitch{{ID: "vsw-j", ZoneID: "cn-hangzhou-j", AvailableIPAddressCount: 100}, {ID: "vsw-i", ZoneID: "cn-hangzhou-i", AvailableIPAddressCount: 10}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
+	p := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(nc).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", e), instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e), pricingProvider: pricer}
 	t.Cleanup(p.instanceProvider.Batcher.Close)
 	pool := &coreapis.NodePool{Spec: coreapis.NodePoolSpec{Template: coreapis.NodeClaimTemplate{Spec: coreapis.NodeClaimTemplateSpec{NodeClassRef: &coreapis.NodeClassReference{Name: nc.Name}}}}}
 	types, err := p.instanceTypeProvider.List(ctx)

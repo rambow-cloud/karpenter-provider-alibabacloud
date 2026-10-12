@@ -48,6 +48,11 @@ spec:
           spec:
             description: ECSNodeClassSpec defines the desired state of ECSNodeClass
             properties:
+              ackNodePoolID:
+                description: ACKNodePoolID selects the native ACK bootstrap pool.
+                  Omitted selects its unique default.
+                pattern: ^np[-a-zA-Z0-9]+$
+                type: string
               capacityReservationPreference:
                 description: CapacityReservationPreference specifies the preference
                   for capacity reservations (open or target or none)
@@ -266,7 +271,8 @@ spec:
                   P0 only validates the enum.
                 type: string
               kubelet:
-                description: Kubelet defines Kubelet configuration overrides
+                description: Kubelet overrides are rejected for ACK; configure the
+                  native ACK node pool.
                 properties:
                   clusterDNS:
                     description: ClusterDNS is a list of DNS server IP addresses
@@ -369,6 +375,26 @@ spec:
                     - optional
                     - required
                     type: string
+                type: object
+              nodeFilesystem:
+                description: NodeFilesystem is measured kubelet nodefs data for one
+                  exact image and launch layout.
+                properties:
+                  allocatable:
+                    type: string
+                  capacity:
+                    type: string
+                  configurationHash:
+                    pattern: ^[a-f0-9]{64}$
+                    type: string
+                  imageID:
+                    minLength: 1
+                    type: string
+                required:
+                - allocatable
+                - capacity
+                - configurationHash
+                - imageID
                 type: object
               role:
                 description: Role is the name of the RAM role to use for the instance
@@ -524,6 +550,12 @@ spec:
             - message: spec.vSwitchSelectorTerms is required when launchTemplateID
                 is not specified
               rule: has(self.launchTemplateID) || has(self.vSwitchSelectorTerms)
+            - message: resource-model is a reserved provider tag
+              rule: '!has(self.tags) || !(''karpenter.alibabacloud.com/resource-model''
+                in self.tags)'
+            - message: ACK attach scripts cannot apply spec.kubelet overrides; configure
+                the selected native ACK node pool
+              rule: '!has(self.kubelet)'
             - message: spec.securityGroupSelectorTerms is required when launchTemplateID
                 is not specified
               rule: has(self.launchTemplateID) || has(self.securityGroupSelectorTerms)
@@ -540,6 +572,88 @@ spec:
           status:
             description: ECSNodeClassStatus defines the observed state of ECSNodeClass
             properties:
+              ackNodePool:
+                description: ACKNodePool is the resolved bootstrap pool and its resource-affecting
+                  kubelet settings.
+                properties:
+                  clusterID:
+                    type: string
+                  id:
+                    type: string
+                  kubelet:
+                    description: KubeletConfiguration defines Kubelet configuration
+                      overrides
+                    properties:
+                      clusterDNS:
+                        description: ClusterDNS is a list of DNS server IP addresses
+                        items:
+                          type: string
+                        type: array
+                      cpuCFSQuota:
+                        description: CPUCFSQuota enables CPU CFS quota enforcement
+                        type: boolean
+                      evictionHard:
+                        additionalProperties:
+                          type: string
+                        description: EvictionHard contains eviction thresholds
+                        type: object
+                      evictionMaxPodGracePeriod:
+                        description: EvictionMaxPodGracePeriod is the maximum grace
+                          period for pod termination during eviction
+                        format: int32
+                        type: integer
+                      evictionSoft:
+                        additionalProperties:
+                          type: string
+                        description: EvictionSoft contains soft eviction thresholds
+                        type: object
+                      evictionSoftGracePeriod:
+                        additionalProperties:
+                          type: string
+                        description: EvictionSoftGracePeriod contains grace periods
+                          for soft eviction thresholds
+                        type: object
+                      imageGCHighThresholdPercent:
+                        description: ImageGCHighThresholdPercent is the disk usage
+                          threshold for high image garbage collection
+                        format: int32
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                      imageGCLowThresholdPercent:
+                        description: ImageGCLowThresholdPercent is the disk usage
+                          threshold for low image garbage collection
+                        format: int32
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                      kubeReserved:
+                        additionalProperties:
+                          type: string
+                        description: KubeReserved contains resources reserved for
+                          Kubernetes components
+                        type: object
+                      maxPods:
+                        description: MaxPods is the maximum number of pods per node
+                        format: int32
+                        type: integer
+                      podsPerCore:
+                        description: |-
+                          PodsPerCore enables pods per core scheduling
+                          The maximum number of pods per node will be calculated as podsPerCore * number of cores
+                        format: int32
+                        type: integer
+                      systemReserved:
+                        additionalProperties:
+                          type: string
+                        description: SystemReserved contains resources reserved for
+                          system daemons
+                        type: object
+                    type: object
+                required:
+                - clusterID
+                - id
+                type: object
               conditions:
                 description: Conditions contains the current conditions of the ECSNodeClass
                 items:
@@ -724,6 +838,10 @@ spec:
                 description: Ready indicates whether the ECSNodeClass is ready to
                   provision instances
                 type: boolean
+              resourceConfigurationHash:
+                description: ResourceConfigurationHash binds nodefs measurements to
+                  resolved launch settings.
+                type: string
               securityGroups:
                 description: SecurityGroups contains the resolved security group list
                 items:

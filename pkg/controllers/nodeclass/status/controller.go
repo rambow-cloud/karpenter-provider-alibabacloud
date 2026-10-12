@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/ramrole"
 	"k8s.io/apimachinery/pkg/api/equality"
 
@@ -56,6 +57,7 @@ type Controller struct {
 	imageFamilyProvider    *imagefamily.Provider
 	launchTemplateProvider *launchtemplate.Provider
 	ramProvider            *ramrole.Provider
+	ackNodePoolProvider    *nodepool.Provider
 }
 
 const (
@@ -75,8 +77,9 @@ func NewController(
 	imageFamilyProvider *imagefamily.Provider,
 	launchTemplateProvider *launchtemplate.Provider,
 	ramProvider *ramrole.Provider,
+	ackNodePoolProviders ...*nodepool.Provider,
 ) *Controller {
-	return &Controller{
+	c := &Controller{
 		client:                 client,
 		vswitchProvider:        vswitchProvider,
 		securityGroupProvider:  securityGroupProvider,
@@ -84,6 +87,10 @@ func NewController(
 		launchTemplateProvider: launchTemplateProvider,
 		ramProvider:            ramProvider,
 	}
+	if len(ackNodePoolProviders) > 0 {
+		c.ackNodePoolProvider = ackNodePoolProviders[0]
+	}
+	return c
 }
 
 // Reconcile updates the status of ECSNodeClass by resolving selectors
@@ -98,6 +105,12 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	stored := nodeClass.DeepCopy()
+	var poolErr error
+	if c.ackNodePoolProvider != nil {
+		nodeClass.Status.ResourceConfigurationHash = ""
+		nodeClass.Status.ACKNodePool = nil
+		nodeClass.Status.ACKNodePool, poolErr = c.ackNodePoolProvider.Resolve(ctx, nodeClass)
+	}
 	var resolveErr error
 
 	if nodeClass.Spec.LaunchTemplateID != nil {
@@ -105,6 +118,15 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	} else {
 		nodeClass.Status.LaunchTemplate = nil
 		resolveErr = c.resolveSelectorResources(nodeClass, ctx)
+	}
+	if poolErr != nil {
+		resolveErr = poolErr
+	}
+	if resolveErr == nil && c.ackNodePoolProvider != nil {
+		nodeClass.Status.ResourceConfigurationHash, resolveErr = nodeClass.ResourceConfigurationHash()
+		if resolveErr == nil && nodeClass.Spec.NodeFilesystem != nil && nodeClass.Spec.NodeFilesystem.ConfigurationHash != nodeClass.Status.ResourceConfigurationHash {
+			resolveErr = fmt.Errorf("nodeFilesystem measurement uses a different resource configuration")
+		}
 	}
 
 	// Validate RAM Role

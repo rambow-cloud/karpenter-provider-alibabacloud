@@ -163,7 +163,10 @@ func (c *CloudProvider) recoverLaunch(ctx context.Context, claim *coreapis.NodeC
 	if err != nil {
 		return nil, err
 	}
-	result := c.convertInstanceToNodeClaim(ctx, inst, claim, types, tags[v1alpha1.TagClusterID])
+	result, err := c.convertInstanceToNodeClaim(ctx, inst, claim, types, tags[v1alpha1.TagClusterID])
+	if err != nil {
+		return nil, err
+	}
 	setNodeClassHashAnnotation(result, attempt.Hash)
 	return result, nil
 }

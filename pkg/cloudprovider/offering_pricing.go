@@ -1,6 +1,7 @@
 package cloudprovider
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -37,15 +38,26 @@ type launchCandidate struct {
 	vswitch      v1alpha1.VSwitch
 	capacityType string
 	price        float64
+	snapshot     string
 }
 
-func (c *CloudProvider) pricedLaunchCandidates(claim *coreapis.NodeClaim, nc *v1alpha1.ECSNodeClass, types []*instancetype.InstanceType, images []v1alpha1.Image, vswitches []v1alpha1.VSwitch) ([]launchCandidate, error) {
+func (c *CloudProvider) pricedLaunchCandidates(ctx context.Context, claim *coreapis.NodeClaim, nc *v1alpha1.ECSNodeClass, types []*instancetype.InstanceType, images []v1alpha1.Image, vswitches []v1alpha1.VSwitch) ([]launchCandidate, error) {
 	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(claim.Spec.Requirements...)
 	var candidates []launchCandidate
 	var priceErr error
 	for _, it := range types {
 		image := selectBootImage(images, it, nc)
 		if image.ID == "" {
+			continue
+		}
+		model, err := c.resourceModel(ctx, it, nc, image.ID)
+		if err != nil {
+			priceErr = err
+			continue
+		}
+		snapshot, err := model.Encode()
+		if err != nil {
+			priceErr = err
 			continue
 		}
 		for _, vs := range vswitches {
@@ -77,7 +89,7 @@ func (c *CloudProvider) pricedLaunchCandidates(claim *coreapis.NodeClaim, nc *v1
 					priceErr = err
 					continue
 				}
-				candidates = append(candidates, launchCandidate{it, image, vs, ct, quote.Hourly})
+				candidates = append(candidates, launchCandidate{it, image, vs, ct, quote.Hourly, snapshot})
 			}
 		}
 	}

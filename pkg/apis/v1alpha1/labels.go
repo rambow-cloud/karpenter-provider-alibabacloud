@@ -94,6 +94,7 @@ const (
 
 	// TagKubeletMaxPods records the ECSNodeClass kubelet maxPods setting on launched instances.
 	TagKubeletMaxPods = Group + "/kubelet-max-pods"
+	TagResourceModel  = Group + "/resource-model"
 
 	// LabelInstanceFamily is the legacy label key for instance family
 	LabelInstanceFamily = "node.kubernetes.io/instance-family"

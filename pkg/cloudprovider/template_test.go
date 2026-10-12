@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/cluster"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/imagefamily"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instancetype"
@@ -16,11 +17,11 @@ func TestTemplateLayoutReachesRunInstancesWithoutAddingDisks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	e := &imageLaunchECS{}
-	p := &CloudProvider{instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e)}
+	p := &CloudProvider{clusterNetworkConfig: &cluster.NetworkConfig{ClusterNetwork: "kube-flannel-ds", MaxPods: 64}, instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", e)}
 	defer p.instanceProvider.Batcher.Close()
 	disks, err := v1alpha1.NormalizeDisks(v1alpha1.ECSNodeClassSpec{SystemDisk: &v1alpha1.SystemDiskSpec{Size: tea.Int32(80)}, DataDisks: []v1alpha1.DataDiskSpec{{Category: "cloud_ssd", Size: 100}}})
 	require.NoError(t, err)
-	nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{LaunchTemplateID: tea.String("lt-test")}, Status: v1alpha1.ECSNodeClassStatus{LaunchTemplate: &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 7, InstanceType: "ecs.g7.large", Disks: disks, Pricing: &v1alpha1.LaunchTemplatePricing{}}}}
+	nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{LaunchTemplateID: tea.String("lt-test")}, Status: v1alpha1.ECSNodeClassStatus{ACKNodePool: &v1alpha1.ResolvedACKNodePool{ID: "np-offline", ClusterID: "c-offline"}, LaunchTemplate: &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 7, InstanceType: "ecs.g7.large", Disks: disks, Pricing: &v1alpha1.LaunchTemplatePricing{}}}}
 	spec, err := nc.LaunchSpec()
 	require.NoError(t, err)
 	nc.Spec = spec

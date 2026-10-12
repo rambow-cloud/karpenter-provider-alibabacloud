@@ -24,6 +24,7 @@ import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/controllers"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/operator"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/operator/options"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/overlay"
@@ -62,6 +63,7 @@ func main() {
 		alibabaOperator.BootstrapProvider,
 		alibabaOperator.ClusterNetworkConfig,
 		alibabaOperator.UnavailableOfferingsCache,
+		nodepool.New(alibabaOperator.Options.ClusterID, alibabaOperator.CSClient),
 	)
 
 	overlayUndecoratedCloudProvider := metrics.Decorate(alibabaCloudProvider)

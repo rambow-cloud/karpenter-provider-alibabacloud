@@ -10,7 +10,7 @@
 
 ## 节点漂移
 
-ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用版本 `v3`。全新部署使用该版本；当前范围不包含旧哈希迁移。
+ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用版本 `v4`。全新部署使用该版本；当前范围不包含旧哈希迁移。
 
 镜像、交换机与安全组 selector 的原文、顺序和重复项不参与静态哈希。修改 selector 后，当前节点的镜像和交换机仍在解析集合中、安全组集合仍相同时，不会仅因 selector 改写报告漂移。节点使用的资源不再被允许时，分别报告 `ImageDrift`、`VSwitchDrift` 或 `SecurityGroupDrift`。出现更新的镜像不会自动淘汰仍在允许集合中的旧镜像。当前 generation 尚未 Ready 时暂停漂移判断，避免使用未完成的解析结果。
 
@@ -75,3 +75,19 @@ SDK v5.1.0 的生成模型缺少 `Usable` 请求及响应字段。adapter 通过
 2026-10-11 的真实只读查询证据来自 cn-hangzhou 的一个 OAuth profile：`lifsea_3_x64_5G_alibase_20260519.qcow2` 在省略/false 时返回 0，true 时返回 1，且额外过滤 Available/Usable 仍返回 1；`aliyun_3_x64_20G_container_optimized_alibase_20260828.vhd` 三种设置均返回 1。Lifsea family `acs:lifsea_os_3_x64` 三种设置均返回 0，因此不能用 family 替代该精确 pin。成功 Lifsea Available/Usable 查询 RequestId 为 `01A129B7-C202-58FC-B7FC-1714ACCF8FFE`；完整脱敏记录见 [issue #29](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/29)。
 
 上述证据不代表所有 ContainerOS、区域或账号的行为。该 profile 未取得已订阅、已过期或 Usable=false 的真实镜像样本；这些过滤分支使用本地 SDK HTTP 响应测试，不能称为云端实测。真实订阅期限与运行权限仍须在目标账号核实，节点启动与加入 ACK 仍由 #5/#23 验收。官方字段定义见 [DescribeImages](https://www.alibabacloud.com/help/en/ecs/developer-reference/api-ecs-2014-05-26-describeimages)。
+
+## ACK 节点资源计算
+
+通过 `spec.ackNodePoolID` 选择现有 ACK 原生节点池；省略时要求唯一默认池。仅接受 active 的普通 ESS/containerd 节点池，并读取 `cs:DescribeClusterNodePools` / `cs:DescribeClusterNodePoolDetail`。将池 ID 和资源相关 kubelet 设置写入 `status.ackNodePool`；attach script 固定该池 ID，脚本缓存按池和配置哈希隔离。创建前再次读取，配置改变时等待 status 刷新，不修改原生节点池。缺失、权限错误、身份不符、native userdata、auto mode、CPU/内存 manager 或 soft eviction overrides 均明确拒绝。
+
+ACK attach script 不能应用 `spec.kubelet`；admission 和启动路径明确拒绝该字段，包括 maxPods、podsPerCore 和预留配置。请在所选原生节点池配置 kubelet。原生 API 不提供 podsPerCore，不能假设已生效。Pod 候选上限取原生 maxPods 与已发现网络上限的较小值：Flannel 使用实际 mask/256 配额；Terway 使用 ECS 的已知 ENI/IP 数量，保守地不扩大 trunk 容量。不支持 exclusive ENI 或非默认 pod-density-mode；未知 ENI 元数据不会获得候选。Terway maxPods 的 host-network 语义可能使此保守上限低于实际节点容量，真实值以注册节点为准。
+
+VM 内存损耗通过百分比和固定量的较大值扣减一次 Capacity。ACK 1.28+ CPU 分段规则、内存 `min(11×Pod上限+255 MiB, 可用内存×25%)` 分别计算 kube/system reservation，按 50/50 分配；采用网络和原生上限的较大值计算默认内存预留，避免保守 Pod 上限导致预留不足。显式原生 kubeReserved/systemReserved 按字段覆盖；eviction 单独扣减，ACK 默认 memory.available 为 300Mi。自定义 evictionHard 必须显式包含 memory.available，支持数量/百分比，拒绝未知信号和无效值；不假设 ACK 未公开的默认合并设置。调度和创建共用此模型，不再固定均分总 overhead。
+
+ECS 磁盘大小不能证明 kubelet nodefs 的挂载、分区和可分配容量，未测量时不声明 ephemeral-storage，临时存储请求不会匹配。可在相同镜像和启动配置的校准节点读取 kubelet Capacity/Allocatable 后，填写 `spec.nodeFilesystem` 的 `imageID`、`capacity`、`allocatable` 和 `configurationHash`（来自 `status.resourceConfigurationHash`）。配置哈希覆盖有效磁盘、原生池和自定义 userdata；配置或镜像改变后测量失效。容量不得超过任一启动云盘大小，不累加独立磁盘；allocatable 必须符合已知预留/eviction。未验证的 RAID/独立 imagefs 布局不通过此模型推算。
+
+创建的 Capacity/Allocatable 以紧凑快照保存在首次 RunInstances 的保留 ECS tag `karpenter.alibabacloud.com/resource-model`，纳入持久化幂等参数摘要。Create/Get/List 和失败恢复读取同一快照，不随 NodeClass 后续变化重新估算。节点注册后，核对 NodeClaim UID 和 Node ProviderID，再采用 kubelet 报告；查询错误、身份冲突或非法资源值明确返回错误。无快照的孤立实例保留未知资源，不伪造容量。静态哈希版本为 v4，包含原生池配置；当前按全新部署处理。
+
+离线回归覆盖公式、网络/原生上限、配置拒绝、测量绑定、SDK 参数、脚本缓存、首次 tag 与恢复一致性。目标 ACK 实际校准和节点资源对比仍保留为 #5/#23 验收。
+
+参考 [ACK 资源预留策略](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/resource-reservation-policy)、[ACK 原生 kubelet 配置](https://help.aliyun.com/en/ack/ack-managed-and-ack-dedicated/user-guide/customize-the-kubelet-configurations-of-a-node-pool) 和 [AWS v1.14.1 资源模型](https://github.com/aws/karpenter-provider-aws/blob/v1.14.1/pkg/providers/instancetype/types.go)。

@@ -25,6 +25,7 @@ import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/controllers/nodeclass/hash"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/controllers/nodeclass/status"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/operator"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 )
 
 func NewControllers(
@@ -45,6 +46,7 @@ func NewControllers(
 			alibabaOperator.ImageFamilyProvider,
 			alibabaOperator.LaunchTemplateProvider,
 			alibabaOperator.RAMProvider,
+			nodepool.New(alibabaOperator.Options.ClusterID, alibabaOperator.CSClient),
 		),
 		// NodeClass hash controller for drift detection
 		hash.NewController(kubeClient),
