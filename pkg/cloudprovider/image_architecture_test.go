@@ -56,6 +56,9 @@ func TestSchedulingOnlyExposesInstanceTypesWithKnownImageArchitecture(t *testing
 			require.NoError(t, v1alpha1.AddToScheme(scheme))
 			class := &v1alpha1.ECSNodeClass{ObjectMeta: metav1.ObjectMeta{Name: "class", Generation: 1}, Status: v1alpha1.ECSNodeClassStatus{Images: tc.images, VSwitches: []v1alpha1.VSwitch{{ID: "vsw-offline", ZoneID: "cn-hangzhou-i"}}, Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1}}}}
 			provider := &CloudProvider{kubeClient: fake.NewClientBuilder().WithScheme(scheme).WithObjects(class).Build(), instanceTypeProvider: instancetype.NewProvider("cn-hangzhou", &imageLaunchECS{})}
+			types, err := provider.instanceTypeProvider.List(context.Background())
+			require.NoError(t, err)
+			provider.pricingProvider = warmOfflinePricing(t, context.Background(), class, types, tc.images, class.Status.VSwitches)
 			pool := &coreapis.NodePool{Spec: coreapis.NodePoolSpec{Template: coreapis.NodeClaimTemplate{Spec: coreapis.NodeClaimTemplateSpec{NodeClassRef: &coreapis.NodeClassReference{Name: "class"}}}}}
 			result, err := provider.GetInstanceTypes(context.Background(), pool)
 			if len(tc.types) == 0 {
@@ -90,7 +93,11 @@ func TestActualCreateRejectsMismatchedImagesAndChoosesNewestCompatible(t *testin
 			client := &imageLaunchECS{}
 			provider := &CloudProvider{instanceProvider: instance.NewProvider(ctx, "cn-hangzhou", client)}
 			types := []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64"}}
-			_, err := provider.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, &v1alpha1.ECSNodeClass{}, types, tc.images, []v1alpha1.VSwitch{{ID: "vsw-offline"}}, []v1alpha1.SecurityGroup{{ID: "sg-offline"}}, "offline", nil)
+			nc := &v1alpha1.ECSNodeClass{}
+			vs := []v1alpha1.VSwitch{{ID: "vsw-offline", ZoneID: "cn-hangzhou-i"}}
+			provider.pricingProvider = warmOfflinePricing(t, ctx, nc, types, tc.images, vs)
+			defer provider.instanceProvider.Batcher.Close()
+			_, err := provider.createInstanceWithRetry(ctx, onDemandClaim(), nc, types, tc.images, vs, []v1alpha1.SecurityGroup{{ID: "sg-offline"}}, "offline", nil)
 			if tc.wantImage == "" {
 				require.Error(t, err)
 				require.Empty(t, client.requests)

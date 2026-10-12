@@ -169,7 +169,7 @@ func (p *Provider) RevalidateForLaunch(ctx context.Context, nc *v1alpha1.ECSNode
 }
 
 func resolvedImage(img ecs.DescribeImagesResponseBodyImagesImage, imageType string) v1alpha1.Image {
-	return v1alpha1.Image{ID: tea.StringValue(img.ImageId), Name: tea.StringValue(img.ImageName), Architecture: tea.StringValue(img.Architecture), OSType: strings.ToLower(tea.StringValue(img.OSType)), ImageType: imageType, CreationTime: tea.StringValue(img.CreationTime)}
+	return v1alpha1.Image{ID: tea.StringValue(img.ImageId), Name: tea.StringValue(img.ImageName), Architecture: tea.StringValue(img.Architecture), OSType: strings.ToLower(tea.StringValue(img.OSType)), OwnerAlias: tea.StringValue(img.ImageOwnerAlias), ImageType: imageType, CreationTime: tea.StringValue(img.CreationTime)}
 }
 
 // ValidateBootImages enforces the implemented bootstrap and disk layout boundary.

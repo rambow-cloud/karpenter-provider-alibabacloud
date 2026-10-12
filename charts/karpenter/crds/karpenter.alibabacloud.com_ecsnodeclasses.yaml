@@ -624,6 +624,9 @@ spec:
                       description: OSType is obtained from ECS. This provider supports
                         Linux only.
                       type: string
+                    ownerAlias:
+                      description: OwnerAlias is the ECS image source for pricing.
+                      type: string
                   required:
                   - id
                   type: object
@@ -687,6 +690,25 @@ spec:
                     type: string
                   instanceType:
                     type: string
+                  pricing:
+                    description: LaunchTemplatePricing records billable template settings
+                      without credentials.
+                    properties:
+                      internetChargeType:
+                        type: string
+                      internetMaxBandwidthOut:
+                        format: int32
+                        type: integer
+                      ioOptimized:
+                        type: string
+                      spotDuration:
+                        format: int32
+                        type: integer
+                      unsupportedReason:
+                        description: UnsupportedReason prevents quotes that omit inherited
+                          billable settings.
+                        type: string
+                    type: object
                   version:
                     format: int64
                     type: integer

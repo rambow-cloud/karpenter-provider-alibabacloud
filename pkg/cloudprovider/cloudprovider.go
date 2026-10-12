@@ -544,9 +544,6 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 	// Log available zones (only at debug level)
 	logger.V(1).Info("Available zones", "zones", availableZones)
 
-	// 6. Update pricing information (if methods exist)
-	// Note: Pricing provider may not have these exact methods, skip for now
-
 	// 7. Convert to core InstanceType format
 	coreInstanceTypes := make([]*cloudprovider.InstanceType, 0, len(filteredTypes))
 	for _, it := range filteredTypes {
@@ -583,6 +580,11 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 				capTypeAvailability[ct] = true // has stock
 			}
 			for capType, isAvailable := range capTypeAvailability {
+				quote, quoteErr := c.offeringQuote(nodeClass, it, filterImagesForNodeLabels(nodeClass.Status.Images, nodePool.Spec.Template.Labels), zoneID, capType)
+				isAvailable = isAvailable && quoteErr == nil
+				if quoteErr != nil {
+					logger.V(1).Info("offering awaits a valid hourly quote", "instanceType", it.Name, "zone", zoneID, "capacityType", capType, "error", quoteErr)
+				}
 				if c.unavailableOfferings != nil {
 					isAvailable = isAvailable && c.unavailableOfferings.IsAvailable(it.Name, zoneID, capType)
 				}
@@ -591,7 +593,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *coreapis
 						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zoneID),
 						scheduling.NewRequirement(coreapis.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capType),
 					),
-					Price:     0.0, // Pricing not implemented yet
+					Price:     quote.Hourly,
 					Available: isAvailable,
 				})
 			}
@@ -1051,10 +1053,11 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 	}
 	securityGroupIDs = securitygroups.NormalizeIDs(securityGroupIDs)
 
-	// Derive capacity type from NodeClaim requirements (karpenter.sh/capacity-type),
-	// then translate it into the ECS SpotStrategy request parameter. Both steps are
-	// centralized in pkg/utils/ecs so the spot semantics stay consistent everywhere.
-	capacityType := capacityTypeFromRequirements(nodeClaim.Spec.Requirements)
+	// Admit only fresh quotes for compatible capacity types, inventory and zones.
+	candidates, err := c.pricedLaunchCandidates(nodeClaim, nodeClass, instanceTypes, images, vswitches)
+	if err != nil {
+		return "", err
+	}
 
 	// Build data disks once (independent of instance type).
 	var dataDisks []instance.DataDisk
@@ -1074,20 +1077,15 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		}
 	}
 
-	// Outer loop: iterate instance types in Karpenter's priority order.
-	// For each instance type, try all vSwitches (inner fallback). This mirrors
-	// the upstream AWS provider behaviour — if the first instance type has no
-	// capacity in any zone, we fall back to the next best fit rather than
-	// failing the whole launch.
+	// Try the lowest-priced compatible tuples first, retaining Karpenter's Spot
+	// precedence and the existing capacity/IP feedback and idempotency guards.
 	logger := log.FromContext(ctx)
 	var lastErr error
-	for _, it := range instanceTypes {
-		// Pick an image whose architecture matches this instance type. The
-		// NodeClass may resolve images for multiple architectures; blindly
-		// taking the first one can hand an arm64 instance an x86_64 image
-		// (or vice versa), which ECS rejects. For single-arch NodeClasses
-		// this is a no-op.
-		image := selectBootImage(images, it, nodeClass)
+	for _, candidate := range candidates {
+		it := candidate.instanceType
+		capacityType := candidate.capacityType
+		// The candidate image is the exact compatible image used for its quote.
+		image := candidate.image
 		if image.ID == "" {
 			continue // Never submit a mismatched architecture to ECS.
 		}
@@ -1124,7 +1122,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 			baseOpts.Ipv6AddressCount = &one
 		}
 
-		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, vswitches, func(ctx context.Context, opts instance.CreateOptions) (string, error) {
+		instanceID, err := vswitchFallbackCreate(ctx, baseOpts, []v1alpha1.VSwitch{candidate.vswitch}, func(ctx context.Context, opts instance.CreateOptions) (string, error) {
 			if nodeClaim.UID == "" {
 				return c.instanceProvider.Create(ctx, opts)
 			}
@@ -1139,7 +1137,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		}
 
 		if errors.IsInsufficientCapacityError(err) {
-			logger.Info("instance type unavailable in all zones, trying next instance type",
+			logger.Info("priced launch candidate unavailable, trying next candidate",
 				"instanceType", it.Name, "error", err)
 			lastErr = err
 			continue
@@ -1148,7 +1146,7 @@ func (c *CloudProvider) createInstanceWithRetry(ctx context.Context, nodeClaim *
 		// a different instance type won't fix a bad parameter.
 		return "", fmt.Errorf("failed to create instance: %w", err)
 	}
-	return "", fmt.Errorf("all instance types exhausted across all zones (%d types tried), last error: %w", len(instanceTypes), lastErr)
+	return "", fmt.Errorf("all priced launch candidates exhausted (%d tried), last error: %w", len(candidates), lastErr)
 }
 
 // vswitchFallbackCreate tries vswitches in order, falling back to the next on capacity or IP-exhaustion

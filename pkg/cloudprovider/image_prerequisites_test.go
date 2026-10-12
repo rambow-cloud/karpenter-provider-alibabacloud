@@ -6,7 +6,6 @@ import (
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instance"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/instancetype"
 	"github.com/stretchr/testify/require"
-	coreapis "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"testing"
 )
 
@@ -26,7 +25,9 @@ func TestContainerLocalDiskMetadataControlsActualLaunch(t *testing.T) {
 			nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{DataDisks: []v1alpha1.DataDiskSpec{{Category: "cloud_essd", Size: 40}}}}
 			it := &instancetype.InstanceType{Name: "ecs.g7.large", Architecture: "X86_64", LocalDiskKnown: tc.known, LocalDiskCount: tc.count}
 			images := []v1alpha1.Image{{ID: "lifsea-test", ImageType: "ContainerOS", OSType: "linux", Architecture: "x86_64"}}
-			_, err := p.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, nc, []*instancetype.InstanceType{it}, images, []v1alpha1.VSwitch{{ID: "vsw-test"}}, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "bootstrap", nil)
+			vs := []v1alpha1.VSwitch{{ID: "vsw-test", ZoneID: "cn-hangzhou-i"}}
+			p.pricingProvider = warmOfflinePricing(t, ctx, nc, []*instancetype.InstanceType{it}, images, vs)
+			_, err := p.createInstanceWithRetry(ctx, onDemandClaim(), nc, []*instancetype.InstanceType{it}, images, vs, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "bootstrap", nil)
 			if tc.want {
 				require.NoError(t, err)
 				require.Len(t, e.requests, 1)

@@ -466,10 +466,22 @@ type ECSNodeClassStatus struct {
 // ResolvedLaunchTemplate contains no credentials or template userdata.
 // +kubebuilder:object:generate=true
 type ResolvedLaunchTemplate struct {
-	ID           string          `json:"id"`
-	Version      int64           `json:"version"`
-	InstanceType string          `json:"instanceType,omitempty"`
-	Disks        NormalizedDisks `json:"disks"`
+	ID           string                 `json:"id"`
+	Version      int64                  `json:"version"`
+	InstanceType string                 `json:"instanceType,omitempty"`
+	Disks        NormalizedDisks        `json:"disks"`
+	Pricing      *LaunchTemplatePricing `json:"pricing,omitempty"`
+}
+
+// LaunchTemplatePricing records billable template settings without credentials.
+// +kubebuilder:object:generate=true
+type LaunchTemplatePricing struct {
+	InternetChargeType      string `json:"internetChargeType,omitempty"`
+	InternetMaxBandwidthOut int32  `json:"internetMaxBandwidthOut,omitempty"`
+	IoOptimized             string `json:"ioOptimized,omitempty"`
+	SpotDuration            *int32 `json:"spotDuration,omitempty"`
+	// UnsupportedReason prevents quotes that omit inherited billable settings.
+	UnsupportedReason string `json:"unsupportedReason,omitempty"`
 }
 
 // VSwitch represents a resolved VSwitch
@@ -516,6 +528,10 @@ type Image struct {
 	// OSType is obtained from ECS. This provider supports Linux only.
 	// +optional
 	OSType string `json:"osType,omitempty"`
+
+	// OwnerAlias is the ECS image source for pricing.
+	// +optional
+	OwnerAlias string `json:"ownerAlias,omitempty"`
 
 	// ImageType is the ACK metadata image_type, when ACK compatibility is verified.
 	// +optional

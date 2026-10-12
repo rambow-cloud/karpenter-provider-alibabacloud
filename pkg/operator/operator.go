@@ -514,7 +514,7 @@ func NewOperator(ctx context.Context, coreOp *coreoperator.Operator) (*Operator,
 	// Initialize providers
 	vswitchProvider := vswitch.NewProvider(opts.Region, vpcClient)
 	securityGroupProvider := securitygroup.NewProvider(opts.Region, ecsClient)
-	pricingProvider := pricing.NewProvider(opts.Region, ecsClient)
+	pricingProvider := pricing.NewProvider(opts.Region, ecsClient, pricing.WithContext(ctx))
 	bootstrapProvider := bootstrap.NewProvider(opts.Region, csClient)
 	launchTemplateProvider := launchtemplate.NewProvider(opts.Region, ecsClient)
 	instanceProfileProvider := instanceprofile.NewProvider(ramClient, opts.Region)

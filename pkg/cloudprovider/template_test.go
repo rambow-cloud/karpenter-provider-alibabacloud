@@ -20,13 +20,16 @@ func TestTemplateLayoutReachesRunInstancesWithoutAddingDisks(t *testing.T) {
 	defer p.instanceProvider.Batcher.Close()
 	disks, err := v1alpha1.NormalizeDisks(v1alpha1.ECSNodeClassSpec{SystemDisk: &v1alpha1.SystemDiskSpec{Size: tea.Int32(80)}, DataDisks: []v1alpha1.DataDiskSpec{{Category: "cloud_ssd", Size: 100}}})
 	require.NoError(t, err)
-	nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{LaunchTemplateID: tea.String("lt-test")}, Status: v1alpha1.ECSNodeClassStatus{LaunchTemplate: &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 7, InstanceType: "ecs.g7.large", Disks: disks}}}
+	nc := &v1alpha1.ECSNodeClass{Spec: v1alpha1.ECSNodeClassSpec{LaunchTemplateID: tea.String("lt-test")}, Status: v1alpha1.ECSNodeClassStatus{LaunchTemplate: &v1alpha1.ResolvedLaunchTemplate{ID: "lt-test", Version: 7, InstanceType: "ecs.g7.large", Disks: disks, Pricing: &v1alpha1.LaunchTemplatePricing{}}}}
 	spec, err := nc.LaunchSpec()
 	require.NoError(t, err)
 	nc.Spec = spec
 	images := []v1alpha1.Image{{ID: "lifsea-test", Architecture: "x86_64", OSType: "linux", ImageType: "ContainerOS"}}
 	require.NoError(t, imagefamily.ValidateBootImages(spec, images))
-	_, err = p.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, nc, []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64", LocalDiskKnown: true}}, images, []v1alpha1.VSwitch{{ID: "vsw-test"}}, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "generated-bootstrap", nil)
+	types := []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64", LocalDiskKnown: true}}
+	vs := []v1alpha1.VSwitch{{ID: "vsw-test", ZoneID: "cn-hangzhou-i"}}
+	p.pricingProvider = warmOfflinePricing(t, ctx, nc, types, images, vs)
+	_, err = p.createInstanceWithRetry(ctx, onDemandClaim(), nc, types, images, vs, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "generated-bootstrap", nil)
 	require.NoError(t, err)
 	require.Len(t, e.requests, 1)
 	r := e.requests[0]

@@ -32,7 +32,7 @@ func TestACKAutomaticAlternativesAreFilteredButPinsRemainStrict(t *testing.T) {
 	nc.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ImageOwnerAlias: tea.String("system")}}
 	images, err := p.ResolveForNodeClass(context.Background(), nc)
 	require.NoError(t, err)
-	require.Equal(t, []v1alpha1.Image{{ID: "m-approved", Name: "compatible-node", Architecture: "x86_64", OSType: "linux", ImageType: "AliyunLinux3ContainerOptimized"}}, images)
+	require.Equal(t, []v1alpha1.Image{{ID: "m-approved", Name: "compatible-node", Architecture: "x86_64", OSType: "linux", OwnerAlias: "system", ImageType: "AliyunLinux3ContainerOptimized"}}, images)
 
 	images, err = p.RevalidateForLaunch(context.Background(), nc, []v1alpha1.Image{{ID: "m-approved"}, {ID: "m-stale"}})
 	require.NoError(t, err)
