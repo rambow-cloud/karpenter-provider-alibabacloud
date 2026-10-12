@@ -28,6 +28,20 @@ ContainerOS 的启动校验与 bootstrap 使用同一规范化磁盘快照；只
 
 参考 [AWS v1.14.1 静态 hash 与 selector 忽略策略](https://github.com/aws/karpenter-provider-aws/blob/v1.14.1/pkg/apis/v1/ec2nodeclass.go)。
 
+## Offering 报价与成本排序
+
+调度和实际创建共用 ECS `DescribePrice` 的一台实例、一小时成交价。查询明确指定地域、zone、实例规格、实际选择的镜像、VPC、规范化系统盘和数据盘，以及 `NoSpot` 或实际 Spot strategy；Spot 不再使用固定折扣估算。原生模板的公网计费方式、带宽、I/O 优化和 Spot 保留时长来自固定数字版本的 status 快照。市场镜像单独返回的许可成交价纳入合计，并要求币种一致。
+
+只接受完整、有限且非负的 CNY 或 USD 报价。一个 provider 进程使用首个有效报价的币种，其他币种不参与比较，不猜测汇率。缺少价格/币种、API 失败、缓存过期或刷新中，都令该 offering `Available=false`；保留其规格、zone 和容量类型，避免报价暂不可用被当作规格消失。此时 core 接口中的零值只是不可用报价的占位值；API 明确返回的零价优惠与缺失元数据分开处理。报价恢复后才可参与新节点调度。
+
+报价按完整查询配置隔离，按量有效期 5 分钟，Spot 1 分钟；失败缓存 30 秒，不复用过期报价。首次访问异步刷新，最多 4 个在途请求、每秒 5 个请求（初始 burst 4），每个请求含限流等待最多 30 秒；相同查询合并刷新，缓存最多 4096 项。冷启动或大目录刷新期间只开放已取得有效报价的组合，逐步扩大可调度集合，不阻塞一次调度去同步查询全部 SKU。
+
+创建仅使用当前有库存、未被缺货缓存禁用、镜像兼容且报价有效的组合。两个容量类型都允许时遵循 Karpenter 的 Spot 优先语义，再在该容量类型内按小时报价升序选规格和 zone；同价时优先 IP 余量较多的交换机。缺货/IP 不足才回退到后续候选，权限和参数错误立即返回。报价变化可能改变候选顺序；如果前一次创建结果不明确，既有持久化启动记录仍禁止以不同参数再次创建。
+
+报价是节点配置的小时基准成本，不是最终账单预测；流量、快照、KMS、CPU burst 等用量费用，以及删除后保留磁盘的后续费用均不据此估算。模板中无法表示的预配置 IOPS 或磁盘 bursting 会写入 `status.launchTemplate.pricing.unsupportedReason`，禁止漏价后自动选用；API 报告的磁盘总 IOPS 不作为额外预配置 IOPS。市场镜像保留 ECS 来源，缺少独立许可报价时不可调度。报价 API 权限为已有的 `ecs:DescribePrice`。离线测试执行 core 的严格替换价格筛选，并验证实际 RunInstances 选择；真实账号报价、账单与非空节点 consolidation 保留为 #5/#23 验收。
+
+参考 [阿里云 DescribePrice](https://help.aliyun.com/zh/ecs/developer-reference/api-ecs-2014-05-26-describeprice)、[AWS offering 报价可用性](https://github.com/aws/karpenter-provider-aws/blob/v1.14.1/pkg/providers/instancetype/offering/base_resolver.go) 和 [Karpenter 替换价格筛选](https://github.com/kubernetes-sigs/karpenter/blob/v1.14.1/pkg/controllers/provisioning/scheduling/nodeclaim.go)。
+
 ## 缺货反馈
 
 实际 RunInstances 返回结构化 ECS 错误码 `OperationDenied.NoStock`、`Zone.NotOnSale` 或 `InvalidResourceType.NotSupported` 时，将“实例规格＋可用区＋容量类型”标记为暂不可用。缓存由 operator 创建并注入 CloudProvider，TTL 使用现有 `--unavailable-offering-cache-ttl` 配置，默认 5 分钟。调度读取该状态；下一次创建也跳过缓存中的组合，TTL 到期后允许再次尝试。

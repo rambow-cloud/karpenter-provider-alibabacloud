@@ -26,6 +26,7 @@ import (
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 // Provider handles image operations for Alibaba Cloud
@@ -234,7 +235,7 @@ func (p *Provider) getByQuery(ctx context.Context, query ImageQuery) ([]v1alpha1
 		if img.ImageId == nil {
 			continue
 		}
-		image := v1alpha1.Image{ID: *img.ImageId}
+		image := v1alpha1.Image{ID: *img.ImageId, OwnerAlias: tea.StringValue(img.ImageOwnerAlias)}
 		if img.CreationTime != nil {
 			image.CreationTime = *img.CreationTime
 		}

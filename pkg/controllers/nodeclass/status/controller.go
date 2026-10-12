@@ -176,7 +176,7 @@ func (c *Controller) resolveLaunchTemplate(nodeClass *v1alpha1.ECSNodeClass, ctx
 		c.setSelectorConditionsFromLaunchTemplateError(nodeClass, err)
 		return err
 	}
-	nodeClass.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: *nodeClass.Spec.LaunchTemplateID, Version: data.Version, InstanceType: data.InstanceType, Disks: data.Disks}
+	nodeClass.Status.LaunchTemplate = &v1alpha1.ResolvedLaunchTemplate{ID: *nodeClass.Spec.LaunchTemplateID, Version: data.Version, InstanceType: data.InstanceType, Disks: data.Disks, Pricing: &data.Pricing}
 
 	imageClass := nodeClass.DeepCopy()
 	imageClass.Spec.ImageSelectorTerms = []v1alpha1.ImageSelectorTerm{{ID: &data.ImageID}}

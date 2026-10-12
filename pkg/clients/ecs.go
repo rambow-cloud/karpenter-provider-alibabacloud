@@ -406,7 +406,13 @@ func (c *DefaultECSClient) DescribeCapacityReservations(ctx context.Context, id 
 	return response, nil
 }
 
-// DescribePrice implements ECSClient interface
+// DescribeOfferingPrice preserves the complete hourly billing configuration.
+// It is optional on ECSClient so inventory-only adapters need not implement pricing.
+func (c *DefaultECSClient) DescribeOfferingPrice(ctx context.Context, request *ecs.DescribePriceRequest) (*ecs.DescribePriceResponse, error) {
+	return callSDK(ctx, func() (*ecs.DescribePriceResponse, error) { return c.withContext(ctx).DescribePrice(request) })
+}
+
+// DescribePrice implements the legacy instance-type-only ECSClient operation.
 func (c *DefaultECSClient) DescribePrice(ctx context.Context, instanceType string) (*ecs.DescribePriceResponse, error) {
 
 	request := &ecs.DescribePriceRequest{

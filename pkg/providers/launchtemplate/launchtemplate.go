@@ -46,6 +46,7 @@ type LaunchTemplate struct {
 type LaunchTemplateData struct {
 	Version          int64
 	Disks            v1alpha1.NormalizedDisks
+	Pricing          v1alpha1.LaunchTemplatePricing
 	ImageID          string
 	InstanceType     string
 	VSwitchID        string
@@ -217,6 +218,7 @@ func (p *Provider) GetData(ctx context.Context, id string, version *int64) (*Lau
 		return nil, err
 	}
 	result := &LaunchTemplateData{Version: *sets[0].VersionNumber, Disks: disks}
+	result.Pricing = resolveTemplatePricing(data)
 	if data.ImageId != nil {
 		result.ImageID = *data.ImageId
 	}
