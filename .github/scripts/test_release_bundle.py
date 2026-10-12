@@ -54,6 +54,9 @@ class ReleaseContracts(unittest.TestCase):
         for value in ("oci://ghcr.io/o/r", "ghcr.io/o/r:latest", "ghcr.io/o/r@sha256:a", "ghcr.io/o/../r", "ghcr.io//r"):
             self.assertFalse(bundle.valid_repository(value), value)
 
+    def test_ko_destination_uses_posix_relative_path_on_windows(self):
+        self.assertEqual(bundle.ko_layout_path(bundle.ROOT / ".e2e/release/image-layout"), ".e2e/release/image-layout")
+
     def test_corrupted_oci_blob_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             layout = Path(directory)

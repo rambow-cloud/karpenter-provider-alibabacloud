@@ -24,6 +24,15 @@ def valid_repository(value):
     return bool(REPOSITORY.fullmatch(value)) and all(part not in ("", ".", "..") for part in value.split("/"))
 
 
+def ko_layout_path(path):
+    # ko also parses its local layout destination as an image reference. Windows
+    # drive letters/backslashes cannot be used there; use a POSIX relative path.
+    value = Path(os.path.relpath(path, ROOT)).as_posix()
+    if not re.fullmatch(r"[a-z0-9_./-]+", value):
+        raise ValueError("Use a lowercase workspace-relative bundle output path")
+    return value
+
+
 def call(*args, env=None):
     return subprocess.run(args, cwd=ROOT, env=env, check=True, text=True,
                           stdout=subprocess.PIPE).stdout.strip()
@@ -148,7 +157,7 @@ def build(args):
     layout = output / "image-layout"
     call(args.ko, "build", "./cmd/controller", "--bare", "--platform=linux/amd64,linux/arm64",
          "--push=false", "--tags=" + sha, "--image-user=65532:65532", "--jobs=1",
-         "--oci-layout-path=" + str(layout), "--sbom-dir=" + str(output / "sbom"),
+         "--oci-layout-path=" + ko_layout_path(layout), "--sbom-dir=" + str(output / "sbom"),
          "--image-label=org.opencontainers.image.source=" + SOURCE,
          "--image-label=org.opencontainers.image.revision=" + sha, env=env)
     digest, platforms = inspect_layout(layout, sha, args.go)
