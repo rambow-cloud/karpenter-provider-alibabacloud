@@ -13,6 +13,7 @@ description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNod
 | --- | --- | --- |
 | Pod 驱动的节点供给 | 将 Pod 资源请求和调度约束交给 Karpenter core，provider 查询 ECS 规格与 offering 并创建实例 | [CloudProvider](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/pkg/cloudprovider/cloudprovider.go) |
 | 声明式容量配置 | NodePool 约束规格、架构、可用区与容量类型；支持按需和 Spot 创建路径 | [实例类型 provider](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/pkg/providers/instancetype/instancetype.go)；Spot 中断见下文 |
+| 真实报价与成本排序 | 按实际镜像、磁盘、规格、zone 与容量类型查询小时成交价；有效报价参与调度、创建排序和 core 替换候选筛选 | [报价实现 #18](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/18)；[报价边界](../support/index.md) |
 | 阿里云资源配置 | ECSNodeClass 选择镜像、交换机、安全组和磁盘；引导配置将实例接入目标集群 | [API 定义](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/tree/main/pkg/apis)；[Provider](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/tree/main/pkg/providers) |
 | 生命周期与所有权 | 实例创建、发现、删除与 Drift 接入；所有权限制避免误操作其他集群资源 | [所有权修复 #2](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/2)；[待修复问题](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/milestone/2) |
 | 版本边界 | core 固定 v1.14.1；Helm、controller 和 ACK 配置要求 Kubernetes >=1.34 | [支持策略](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md)；[已完成 #7](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/7) |
@@ -20,7 +21,7 @@ description: 了解 阿里云 Karpenter 的 Pod 驱动供给、NodePool、ECSNod
 
 ## 实现与验收的边界
 
-当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；全新部署的真实 ACK/ECS 生命周期验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。镜像解析、失败恢复、资源计算等已知问题继续在 provider milestone 中推进。
+当前基线为 **Karpenter v1.14.1 / Chart 0.3.0-dev / Kubernetes 1.34+**。最低版本检查与离线测试已交付；全新部署的真实 ACK/ECS 生命周期验收仍由 [Issue #5](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/5) 跟踪。失败恢复、镜像前置条件和报价已有实现与离线证据；资源计算仍由 #16 跟踪。
 
 Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功能**，见 [Issue #20](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/20)。不能将实例创建支持视为完整的中断通知、排空与替换支持。
 
@@ -52,6 +53,6 @@ Spot 实例创建路径已经存在，**Spot 中断处理仍是计划中的功�
 
 公共镜像按目标 ACK 区域、集群实际版本和 containerd 兼容清单选择，再通过 ECS 核对镜像状态、Linux OS 和架构。ECS 最新镜像不一定已进入 ACK 清单，精确 pin 不会被替换。元数据错误会阻止解析和启动。
 
-当前 provider 只支持 Linux，拒绝 Windows 和未知 OS。ContainerOS 需要恰好一块显式持久数据盘，暂不支持通过 LaunchTemplate 使用 ContainerOS。自定义/共享镜像需要显式 `imageCompatibilityPolicy: Custom` 和精确 ID，基础 OS、runtime、GPU 驱动及启动兼容性由用户验证。
+当前 provider 只支持 Linux，拒绝 Windows 和未知 OS。ContainerOS 需要恰好一块全新持久数据盘；LaunchTemplate 使用已解析并固定版本的磁盘快照，满足布局与硬件检查时可用。自定义/共享镜像需要 `imageCompatibilityPolicy: Custom`、精确 ID 和 `imagePrerequisitesVerified: true`；GPU、Ubuntu 也有明确的使用者验证要求和自动限制。
 
-部署时配置 RAM 只读权限 `cs:DescribeKubernetesVersionMetadata` 并安装匹配的 CRD。[完整支持边界与配置示例](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)。只读 API 测试不代表真实 ACK 节点生命周期已验收。
+部署时配置 RAM 只读权限 `cs:DescribeKubernetesVersionMetadata` 和 `cs:ListClusterAddonInstances` 并安装匹配的 CRD。[完整支持边界与配置示例](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md)。只读 API 测试不代表真实 ACK 节点生命周期已验收。

@@ -33,22 +33,31 @@ The default policy is `imageCompatibilityPolicy: ACK`; the field may be omitted.
 | Image type | Current behavior |
 | --- | --- |
 | ACK public Linux images | Checked against the target ACK/containerd list and ECS status |
-| ContainerOS | Exactly one explicitly configured valid persistent data disk; no ephemeral disk or instanceStorePolicy |
-| ContainerOS + LaunchTemplate | Rejected while template disk propagation remains tracked in #51 |
-| Custom/shared images | Explicit Custom policy with exact IDs only; users verify OS, runtime and bootstrap compatibility |
+| ContainerOS | Exactly one new valid persistent data disk; reject snapshot/ephemeral disks, instanceStorePolicy and instance types with local or unknown local-disk metadata |
+| ContainerOS + LaunchTemplate | Resolve and pin the numeric version and disk snapshot; ACK bootstrap initializes the data disk when the layout meets those requirements, without adding disks |
+| Custom/shared images | Explicit Custom policy, exact IDs and imagePrerequisitesVerified: true; users confirm OS, runtime and bootstrap compatibility |
 | Windows / unknown OS | Rejected; corresponding bootstrap and resource reservations are not supported |
 
-GPU drivers, Terway, network plugins and local-disk prerequisites still require separate configuration and validation, tracked in [Issue #52](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/52). Resolving an image does not establish successful node registration.
+Alibaba Cloud Linux 4 requires a known active Flannel addon, or Terway `[1.9.18, 1.10.0)` / `>=1.16.4`. Missing, conflicting, upgrading or unknown network metadata is rejected. Installed addons are queried again before creation so cached metadata cannot hide a version change.
+
+GPU images must match GPU hardware; only known NVIDIA hardware is exposed. Users verify drivers, runtime, device plugins and resource registration. Ubuntu CPFS, security hardening and initialization restrictions also require verification; the node label `alibabacloud.com/image-accelerate-enabled: "true"` is incompatible with Ubuntu. GPU, Ubuntu and Custom use `imagePrerequisitesVerified: true` to record user confirmation, which cannot waive known network, architecture or hardware restrictions. See [implemented prerequisites #52](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/52); resolving an image does not establish successful node registration.
 
 ## Custom image configuration
 
 ```yaml
 spec:
   imageCompatibilityPolicy: Custom
+  imagePrerequisitesVerified: true # Confirm only after the checks below
   imageSelectorTerms:
     - id: m-your-verified-custom-image
 ```
 
-Custom permits ECS self/others images and checks Linux, architecture and Available status. It cannot bypass ACK validation for public images or discover custom images in bulk through name/family/tags.
+Custom permits ECS self/others images and checks Linux, architecture and launch availability. It cannot bypass ACK validation for public images or discover custom images in bulk through name/family/tags. Before confirming the field, verify provenance, Swap/system settings, container runtime, ACK bootstrap, drivers and required plugins. Confirmation is not provider certification.
+
+## Template and pricing boundaries
+
+Native template versions and disks are recorded in status; RunInstances and bootstrap use the same snapshot. NodeClass disk overrides are not supported. If template provisioned disk IOPS or bursting cannot be fully priced, `status.launchTemplate.pricing.unsupportedReason` explains the exclusion from automatic provisioning.
+
+On-demand and Spot use ECS hourly quotes for the actual image and disks. Missing, failed, expired or pending quotes temporarily make an offering unavailable while retaining its drift membership. Quotes use one account currency, CNY or USD, without assumed exchange rates; marketplace images also require complete licensing quotes in the same currency. On-demand quotes last 5 minutes, Spot 1 minute and failures 30 seconds. Refresh concurrency and request rate are bounded; cold catalogs become available as valid quotes arrive. This is not an invoice forecast and excludes later usage charges such as traffic and snapshots. See [provider pricing and lifecycle behavior](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/PROVIDER_BEHAVIOR.md).
 
 See [ACK_IMAGE_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/ACK_IMAGE_SUPPORT.md) for permissions, ContainerOS examples and detailed behavior, and [KUBERNETES_SUPPORT.md](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/blob/main/KUBERNETES_SUPPORT.md) for version evidence. Continue to [core features](../features/index.md) or [status and roadmap](../status/index.md).
