@@ -1,5 +1,24 @@
 # ACK E2E execution controls
 
+All E2E workflows, including KWOK and E2EParity, are manual-only under #89.
+Root entry points use `workflow_dispatch`; `workflow_call` is internal reuse
+only and every execution job rejects non-dispatch events. No PR/push/schedule,
+workflow completion or repository event starts an E2E run. ACK creation also
+requires `ACK_E2E_ENABLED=true`; independent manual cleanup remains available
+when creation is disabled. Ordinary offline CI/unit checks retain their routing.
+
+On 2026-10-12, the KWOK and Parity repository registrations were disabled to
+stop automatic events from their older main definitions. Keep them disabled
+until a later main checkpoint contains #89; review the main workflow source
+before enabling manual entry points. A dev merge alone is insufficient. The
+repository `ACK_E2E_ENABLED` variable is explicitly `false`.
+
+#23 and #88 require the same manual-only policy for the new three-worker smoke
+and dual OIDC setup. There is currently no dedicated test ACK. GitHub OIDC trust
+can be prepared independently; controller RRSA, cluster-scoped RAM/RBAC and
+real runtime validation remain pending until the cluster is selected. Do not
+create a cluster or start E2E just to validate identity configuration.
+
 Real ACK runtime validation is currently deferred under #5/#23. On 2026-10-12,
 the repository registrations for `E2ESoakTrigger` and `E2EScaleTrigger` were
 disabled to stop their existing main-branch schedules. This repository setting

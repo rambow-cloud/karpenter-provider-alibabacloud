@@ -1,12 +1,5 @@
 name: E2EParity
 on:
-  pull_request:
-    paths:
-      - ".github/actions/e2e/**"
-      - ".github/workflows/e2e*.yaml"
-      - "test/hack/e2e/parity/**"
-      - "test/suites/**"
-      - "Makefile"
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -15,6 +8,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   parity:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

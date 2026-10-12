@@ -33,6 +33,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   matrix:
+    if: github.event_name == 'workflow_dispatch' && vars.ACK_E2E_ENABLED == 'true'
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.max_parallel }}

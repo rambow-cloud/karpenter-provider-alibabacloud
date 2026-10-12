@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   upgrade:
+    if: github.event_name == 'workflow_dispatch' && vars.ACK_E2E_ENABLED == 'true'
     uses: ./.github/workflows/e2e.yaml
     with:
       suite: Drift

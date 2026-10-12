@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   cleanup:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:

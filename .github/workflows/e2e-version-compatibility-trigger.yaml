@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   version-preflight:
+    if: github.event_name == 'workflow_dispatch' && vars.ACK_E2E_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -41,6 +42,7 @@ jobs:
           go run ./test/hack/e2e/ackctl validate-versions --versions "${ACK_VERSIONS}" > .e2e/versions.json
           echo "versions=$(cat .e2e/versions.json)" >> "${GITHUB_OUTPUT}"
   version-compatibility:
+    if: github.event_name == 'workflow_dispatch' && vars.ACK_E2E_ENABLED == 'true'
     needs: version-preflight
     strategy:
       fail-fast: false
