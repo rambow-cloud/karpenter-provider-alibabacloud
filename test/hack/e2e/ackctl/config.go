@@ -12,14 +12,17 @@ import (
 )
 
 type Config struct {
-	Kubeconfig   string             `yaml:"kubeconfig"`
-	AlibabaCloud CloudConfig        `yaml:"alibaba_cloud"`
-	Cluster      ClusterConfig      `yaml:"cluster"`
-	GPUDiscovery GPUDiscoveryConfig `yaml:"gpu_discovery"`
-	Autoscaling  AutoscalingConfig  `yaml:"autoscaling"`
+	Kubeconfig     string                `yaml:"kubeconfig"`
+	AlibabaCloud   CloudConfig           `yaml:"alibaba_cloud"`
+	Cluster        ClusterConfig         `yaml:"cluster"`
+	GPUDiscovery   GPUDiscoveryConfig    `yaml:"gpu_discovery"`
+	Autoscaling    AutoscalingConfig     `yaml:"autoscaling"`
+	ControllerRRSA *ControllerRRSAConfig `yaml:"controller_rrsa,omitempty"`
 }
 
 type CloudConfig struct {
+	Authentication  string `yaml:"authentication,omitempty"`
+	SecurityToken   string `yaml:"-"`
 	AccessKeyID     string `yaml:"access_key_id"`
 	AccessKeySecret string `yaml:"access_key_secret"`
 	RegionID        string `yaml:"region_id"`
@@ -117,11 +120,8 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	if v := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"); v != "" {
-		cfg.AlibabaCloud.AccessKeyID = v
-	}
-	if v := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"); v != "" {
-		cfg.AlibabaCloud.AccessKeySecret = v
+	if err := loadCloudCredentials(&cfg.AlibabaCloud); err != nil {
+		return nil, err
 	}
 	if cfg.AlibabaCloud.RegionID == "" {
 		return nil, fmt.Errorf("alibaba_cloud.region_id is required")
@@ -165,7 +165,12 @@ func defaultIPv6ServiceCIDR() string {
 }
 
 func SaveConfig(path string, cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
+	saved := *cfg
+	if saved.AlibabaCloud.Authentication == "sts" {
+		saved.AlibabaCloud.AccessKeyID = ""
+		saved.AlibabaCloud.AccessKeySecret = ""
+	}
+	data, err := yaml.Marshal(&saved)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}

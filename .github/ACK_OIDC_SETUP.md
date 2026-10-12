@@ -59,9 +59,28 @@ or RAM role creation/deletion permissions. Shared OIDC/RAM setup is not part of
 smoke cleanup. Check every action's supported resource/tag conditions; describe
 operations with no resource-level scoping may require `Resource: "*"`.
 
-Current `ackctl` clients omit SecurityToken and existing setup still injects an
-AK Secret. #88 must complete that code before the runner identity can execute
-#23. Configuration alone does not satisfy #88's authentication acceptance.
+`ackctl` now accepts `alibaba_cloud.authentication: sts` and atomically reads
+the three temporary credential fields from the environment. All CS/ECS/VPC/SLB
+clients use the same STS configuration; missing fields and mixed identities fail
+without fallback. STS values are omitted when saving configuration. Refresh the
+GitHub OIDC composite before cleanup and start a fresh ackctl process so that
+clients use the new session.
+
+The manual-only `.github/actions/e2e/oidc` composite validates role/provider
+identity before the official SHA-pinned action exchanges OIDC for STS. #23's
+workflow will use it for both setup and cleanup; this composite is not itself
+a workflow and cannot start a job.
+
+Use `.github/ack-e2e-config.example.yaml` to describe the cluster and separate
+controller identity. `ackctl rrsa-values --config CONFIG --endpoint HTTPS_URL
+--output VALUES` renders only controller RRSA values; `ackctl check-rrsa-pod
+--config CONFIG --input POD_JSON` verifies the admitted controller identity,
+environment and projected token. Existing setup also selects the RRSA-only path
+when `controller_rrsa` is configured and refuses to deploy runner STS credentials
+into the controller. It uses `--reset-values` to eliminate stale credentials.
+The three-worker smoke must use its own fresh-deployment/strict-cleanup path,
+not legacy cluster-wide setup/cleanup. No actual authentication on ACK has yet
+been tested; configuration and offline contracts do not replace that evidence.
 
 ## Manual-only operation
 

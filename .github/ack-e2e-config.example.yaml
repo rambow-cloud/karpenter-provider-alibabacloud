@@ -1,0 +1,16 @@
+# Replace identifiers after selecting a dedicated ACK; never add cloud credentials.
+alibaba_cloud:
+  authentication: sts
+  region_id: cn-hangzhou
+  cluster_id: REPLACE_ACK_CLUSTER_ID
+cluster:
+  name: REPLACE_ACK_CLUSTER_NAME
+  kubernetes_version: REPLACE_ACTUAL_ACK_VERSION
+controller_rrsa:
+  role_arn: acs:ram::ACCOUNT_ID:role/karpenter-controller-e2e
+  oidc_provider_arn: acs:ram::ACCOUNT_ID:oidc-provider/ack-rrsa-CLUSTER_ID
+  system_node_selector:
+    e2e.karpenter.alibabacloud.com/system: "true"
+  image_repository: REPLACE_CONTROLLER_REPOSITORY
+  # The tag must contain the tested full Git SHA and immutable digest.
+  image_tag: FULL_GIT_SHA@sha256:IMAGE_DIGEST
