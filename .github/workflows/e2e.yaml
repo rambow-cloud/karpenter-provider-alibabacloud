@@ -81,6 +81,8 @@ on:
 jobs:
   run-suite:
     name: suite-${{ inputs.suite }}
+    # ACK runtime is deferred. A caller must manually dispatch and explicitly opt in.
+    if: github.event_name == 'workflow_dispatch' && vars.ACK_E2E_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,6 +95,23 @@ jobs:
       TEST_REGION: ${{ inputs.region }}
       ENABLE_METRICS: ${{ inputs.enable_metrics }}
     steps:
+      - name: Check required ACK E2E inputs
+        shell: bash
+        env:
+          ALIBABA_CLOUD_E2E_CONFIG: ${{ secrets.ALIBABA_CLOUD_E2E_CONFIG }}
+          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_ID }}
+          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in ALIBABA_CLOUD_E2E_CONFIG ALIBABA_CLOUD_ACCESS_KEY_ID ALIBABA_CLOUD_ACCESS_KEY_SECRET; do
+            value="${!name:-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then
+              echo "::error::Required ACK E2E input ${name} is missing or blank"
+              missing=1
+            fi
+          done
+          exit "${missing}"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.git_ref }}
@@ -215,24 +234,35 @@ jobs:
             echo "Unsupported source ${SOURCE}" >&2
             exit 1
           fi
+      - id: manifest-state
+        name: Locate ACK run manifest
+        if: always() && steps.generate-cluster-name.outcome == 'success'
+        shell: bash
+        env:
+          RUN_MANIFEST: .e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/manifest.yaml
+        run: |
+          set -euo pipefail
+          if [[ -f "${RUN_MANIFEST}" ]]; then
+            echo "manifest=${RUN_MANIFEST}" >> "${GITHUB_OUTPUT}"
+          fi
       - name: Dump logs on failure
-        if: failure() || cancelled()
+        if: (failure() || cancelled()) && steps.manifest-state.outputs.manifest != ''
         uses: ./.github/actions/e2e/dump-logs
         with:
-          manifest: ${{ steps.setup-cluster.outputs.manifest }}
+          manifest: ${{ steps.manifest-state.outputs.manifest }}
           output_dir: .e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/dump
       - name: Upload log artifact
-        if: failure() || cancelled()
+        if: (failure() || cancelled()) && steps.manifest-state.outputs.manifest != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-dump-${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}
           path: .e2e/${{ steps.generate-cluster-name.outputs.CLUSTER_NAME }}/dump
       - name: Cleanup ACK cluster
-        if: always() && inputs.cleanup
+        if: always() && inputs.cleanup && steps.manifest-state.outputs.manifest != ''
         uses: ./.github/actions/e2e/cleanup
         env:
           ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_ID }}
           ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
         with:
           deploy_config: ${{ env.DEPLOY_CONFIG }}
-          manifest: ${{ steps.setup-cluster.outputs.manifest }}
+          manifest: ${{ steps.manifest-state.outputs.manifest }}

@@ -1,7 +1,5 @@
 name: E2EScaleTrigger
 on:
-  schedule:
-    - cron: "7 18 * * *"
   workflow_dispatch:
     inputs:
       region:
