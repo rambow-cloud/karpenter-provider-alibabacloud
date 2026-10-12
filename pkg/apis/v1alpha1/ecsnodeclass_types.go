@@ -52,6 +52,7 @@ type ECSNodeClassList struct {
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.securityGroupSelectorTerms)",message="spec.securityGroupSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="has(self.launchTemplateID) || has(self.imageSelectorTerms)",message="spec.imageSelectorTerms is required when launchTemplateID is not specified"
 // +kubebuilder:validation:XValidation:rule="!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy != 'Custom' || has(self.launchTemplateID) || (has(self.imageSelectorTerms) && self.imageSelectorTerms.all(t, has(t.id)))",message="Custom image compatibility requires exact image IDs"
+// +kubebuilder:validation:XValidation:rule="!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy != 'Custom' || (has(self.imagePrerequisitesVerified) && self.imagePrerequisitesVerified)",message="Custom images require explicit prerequisite verification"
 type ECSNodeClassSpec struct {
 	// ClusterID is the ACK cluster ID
 	// +optional
@@ -88,6 +89,11 @@ type ECSNodeClassSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=ACK;Custom
 	ImageCompatibilityPolicy string `json:"imageCompatibilityPolicy,omitempty"`
+	// ImagePrerequisitesVerified confirms user validation of prerequisites that
+	// ACK/ECS metadata cannot prove, such as custom provenance and GPU/Ubuntu integration.
+	// Known incompatibilities and hardware checks are never bypassed.
+	// +optional
+	ImagePrerequisitesVerified bool `json:"imagePrerequisitesVerified,omitempty"`
 
 	// Role is the name of the RAM role to use for the instance
 	// +optional

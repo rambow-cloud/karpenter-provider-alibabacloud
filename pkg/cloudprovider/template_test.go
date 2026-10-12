@@ -26,7 +26,7 @@ func TestTemplateLayoutReachesRunInstancesWithoutAddingDisks(t *testing.T) {
 	nc.Spec = spec
 	images := []v1alpha1.Image{{ID: "lifsea-test", Architecture: "x86_64", OSType: "linux", ImageType: "ContainerOS"}}
 	require.NoError(t, imagefamily.ValidateBootImages(spec, images))
-	_, err = p.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, nc, []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64"}}, images, []v1alpha1.VSwitch{{ID: "vsw-test"}}, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "generated-bootstrap", nil)
+	_, err = p.createInstanceWithRetry(ctx, &coreapis.NodeClaim{}, nc, []*instancetype.InstanceType{{Name: "ecs.g8y.large", Architecture: "ARM64"}, {Name: "ecs.g7.large", Architecture: "X86_64", LocalDiskKnown: true}}, images, []v1alpha1.VSwitch{{ID: "vsw-test"}}, []v1alpha1.SecurityGroup{{ID: "sg-test"}}, "generated-bootstrap", nil)
 	require.NoError(t, err)
 	require.Len(t, e.requests, 1)
 	r := e.requests[0]

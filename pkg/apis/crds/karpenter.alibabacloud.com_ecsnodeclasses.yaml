@@ -185,6 +185,12 @@ spec:
                 - ACK
                 - Custom
                 type: string
+              imagePrerequisitesVerified:
+                description: |-
+                  ImagePrerequisitesVerified confirms user validation of prerequisites that
+                  ACK/ECS metadata cannot prove, such as custom provenance and GPU/Ubuntu integration.
+                  Known incompatibilities and hardware checks are never bypassed.
+                type: boolean
               imageSelectorTerms:
                 description: ImageSelectorTerms is a list of image selector requirements
                 items:
@@ -528,6 +534,9 @@ spec:
               rule: '!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy
                 != ''Custom'' || has(self.launchTemplateID) || (has(self.imageSelectorTerms)
                 && self.imageSelectorTerms.all(t, has(t.id)))'
+            - message: Custom images require explicit prerequisite verification
+              rule: '!has(self.imageCompatibilityPolicy) || self.imageCompatibilityPolicy
+                != ''Custom'' || (has(self.imagePrerequisitesVerified) && self.imagePrerequisitesVerified)'
           status:
             description: ECSNodeClassStatus defines the observed state of ECSNodeClass
             properties:
