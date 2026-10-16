@@ -20,6 +20,17 @@ import (
 
 const smokeRunTag = "testing/karpenter-run"
 
+func validateSmokeRRSA(detail *cs.DescribeClusterDetailResponseBody, providerARN string) error {
+	if detail == nil || detail.RrsaConfig == nil || !tea.BoolValue(detail.RrsaConfig.Enabled) || providerARN == "" || tea.StringValue(detail.RrsaConfig.OidcArn) != providerARN {
+		return fmt.Errorf("ACK must have matching enabled RRSA provider")
+	}
+	// ACK reports the Kubernetes API's default token audience here, which can
+	// be https://kubernetes.default.svc. It does not describe RAM's accepted
+	// audiences. The Chart projects sts.aliyuncs.com explicitly and the admitted
+	// controller Pod is checked separately by verifyRRSAPod.
+	return nil
+}
+
 type smokePoolSnapshot struct {
 	detail *cs.DescribeClusterNodePoolDetailResponse
 }
@@ -301,8 +312,10 @@ func runSmokeCloud(args []string) error {
 		if resp == nil || resp.Body == nil || tea.StringValue(resp.Body.State) != "running" {
 			return fmt.Errorf("ACK must be running")
 		}
-		if *op == "cluster" && (resp.Body.RrsaConfig == nil || !tea.BoolValue(resp.Body.RrsaConfig.Enabled) || tea.StringValue(resp.Body.RrsaConfig.OidcArn) != cfg.ControllerRRSA.ProviderARN || tea.StringValue(resp.Body.RrsaConfig.Audience) != "sts.aliyuncs.com") {
-			return fmt.Errorf("ACK must have matching RRSA provider/audience")
+		if *op == "cluster" {
+			if err := validateSmokeRRSA(resp.Body, cfg.ControllerRRSA.ProviderARN); err != nil {
+				return err
+			}
 		}
 		if err = kubernetesversion.Validate(tea.StringValue(resp.Body.CurrentVersion)); err != nil {
 			return err

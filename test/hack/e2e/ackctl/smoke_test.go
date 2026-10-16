@@ -1,13 +1,32 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSmokeRRSAUsesProviderIdentityNotClusterDefaultAudience(t *testing.T) {
+	const provider = "acs:ram::123:oidc-provider/ack-rrsa-c-test"
+	for _, audience := range []string{"https://kubernetes.default.svc", "sts.aliyuncs.com"} {
+		t.Run(audience, func(t *testing.T) {
+			var detail cs.DescribeClusterDetailResponseBody
+			require.NoError(t, json.Unmarshal([]byte(`{"rrsa_config":{"enabled":true,"oidc_arn":"`+provider+`","audience":"`+audience+`"}}`), &detail))
+			require.NoError(t, validateSmokeRRSA(&detail, provider))
+			require.Error(t, validateSmokeRRSA(&detail, "acs:ram::123:oidc-provider/foreign"))
+			require.Error(t, validateSmokeRRSA(&detail, ""))
+			detail.RrsaConfig.Enabled = tea.Bool(false)
+			require.Error(t, validateSmokeRRSA(&detail, provider))
+		})
+	}
+	require.Error(t, validateSmokeRRSA(nil, provider))
+	require.Error(t, validateSmokeRRSA(&cs.DescribeClusterDetailResponseBody{}, provider))
+}
 
 type smokeFake struct {
 	describe func(*ecs.DescribeInstancesRequest) (*ecs.DescribeInstancesResponse, error)
