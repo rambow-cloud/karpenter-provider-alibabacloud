@@ -9,8 +9,11 @@ repository or GitHub secrets.
 The dedicated `karpenter-ack-e2e` cluster is running in `cn-hangzhou-k` on ACK
 `1.35.7-aliyun.1`, containerd `2.3.4`, Flannel and Alibaba Cloud Linux 3 Container
 Optimized. It has one Ready on-demand system worker (4 vCPU / 8 GiB, 40 GiB ESSD
-PL0) and an active, zero-capacity regular `karpenter-template` node pool. Both
-pools disable autoscaling and managed upgrades. CoreDNS uses one replica for
+PL0) in the active regular `system` node pool. The separate zero-capacity
+`karpenter-template` pool was removed at the maintainer's request after verifying
+it held no nodes. Smoke now reads native ACK metadata from the existing system
+pool; a separate template pool is not required. That pool disables autoscaling
+and managed upgrades. CoreDNS uses one replica for
 this single-system-node test baseline; this is not a production HA topology.
 
 ## Configured runner identity
@@ -60,7 +63,8 @@ values, kubeconfig and userdata must not appear in logs or uploaded reports.
 The ignored, access-restricted `.e2e/ack-private/config.yaml` contains the actual
 cluster, subnet, security group, worker role and native pool identifiers. Its
 credential-free contents were set as the `ALIBABA_CLOUD_E2E_CONFIG` secret of
-GitHub Environment `ack-e2e`. The temporary local kubeconfig and SSH private key
+GitHub Environment `ack-e2e`. Both configurations now reference the remaining
+system pool. The temporary local kubeconfig and SSH private key
 remain outside Git tracking in that restricted directory. Never upload it.
 
 The system node matches `e2e.karpenter.alibabacloud.com/system=true`. Worker
@@ -73,14 +77,18 @@ provider, its external issuer, `sts.aliyuncs.com`, and the exact subject
 `system:serviceaccount:karpenter:karpenter`. Its custom policy limits writes to
 the dedicated VPC, the three candidate instance types, PostPaid instances and
 the test ownership tags above; PassRole/GetRole target the actual pool worker
-role only. APIs without resource-level read scoping retain explicit read actions
+role only. RAM policy resource identifiers use the documented global form
+`acs:ram:*:<account>:role/<RoleName>`; the role's returned principal ARN has an
+empty region and cannot be reused verbatim for GetRole authorization. APIs
+without resource-level read scoping retain explicit read actions
 on `*`. Default ACK first-use service roles are platform prerequisites; the
 maintainer separately approved the six missing official roles and policies.
 
 Actual short-lived TokenRequests verified both successful controller-role STS
 exchange and rejection of `default/default`. No temporary credentials were
 persisted, and the temporary controller ServiceAccount was deleted afterward.
-This proves the trust boundary, not an admitted controller Pod or provisioning.
+The local manual smoke also installed the controller on the fixed system node
+and verified its admitted RRSA Pod, projected audience and credential isolation.
 
 ACK reports `https://kubernetes.default.svc` as its cluster default audience;
 the RAM OIDC provider accepts `sts.aliyuncs.com`. These are different settings.
@@ -95,11 +103,42 @@ and mirrored official pause 3.10.1 amd64 image were successfully pulled without
 an imagePullSecret on the system worker. Controller executed only `--help`;
 both temporary pull-check Pods were deleted. The config pins both digests.
 
-`ACK_E2E_ENABLED=false` remains set. No controller release or three Karpenter
-workers were deployed. GitHub runner OIDC exchange, admitted controller RRSA,
-three-worker lifecycle, Spot capacity and zero-residue cleanup still require one
-explicitly requested manual smoke after the default branch contains the manual
-entry point and #95. #23 and #88 therefore remain open.
+`ACK_E2E_ENABLED=false` remains set. A separately authorized local manual smoke
+uses the maintainer's short-lived OAuth STS session as runner identity and ACK
+RRSA for the controller. It does not prove GitHub runner OIDC exchange. #23 and
+#88 remain open until their complete runtime acceptance is recorded.
+
+The first live attempts exposed a missing required NodePool
+`spec.disruption.consolidateAfter`; #97 sets it to `Never` and both complete
+NodePool fixtures passed the actual cluster's server dry-run. The current
+controller default policy is `v3`. Its VPC/tag creation conditions alone did not
+authorize ECS's separate resource-group checks, so it is not yet a complete
+reusable creation policy. The maintainer approved a temporary Hangzhou default
+resource-group `RunInstances` attachment for this one local smoke, with explicit
+restriction checks, independent cleanup and restoration to `v3`. Positive
+on-demand/Spot DryRuns and negative wrong-type, foreign-cluster and missing-tag
+DryRuns passed before actual creation. Do not enable recurring creation or copy
+this temporary grant as a production policy; #98 tracks permanent resource-group
+support, scoped authorization and runtime validation.
+
+The local run `ack-c99613b5d40b47ad8678e092` passed on 2026-10-16:
+
+- ACK `1.35.7-aliyun.1`, kubectl `v1.35.0`, pinned controller/image above.
+- Three new `ecs.u1-c1m2.large` workers: two PostPaid/`NoSpot`, one
+  PostPaid/`SpotAsPriceGo`. All NodeClaims reached Launched, Registered,
+  Initialized and Ready, and all Nodes were Ready.
+- Three lightweight Pods were Running/Ready with Pod IPs, one per new worker.
+  Provisioning took **119.6 seconds**, including setup and the live checks.
+- Normal controller termination passed: zero test ECS, disks, ENIs, NodeClaims
+  and Nodes remained, with **no fallback release**. Owned workloads, classes,
+  pools and the controller release were removed; the fixed system node remains.
+- The temporary resource-group policy and candidate policy version were deleted,
+  and the controller default policy was verified restored to `v3`.
+
+Sanitized local reports are retained in the ignored
+`.e2e/ack-smoke-local-20261016-014059/` directory. This is real local lifecycle
+and Spot-creation evidence for #23; GitHub runner OIDC and a permanent scoped
+controller creation policy remain outstanding for repeatable workflow acceptance.
 
 The fixed system worker and disk were quoted at approximately CNY 0.744/hour at
 preparation time; NAT, API endpoint/load balancer, EIPs and traffic add charges.
@@ -144,8 +183,8 @@ environment and projected token. Existing setup also selects the RRSA-only path
 when `controller_rrsa` is configured and refuses to deploy runner STS credentials
 into the controller. It uses `--reset-values` to eliminate stale credentials.
 The three-worker smoke must use its own fresh-deployment/strict-cleanup path,
-not legacy cluster-wide setup/cleanup. No actual authentication on ACK has yet
-been tested; configuration and offline contracts do not replace that evidence.
+not legacy cluster-wide setup/cleanup. Local controller RRSA evidence does not
+replace the still-pending GitHub runner OIDC acceptance.
 
 ## Manual-only operation
 
@@ -157,8 +196,8 @@ Publishing to dev alone does not update the default-branch entry points.
 
 Inspect the configuration in [GitHub environments](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/settings/environments)
 and the RAM console's role/OIDC provider pages. #88 and #23 remain open pending
-real runtime acceptance. Environment preparation did not dispatch GitHub E2E,
-KWOK, a vulnerability scan or the three-worker smoke.
+complete runtime acceptance. The local manual smoke did not dispatch GitHub E2E,
+KWOK or a vulnerability scan.
 
 Sources: [ACK RRSA](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/use-rrsa-to-authorize-pods-to-access-different-cloud-services),
 [GitHub OIDC](https://docs.github.com/en/actions/reference/security/oidc),

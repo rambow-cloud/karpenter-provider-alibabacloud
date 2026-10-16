@@ -35,6 +35,8 @@ def needs_go(path: str) -> bool:
         return False
     if kwok_path(path) and path != "Makefile" and Path(path).suffix in (".sh", ".py", ".yaml", ".yml", ".json"):
         return False
+    if path.startswith("test/hack/e2e/smoke/") and Path(path).suffix == ".py":
+        return False
     if path.lower().endswith((".md", ".rst")):
         return False
     # Build files, charts, fixtures and any unclassified changes retain full CI.
@@ -87,7 +89,7 @@ def classify(event_name: str, event: dict, repo: str = ".") -> Decision:
     except subprocess.CalledProcessError:
         run_go = True
     reason = ("Code, dependency, build or unclassified files changed" if run_go
-              else "Only documentation, Actions or dedicated KWOK harness settings changed")
+              else "Only documentation, Actions or dedicated Python/E2E harness settings changed")
     return Decision(run_go, reason, files, diff_range)
 
 

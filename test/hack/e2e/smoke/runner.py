@@ -74,7 +74,7 @@ def fixtures(plan, run, cpu):
                             {"key":"node.kubernetes.io/instance-type","operator":"In","values":smoke["instance_types"]},
                             {"key":"kubernetes.io/arch","operator":"In","values":["amd64"]},
                             {"key":"kubernetes.io/os","operator":"In","values":["linux"]}]}},
-            "limits":{"cpu":str(cpu*replicas)},"disruption":{"budgets":[{"nodes":"0"}]}}})
+            "limits":{"cpu":str(cpu*replicas)},"disruption":{"consolidateAfter":"Never","budgets":[{"nodes":"0"}]}}})
         pod = {"metadata":{"labels":labels},"spec":{"nodeSelector":{POOL:name},
             "tolerations":[{"key":RUN_TAG,"operator":"Equal","value":run,"effect":"NoSchedule"}],
             "terminationGracePeriodSeconds":0,

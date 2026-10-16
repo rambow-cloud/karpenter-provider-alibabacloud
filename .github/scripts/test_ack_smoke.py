@@ -78,6 +78,7 @@ class SmokeContracts(unittest.TestCase):
             self.assertEqual(d["spec"]["selector"]["matchLabels"],pod["metadata"]["labels"])
         pools = [o for o in objects if o["kind"]=="NodePool"]
         self.assertEqual([o["spec"]["limits"]["cpu"] for o in pools],["8","4"])
+        self.assertTrue(all(o["spec"]["disruption"]["consolidateAfter"]=="Never" for o in pools))
         self.assertEqual([o["spec"]["template"]["spec"]["requirements"][0]["values"] for o in pools],[["on-demand"],["spot"]])
 
     def test_cleanup_resets_timeout_and_rejects_foreign_manifest(self):
