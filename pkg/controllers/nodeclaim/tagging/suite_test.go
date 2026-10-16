@@ -112,7 +112,9 @@ func mockDescribeInstancesWithTags(instanceID string, tags map[string]string) {
 		})
 	}
 
-	mockECSClient.On("DescribeInstances", mock.Anything, mock.Anything).
+	mockECSClient.On("DescribeInstances", mock.Anything, mock.MatchedBy(func(req *ecs.DescribeInstancesRequest) bool {
+		return req != nil && tea.StringValue(req.InstanceIds) == fmt.Sprintf("[%q]", instanceID)
+	})).
 		Return(&ecs.DescribeInstancesResponse{
 			Body: &ecs.DescribeInstancesResponseBody{
 				TotalCount: tea.Int32(1),
