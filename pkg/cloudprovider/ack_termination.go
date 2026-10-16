@@ -77,6 +77,14 @@ func (c *CloudProvider) deleteACKInstance(ctx context.Context, claim *coreapis.N
 				return fmt.Errorf("refusing ACK termination: instance ownership mismatch for %s", key)
 			}
 		}
+		// A successful receipt proves the old removal, not permanent ownership.
+		// Recheck native tags even when this cluster's membership is now absent.
+		if cluster := inst.Tags["ack.aliyun.com"]; cluster != "" && cluster != c.ackNodePoolProvider.ClusterID() {
+			return fmt.Errorf("instance belongs to another ACK cluster")
+		}
+		if pool := inst.Tags["ack.alibabacloud.com/nodepool-id"]; receipt.TaskID != "" && pool != "" && pool != receipt.PoolID {
+			return fmt.Errorf("instance native pool changed after ACK removal; ECS termination deferred")
+		}
 	}
 	if member != nil {
 		if receipt.TaskID != "" {
@@ -84,9 +92,6 @@ func (c *CloudProvider) deleteACKInstance(ctx context.Context, claim *coreapis.N
 		}
 		if inst == nil {
 			return fmt.Errorf("ACK membership remains for missing ECS; retain NodeClaim for capacity reconciliation")
-		}
-		if cluster := inst.Tags["ack.aliyun.com"]; cluster != "" && cluster != c.ackNodePoolProvider.ClusterID() {
-			return fmt.Errorf("instance belongs to another ACK cluster")
 		}
 		if pool := inst.Tags["ack.alibabacloud.com/nodepool-id"]; pool != "" && pool != member.PoolID {
 			return fmt.Errorf("ACK pool membership does not match instance tags")

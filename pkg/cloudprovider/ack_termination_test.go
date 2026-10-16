@@ -164,3 +164,19 @@ func TestACKTerminationDoesNotRepeatAmbiguousNativeDecrement(t *testing.T) {
 		}
 	}
 }
+
+func TestACKTerminationRechecksNativeOwnershipAfterCompletedRemoval(t *testing.T) {
+	for _, key := range []string{"ack.aliyun.com", "ack.alibabacloud.com/nodepool-id"} {
+		t.Run(key, func(t *testing.T) {
+			p, claim, ack, cloud := terminationFixture(t)
+			require.NoError(t, p.Delete(context.Background(), claim))
+			ack.taskState, ack.member = "success", false
+			// Keep every Karpenter ownership tag. The old ACK task still must
+			// not authorize deleting an instance re-adopted somewhere else.
+			cloud.row.Tags.Tag = append(cloud.row.Tags.Tag, &ecs.DescribeInstancesResponseBodyInstancesInstanceTagsTag{TagKey: tea.String(key), TagValue: tea.String("foreign")})
+			require.Error(t, p.Delete(context.Background(), claim))
+			require.Zero(t, cloud.deletes)
+			require.Equal(t, 1, ack.removeCalls)
+		})
+	}
+}
