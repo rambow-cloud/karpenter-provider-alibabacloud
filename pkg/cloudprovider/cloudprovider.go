@@ -746,7 +746,8 @@ func (c *CloudProvider) Name() string {
 // ## Reconcile frequency
 //
 // The drift reconciler re-queues every 5 minutes, so IsDrifted is called frequently.
-// Avoid expensive or rate-limited API calls on the hot path; cache where possible.
+// Dynamic drift requires a fresh, identity-checked cloud observation. General
+// Get/List caches can contain incomplete metadata observed while ECS is starting.
 func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeClaim) (cloudprovider.DriftReason, error) {
 	// 1. Get NodeClass
 	nodeClass := &v1alpha1.ECSNodeClass{}
@@ -761,18 +762,13 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 		return "", err
 	}
 
-	// 2. Get instance details
+	// 2. Validate identity before checking static or dynamic drift.
 	instanceID := fromProviderID(nodeClaim.Status.ProviderID)
 	if instanceID == "" {
 		return "", fmt.Errorf("invalid providerID: %s", nodeClaim.Status.ProviderID)
 	}
 
-	inst, err := c.instanceProvider.Get(ctx, instanceID, false)
-	if err != nil {
-		return "", fmt.Errorf("failed to get instance: %w", err)
-	}
-
-	// 3. Check NodeClass hash (most important drift detection)
+	// 3. Static configuration drift does not depend on ECS launch observations.
 	currentHash, err := nodeClass.Hash()
 	if err != nil {
 		return "", err
@@ -784,6 +780,23 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 
 	if currentHash != annotatedHash || nodeClaim.Annotations[v1alpha1.AnnotationECSNodeClassHashVersion] != v1alpha1.ECSNodeClassHashVersion {
 		return NodeClassDrift, nil
+	}
+
+	inst, err := c.instanceProvider.Get(ctx, instanceID, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to get instance: %w", err)
+	}
+	if nodeClaim.Status.ProviderID != inst.Region+"."+inst.InstanceID {
+		return "", fmt.Errorf("fresh ECS identity does not match NodeClaim providerID")
+	}
+	log.FromContext(ctx).V(1).Info("Evaluating fresh ECS drift observation",
+		"nodeClaim", nodeClaim.Name, "nodeClaimUID", nodeClaim.UID, "instanceID", inst.InstanceID, "region", inst.Region,
+		"instanceStatus", inst.Status, "securityGroupsObserved", inst.SecurityGroupIDs != nil,
+		"actualSecurityGroupIDs", inst.SecurityGroupIDs,
+		"resolvedSecurityGroupIDs", lo.Map(nodeClass.Status.SecurityGroups, func(group v1alpha1.SecurityGroup, _ int) string { return group.ID }),
+		"actualVSwitchID", inst.VSwitchID)
+	if inst.VSwitchID == "" || inst.SecurityGroupIDs == nil {
+		return "", fmt.Errorf("instance %s network metadata is not yet observed; defer drift classification", instanceID)
 	}
 
 	// 4. Check if image is still in allowed list

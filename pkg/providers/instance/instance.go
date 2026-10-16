@@ -438,41 +438,35 @@ func (p *Provider) Get(ctx context.Context, instanceID string, skipCache bool) (
 
 	// 解析批处理结果
 	batchResults, ok := results.([]interface{})
-	if !ok || len(batchResults) == 0 {
+	if !ok || len(batchResults) != 1 {
 		return nil, fmt.Errorf("invalid batch results for instance %s", instanceID)
 	}
 
 	response, ok := batchResults[0].(*ecs.DescribeInstancesResponse)
-	if !ok {
-		return nil, fmt.Errorf("invalid response type for instance %s", instanceID)
+	if !ok || response == nil || response.Body == nil || response.Body.TotalCount == nil {
+		return nil, fmt.Errorf("incomplete DescribeInstances response for instance %s", instanceID)
 	}
-
-	// Log response information for debugging (only at debug level)
-	logger.V(1).Info("DescribeInstances response", "instanceCount", len(response.Body.Instances.Instance), "totalInstancesInRegion", *response.Body.TotalCount, "pageNumber", *response.Body.PageNumber, "pageSize", *response.Body.PageSize)
-
-	if len(response.Body.Instances.Instance) == 0 {
-		// Log additional information when instance is not found (only at debug level)
-		logger.V(1).Info("Instance not found in response", "instanceID", instanceID, "region", p.region,
-			"totalInstancesInRegion", *response.Body.TotalCount, "pageNumber", *response.Body.PageNumber, "pageSize", *response.Body.PageSize)
-
-		// List instances in region for debugging purposes (only when instance is not found and at debug level)
-		if *response.Body.TotalCount > 0 {
-			logger.V(1).Info("List instances in region for debugging", "region", p.region, "totalInstances", *response.Body.TotalCount, "returnedInstances", len(response.Body.Instances.Instance))
-			// Log sample instances for debugging
-			maxSample := 5
-			if len(response.Body.Instances.Instance) < maxSample {
-				maxSample = len(response.Body.Instances.Instance)
-			}
-			for i := 0; i < maxSample; i++ {
-				inst := response.Body.Instances.Instance[i]
-				logger.V(1).Info("Sample instance in region", "sampleInstanceID", *inst.InstanceId, "status", *inst.Status)
-			}
-		}
+	var rows []*ecs.DescribeInstancesResponseBodyInstancesInstance
+	if response.Body.Instances != nil {
+		rows = response.Body.Instances.Instance
+	}
+	// Get requests exactly one ID. An incomplete body or a different row must
+	// never become a cached snapshot (or false proof that the instance is gone).
+	if *response.Body.TotalCount == 0 && len(rows) == 0 {
 		p.deleteCachedInstance(instanceID)
 		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance %s not found", instanceID))
 	}
-
-	inst := response.Body.Instances.Instance[0]
+	if *response.Body.TotalCount != 1 || len(rows) != 1 {
+		return nil, fmt.Errorf("incomplete or ambiguous describe response for instance %s", instanceID)
+	}
+	inst := rows[0]
+	if inst == nil || derefString(inst.InstanceId) != instanceID || derefString(inst.RegionId) != p.region {
+		return nil, fmt.Errorf("describe response identity does not match instance %s in %s", instanceID, p.region)
+	}
+	if derefString(inst.ZoneId) == "" || derefString(inst.InstanceType) == "" || derefString(inst.ImageId) == "" ||
+		derefString(inst.Status) == "" || derefString(inst.CreationTime) == "" || inst.Cpu == nil || inst.Memory == nil {
+		return nil, fmt.Errorf("incomplete instance metadata for %s", instanceID)
+	}
 
 	// Log instance information for debugging (only at debug level)
 	logger.V(1).Info("Found instance", "instanceID", *inst.InstanceId, "status", *inst.Status, "zone", *inst.ZoneId, "instanceType", *inst.InstanceType)
@@ -494,12 +488,16 @@ func (p *Provider) Get(ctx context.Context, instanceID string, skipCache bool) (
 
 	capacityType := ecsutil.CapacityTypeFromInstance(derefString(inst.InstanceChargeType), derefString(inst.SpotStrategy))
 
-	securityGroupIds := []string{}
+	// nil means unobserved, distinct from an explicitly observed empty set.
+	// Drift must defer unknown data rather than classify it as missing groups.
+	var securityGroupIds []string
 	if inst.SecurityGroupIds != nil && inst.SecurityGroupIds.SecurityGroupId != nil {
+		securityGroupIds = make([]string, 0, len(inst.SecurityGroupIds.SecurityGroupId))
 		for _, sg := range inst.SecurityGroupIds.SecurityGroupId {
-			if sg != nil {
-				securityGroupIds = append(securityGroupIds, *sg)
+			if sg == nil || *sg == "" {
+				return nil, fmt.Errorf("incomplete security-group metadata for %s", instanceID)
 			}
+			securityGroupIds = append(securityGroupIds, *sg)
 		}
 	}
 
@@ -534,8 +532,10 @@ func (p *Provider) Get(ctx context.Context, instanceID string, skipCache bool) (
 		GPUSpec:          gpuSpec,
 	}
 
-	// Cache the instance
-	p.setCachedInstance(instanceID, instance)
+	// Partial launch observations must not overwrite a complete cached snapshot.
+	if securityGroupIds != nil && vSwitchID != "" {
+		p.setCachedInstance(instanceID, instance)
+	}
 
 	return instance, nil
 }
