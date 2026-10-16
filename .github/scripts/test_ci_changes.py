@@ -13,7 +13,8 @@ class RoutingTests(unittest.TestCase):
         for path in ("README.md", "UPGRADING.md", "test/hack/kwok/README.md",
                      "docs/guide.rst", "website/build.py", "website/assets/logo.png",
                      ".github/workflows/ci.yaml", ".github/actions/e2e/setup-cluster/action.yaml",
-                     ".github/scripts/ci_changes.py", ".github/ISSUE_TEMPLATE/docs_website.yml"):
+                     ".github/scripts/ci_changes.py", ".github/ISSUE_TEMPLATE/docs_website.yml",
+                     "test/hack/e2e/smoke/runner.py"):
             with self.subTest(path=path):
                 self.assertFalse(needs_go(path))
 
@@ -21,7 +22,9 @@ class RoutingTests(unittest.TestCase):
         for path in ("pkg/provider.go", "website/example.go", ".github/tools/check.go",
                      "website/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum",
                      "Makefile", "Dockerfile", "charts/karpenter/Chart.yaml",
-                     "test/fixtures/config.yaml", "new-unclassified-file"):
+                     "test/fixtures/config.yaml", "new-unclassified-file",
+                     "test/hack/e2e/smoke/check.go", "test/hack/e2e/smoke/go.mod",
+                     "test/hack/e2e/smoke/config.yaml"):
             with self.subTest(path=path):
                 self.assertTrue(needs_go(path))
 
@@ -73,6 +76,12 @@ class GitDiffTests(unittest.TestCase):
     def test_mixed_change(self):
         self.write("README.md", "updated\n")
         self.write("pkg/source.go", "package changed\n")
+        self.assertTrue(self.push(self.commit()).run_go)
+
+    def test_ack_python_harness_only_skips_provider_checks(self):
+        self.write("test/hack/e2e/smoke/runner.py", "print('fixture')\n")
+        self.assertFalse(self.push(self.commit()).run_go)
+        self.write("test/hack/e2e/ackctl/smoke.go", "package main\n")
         self.assertTrue(self.push(self.commit()).run_go)
 
     def test_deleted_source(self):

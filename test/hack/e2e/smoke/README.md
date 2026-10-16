@@ -7,7 +7,10 @@ worker remains outside the run and hosts the controller; it is not part of the
 three new workers. This is lifecycle/Spot creation evidence, not #20's Spot
 interruption/notification/drain acceptance.
 
-No live cloud execution has been performed yet. The workflow is manual-only;
+Local live execution began on 2026-10-16; see
+[the environment status](../../../../.github/ACK_OIDC_SETUP.md) for evidence and
+remaining acceptance. Local maintainer OAuth STS is distinct from the workflow's
+GitHub runner OIDC. The workflow is manual-only;
 ordinary PR/CI does not launch it. It does not create ACK, VPC, vSwitch, security
 groups, native node pools, RAM roles or OIDC providers. It uses a dedicated,
 existing ACK and installs a fresh test controller. Shared CRDs and the controller
@@ -22,6 +25,9 @@ namespace are retained as cluster test infrastructure after cleanup.
    supported by this fresh-install smoke.
 2. Pin an active regular native ACK containerd pool with a supported kubelet
    resource model, no custom userdata/auto-mode and **autoscaling disabled**.
+   Reuse the fixed system worker's ACK pool when it satisfies these checks; no
+   separate zero-capacity template pool is required. Karpenter creates the three
+   business workers; ACK pool desired capacity is not increased by this test.
    Existing pool/scripts are inspected, not created or changed. Select 1..5
    confirmed amd64 instance types with identical vCPU counts, explicit vSwitch
    and security-group IDs, worker RAM role, system disk category/size and an
@@ -44,8 +50,8 @@ namespace are retained as cluster test infrastructure after cleanup.
 5. Fill `.github/ack-e2e-config.example.yaml` without cloud credentials and store
    it as the `ack-e2e` Environment secret `ALIBABA_CLOUD_E2E_CONFIG`. Its region,
    cluster name/ID, version and controller RRSA ARN must match actual metadata.
-   Keep the already prepared runner OIDC Environment variables. The runner
-   role currently has no operation policies until this cluster preparation.
+   Keep the already prepared runner OIDC Environment variables. Grant the runner
+   only the cluster-scoped reads, RBAC and run-owned cleanup described above.
 
 ## Dispatch the bounded test
 
@@ -69,6 +75,9 @@ anti-affinity force 2/1 capacity and one Pod per node. NodePool CPU limits bound
 the target shape; non-atomic creation races are caught by actual cloud inventory.
 Extra instances are recorded and the test fails; cleanup can still read/release
 them. Spot inventory must be available; fallback to on-demand never passes.
+Both test NodePools explicitly set `consolidateAfter: Never` as required by the
+Karpenter v1 disruption schema, in addition to their zero voluntary-disruption
+budgets.
 
 It checks Launched/Registered/Initialized/Ready, Node Ready, Pod Running/Ready/IP,
 unique ProviderIDs/instance IDs and ECS Running/charge type/SpotStrategy/image/
