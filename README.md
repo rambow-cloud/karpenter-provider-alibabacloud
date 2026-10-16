@@ -102,12 +102,18 @@ RRSA (RAM Roles for Service Accounts) 是阿里云提供的一种安全认证方
         "cs:DescribeClusterAttachScripts",
         "cs:DescribeClusterNodePools",
         "cs:DescribeClusterNodePoolDetail",
+        "cs:DescribeTaskInfo",
         "cs:GetClusterAddonInstance",
 		"cs:ListClusterAddonInstances",
         "cs:DescribeClusterDetail",
         "cs:DescribeKubernetesVersionMetadata"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["cs:DescribeClusterNodes", "cs:RemoveNodePoolNodes"],
+      "Resource": "acs:cs:<region>:<account-id>:cluster/<cluster-id>"
     },
     {
       "Effect": "Allow",
@@ -142,6 +148,12 @@ RRSA (RAM Roles for Service Accounts) 是阿里云提供的一种安全认证方
   ]
 }
 ```
+
+将策略中的 `<region>`、`<account-id>` 和 `<cluster-id>` 替换为目标 ACK 的值。
+ACK 接管节点后会维护原生期望数量，即使关闭自动伸缩也可能补节点。
+终止时 controller 先通过 ACK 移除精确的自有节点，等待任务成功后再释放 ECS；
+请配置上述集群范围权限。`cs:DescribeTaskInfo` 只支持 `Resource: "*"`。
+此终止修复尚待重新进行真实 ACK 验收，详见 #101。
 
 #### 4. 配置 Helm Chart Values
 
@@ -345,11 +357,17 @@ Attach the following custom permission policy to the RAM role:
         "cs:DescribeClusterAttachScripts",
         "cs:DescribeClusterNodePools",
         "cs:DescribeClusterNodePoolDetail",
+        "cs:DescribeTaskInfo",
         "cs:GetClusterAddonInstance",
         "cs:DescribeClusterDetail",
         "cs:DescribeKubernetesVersionMetadata"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["cs:DescribeClusterNodes", "cs:RemoveNodePoolNodes"],
+      "Resource": "acs:cs:<region>:<account-id>:cluster/<cluster-id>"
     },
     {
       "Effect": "Allow",
@@ -384,6 +402,12 @@ Attach the following custom permission policy to the RAM role:
   ]
 }
 ```
+
+Replace `<region>`, `<account-id>` and `<cluster-id>` with the target ACK values.
+ACK maintains native desired capacity after adoption even with autoscaling off.
+Termination first removes the exact owned native member, waits for the ACK task,
+then deletes ECS. Grant the cluster-scoped permissions above; `cs:DescribeTaskInfo`
+supports only `Resource: "*"`. Live revalidation of this fix remains open in #101.
 
 ##### 4. Configure Helm Chart Values
 

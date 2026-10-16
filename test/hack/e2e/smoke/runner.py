@@ -22,6 +22,7 @@ POOL = "karpenter.sh/nodepool"
 CAPACITY = "karpenter.sh/capacity-type"
 CUSTOM = {"NodePool":"nodepools.karpenter.sh","NodeClaim":"nodeclaims.karpenter.sh","ECSNodeClass":"ecsnodeclasses.karpenter.alibabacloud.com"}
 RESOURCE_KINDS = {"nodepools":"NodePool","nodeclaims":"NodeClaim","ecsnodeclasses":"ECSNodeClass"}
+CAPACITY_STABILITY_SECONDS = 300
 
 
 class Failure(Exception):
@@ -239,6 +240,12 @@ class Runner:
         self.write("instances.json",rows)
         if enforce_limit and (len(rows)>3 or len(self.manifest["instances"])>3):
             raise Failure("duplicate/extra/replacement run instances; stopping provisioning")
+        if enforce_limit and self.manifest.get("vpc_id"):
+            all_rows = self.cloud("vpc-instances",vpc_id=self.manifest["vpc_id"])
+            new_ids = {r["InstanceId"] for r in all_rows}-set(self.manifest["baseline_vpc_instance_ids"])
+            if len(new_ids)>3 or new_ids-set(self.manifest["instances"]):
+                self.write("unexpected-vpc-instances.json",sorted(new_ids))
+                raise Failure("unexpected untagged/native VPC capacity; no broad deletion authorized")
         return rows
 
     def existing(self,kind,name,namespace=None):
@@ -248,6 +255,17 @@ class Runner:
         if namespace:
             argv += ["-n",namespace]
         return self.kube(*argv)
+
+    def capacity_matches_baseline(self):
+        m = self.manifest
+        if not m.get("baseline_native_capacity") or not m.get("vpc_id") or "baseline_vpc_instance_ids" not in m:
+            raise Failure("cleanup lacks native/VPC capacity baseline; cannot claim complete zero residue")
+        native = self.cloud("native-capacity")
+        vpc = self.cloud("vpc-instances",vpc_id=m["vpc_id"])
+        ids = sorted(r["InstanceId"] for r in vpc)
+        matches = native==m["baseline_native_capacity"] and ids==m["baseline_vpc_instance_ids"]
+        self.write("capacity-residue.json",{"matches_baseline":matches,"native":native,"vpc_instance_ids":ids})
+        return matches
 
     def provision(self):
         if os.environ.get("ACK_E2E_ENABLED")!="true":
@@ -286,6 +304,13 @@ class Runner:
         if {r["InstanceId"] for r in baseline} != set(baseline_ids):
             raise Failure("runner cannot observe every baseline ECS instance")
         self.cloud("native-pool")
+        vpc_id = cluster.get("vpc_id")
+        if not vpc_id:
+            raise Failure("ACK VPC identity is required for complete capacity accounting")
+        native_capacity = self.cloud("native-capacity")
+        vpc_baseline = self.cloud("vpc-instances",vpc_id=vpc_id)
+        if not native_capacity or "member_ids" not in native_capacity:
+            raise Failure("native ACK capacity baseline is incomplete")
         baseline_resources = {"disks":[],"enis":[]}
         for op,key in (("disks","DiskId"),("enis","NetworkInterfaceId")):
             # Full pre-creation snapshot distinguishes pooled/pre-existing
@@ -304,6 +329,7 @@ class Runner:
         self.manifest = {"version":1,"run_id":run,"config_hash":self.hash,"cluster_id":self.plan["cluster_id"],"region":self.plan["region"],
             "started_at":time.time(),"baseline_node_uids":[n["metadata"]["uid"] for n in nodes],"baseline_instance_ids":baseline_ids,
             "baseline_resources":baseline_resources,"instances":{},"resources":{"disks":{},"enis":{}},"objects":[],"controller_owned":False,
+            "vpc_id":vpc_id,"baseline_native_capacity":native_capacity,"baseline_vpc_instance_ids":sorted(r["InstanceId"] for r in vpc_baseline),
             "kubernetes_version":version,"ack_version":cluster["current_version"],"controller_image":self.plan["controller_image"]}
         self.save()
         objects = fixtures(self.plan,run,int(next(iter(cpus))))
@@ -417,6 +443,7 @@ class Runner:
                 raise Failure("refusing baseline instance termination")
             self.delete_owned({"kind":"NodeClaim","name":claim["metadata"]["name"],"uid":claim["metadata"]["uid"]})
         fallback = False
+        stable_since = None
         normal_until = self.deadline-120
         while time.monotonic()<self.deadline:
             rows = self.inventory(enforce_limit=False)
@@ -434,6 +461,16 @@ class Runner:
                     residue[op] += new
             claims,nodes = self.list("nodeclaims"),self.list("nodes")
             if not rows and not known and not any(residue.values()) and not claims and not nodes:
+                if not self.capacity_matches_baseline():
+                    # Untagged native replacements are not ours to release by
+                    # guessing. Preserve evidence and fail the cost acceptance.
+                    raise Failure("native ACK/VPC capacity changed after tagged workers disappeared; no broad deletion attempted")
+                if stable_since is None:
+                    stable_since = time.monotonic()
+                if time.monotonic()-stable_since < CAPACITY_STABILITY_SECONDS:
+                    print("Cleanup: tagged resources absent; observing native/VPC capacity stability",flush=True)
+                    time.sleep(min(30,max(0,self.deadline-time.monotonic())))
+                    continue
                 for record in reversed(m["objects"]):
                     if record["kind"]!="Deployment":
                         self.delete_owned(record)
@@ -448,10 +485,11 @@ class Runner:
                         if status.get("info",{}).get("description")!="ACK-smoke:"+m["run_id"]:
                             raise Failure("refusing to uninstall an unowned/replaced controller release")
                     self.call(["helm","uninstall","karpenter","-n","karpenter","--ignore-not-found"],json_result=False)
-                self.write("cleanup.json",{"result":"failed-normal-termination" if fallback else "passed","instances":0,"disks":0,"enis":0,"nodeclaims":0,"nodes":0,"fallback_used":fallback})
+                self.write("cleanup.json",{"result":"failed-normal-termination" if fallback else "passed","instances":0,"disks":0,"enis":0,"nodeclaims":0,"nodes":0,"fallback_used":fallback,"native_vpc_baseline_restored":True,"capacity_stability_seconds":CAPACITY_STABILITY_SECONDS})
                 if fallback:
                     raise Failure("fallback released ECS; normal termination acceptance failed")
                 return
+            stable_since = None
             if time.monotonic()>=normal_until:
                 for row in rows:
                     ident = row["InstanceId"]

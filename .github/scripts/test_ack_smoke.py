@@ -36,6 +36,10 @@ def data():
 
 
 class SmokeContracts(unittest.TestCase):
+    def setUp(self):
+        self.capacity_timer = patch.object(smoke,"CAPACITY_STABILITY_SECONDS",0)
+        self.capacity_timer.start()
+        self.addCleanup(self.capacity_timer.stop)
     def test_fresh_cluster_without_custom_crds_does_not_query_missing_resources(self):
         runner = smoke.Runner.__new__(smoke.Runner)
         runner.crds = set()
@@ -122,10 +126,13 @@ class SmokeContracts(unittest.TestCase):
         runner.plan,runner.hash = plan,"correct"
         runner.deadline = -1
         records = [{"kind":"Deployment","name":m["run_id"]+"-od","namespace":m["run_id"],"uid":"dep-uid"}]
-        manifest = {**m,"version":1,"config_hash":"correct","region":plan["region"],"cluster_id":plan["cluster_id"],"objects":records,"instances":{},"resources":{"disks":{},"enis":{}},"baseline_resources":{"disks":[],"enis":[]},"controller_owned":False}
+        native = {"nodepool_id":"np-test","desired_size":1,"total_nodes":1,"member_ids":["i-base"]}
+        manifest = {**m,"version":1,"config_hash":"correct","region":plan["region"],"cluster_id":plan["cluster_id"],"objects":records,"instances":{},"resources":{"disks":{},"enis":{}},"baseline_resources":{"disks":[],"enis":[]},"controller_owned":False,"vpc_id":"vpc-test","baseline_native_capacity":native,"baseline_vpc_instance_ids":["i-base"]}
         runner.manifest_path.write_text(json.dumps(manifest))
         state = {"claims":list(claims),"instances":list(rows),"workload":True,"released":[]}
         def cloud(op,**kwargs):
+            if op=="native-capacity": return dict(native)
+            if op=="vpc-instances": return [{"InstanceId":"i-base"}]
             if op=="instances":
                 if cloud_denied and not state["claims"]:
                     raise smoke.Failure("cloud permission denied")
@@ -176,6 +183,31 @@ class SmokeContracts(unittest.TestCase):
             with self.assertRaises(smoke.Failure): runner.cleanup()
             self.assertFalse((Path(tmp)/"cleanup.json").exists())
             self.assertTrue((Path(tmp)/"run.json").exists())
+
+    def test_delayed_native_replenishment_without_run_tags_fails_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner,state = self.cleanup_runner(tmp)
+            original_cloud = runner.cloud
+            elapsed = [0]
+            def cloud(op,**flags):
+                if op=="vpc-instances" and elapsed[0]>=30:
+                    return [{"InstanceId":"i-base"},{"InstanceId":"i-native-replacement"}]
+                return original_cloud(op,**flags)
+            runner.cloud = cloud
+            with patch.object(smoke,"CAPACITY_STABILITY_SECONDS",300),patch.object(smoke.time,"monotonic",side_effect=lambda:elapsed[0]),patch.object(smoke.time,"sleep",side_effect=lambda seconds:elapsed.__setitem__(0,elapsed[0]+seconds)):
+                with self.assertRaisesRegex(smoke.Failure,"native ACK/VPC capacity changed"):
+                    runner.cleanup()
+            self.assertFalse((Path(tmp)/"cleanup.json").exists())
+            self.assertFalse(json.loads((Path(tmp)/"capacity-residue.json").read_text())["matches_baseline"])
+            self.assertEqual(state["released"],[],"untagged replacements must never be guessed as owned")
+
+    def test_native_desired_capacity_drift_is_not_hidden_by_empty_run_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner,_ = self.cleanup_runner(tmp)
+            original = runner.cloud
+            runner.cloud = lambda op,**kw: {"nodepool_id":"np-test","desired_size":5,"total_nodes":1,"member_ids":["i-base"]} if op=="native-capacity" else original(op,**kw)
+            with self.assertRaisesRegex(smoke.Failure,"native ACK/VPC capacity changed"):
+                runner.cleanup()
 
 
 if __name__ == "__main__":

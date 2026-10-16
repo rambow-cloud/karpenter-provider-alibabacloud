@@ -11,7 +11,7 @@ This guide targets a **fresh provider installation** on an existing ACK cluster.
 
 - ACK Kubernetes 1.34 or newer, working `kubectl` access and Helm 3.
 - Identify the ACK cluster ID, region, VPC, vSwitches and security groups; node networking must reach the API server.
-- The controller needs appropriate ECS, VPC, RAM and CS permissions. Public-image reads include `cs:DescribeClusterDetail`, `cs:DescribeKubernetesVersionMetadata`, `cs:ListClusterAddonInstances` and `ecs:DescribeImages`; pricing needs `ecs:DescribePrice`; native-pool discovery additionally needs `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`.
+- The controller needs appropriate ECS, VPC, RAM and CS permissions. Public-image reads include `cs:DescribeClusterDetail`, `cs:DescribeKubernetesVersionMetadata`, `cs:ListClusterAddonInstances` and `ecs:DescribeImages`; pricing needs `ecs:DescribePrice`; native-pool discovery additionally needs `cs:DescribeClusterNodePools` and `cs:DescribeClusterNodePoolDetail`. Termination needs cluster-scoped `cs:DescribeClusterNodes`/`cs:RemoveNodePoolNodes` and `cs:DescribeTaskInfo` (the latter supports only `Resource: "*"`). It removes native membership before releasing ECS to prevent replenishment; #101 still requires live revalidation.
 - Prepare an ECS node RAM role separately from the controller's cloud API identity.
 - Keep the controller on an existing real node so its initial startup does not depend on nodes it provisions itself.
 

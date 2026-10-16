@@ -100,3 +100,21 @@ func TestSmokeCloudSparseDeniedAndRepeatedPaginationFail(t *testing.T) {
 		})
 	}
 }
+
+func TestSmokeFallbackRefusesOwnedNativePoolMembers(t *testing.T) {
+	for _, key := range []string{"ack.alibabacloud.com/nodepool-id", "acs:autoscaling:scalingGroupId"} {
+		t.Run(key, func(t *testing.T) {
+			f := &smokeFake{describe: func(req *ecs.DescribeInstancesRequest) (*ecs.DescribeInstancesResponse, error) {
+				if tea.BoolValue(req.DryRun) {
+					return nil, &tea.SDKError{Code: tea.String("DryRunOperation")}
+				}
+				r := smokeResponse("i-owned", "", "ack-123456789")
+				r.Body.Instances.Instance[0].Tags.Tag = append(r.Body.Instances.Instance[0].Tags.Tag,
+					&ecs.DescribeInstancesResponseBodyInstancesInstanceTagsTag{TagKey: tea.String(key), TagValue: tea.String("native-member")})
+				return r, nil
+			}}
+			require.ErrorContains(t, releaseSmokeInstance(f, "cn-hangzhou", "c-test", "ack-123456789", "i-owned"), "direct fallback refused")
+			require.False(t, f.deleted)
+		})
+	}
+}

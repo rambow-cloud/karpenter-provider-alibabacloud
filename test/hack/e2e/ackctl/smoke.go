@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/apis/v1alpha1"
+	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/clients"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/providers/nodepool"
 	"github.com/AliyunContainerService/karpenter-provider-alibabacloud/pkg/utils/kubernetesversion"
 	cs "github.com/alibabacloud-go/cs-20151215/v5/client"
@@ -163,14 +164,24 @@ func selectedJSON(value interface{}, keys ...string) (map[string]interface{}, er
 	return result, nil
 }
 
-func smokeInstances(client smokeInstanceAPI, region, cluster, run string, ids []string) ([]map[string]interface{}, error) {
+func smokeInstances(client smokeInstanceAPI, region, cluster, run string, ids []string, vpcs ...string) ([]map[string]interface{}, error) {
+	vpc := ""
+	if len(vpcs) > 0 {
+		vpc = vpcs[0]
+	}
 	if run != "" && !validSmokeRun(run) {
 		return nil, fmt.Errorf("invalid run ID")
 	}
-	if run == "" && len(ids) == 0 {
+	if run == "" && len(ids) == 0 && vpc == "" {
 		return nil, fmt.Errorf("instance query requires run ownership or exact IDs")
 	}
 	req := &ecs.DescribeInstancesRequest{RegionId: tea.String(region), MaxResults: tea.Int32(100), DryRun: tea.Bool(true)}
+	if vpc != "" {
+		if !strings.HasPrefix(vpc, "vpc-") {
+			return nil, fmt.Errorf("invalid exact VPC identity")
+		}
+		req.VpcId = tea.String(vpc)
+	}
 	if run != "" {
 		req.Tag = ecsInstanceTags(smokeSelectors(cluster, run))
 	}
@@ -194,6 +205,9 @@ func smokeInstances(client smokeInstanceAPI, region, cluster, run string, ids []
 			return nil, fmt.Errorf("incomplete DescribeInstances response")
 		}
 		for _, inst := range resp.Body.Instances.Instance {
+			if vpc != "" && (inst == nil || inst.VpcAttributes == nil || tea.StringValue(inst.VpcAttributes.VpcId) != vpc) {
+				return nil, fmt.Errorf("foreign or incomplete VPC instance returned")
+			}
 			row, err := selectedJSON(inst, "InstanceId", "RegionId", "ZoneId", "Status", "InstanceChargeType", "SpotStrategy", "ImageId", "InstanceType", "Cpu", "VpcAttributes", "SecurityGroupIds")
 			if err != nil {
 				return nil, err
@@ -208,7 +222,7 @@ func smokeInstances(client smokeInstanceAPI, region, cluster, run string, ids []
 				for _, tag := range inst.Tags.Tag {
 					if tag != nil {
 						k := tea.StringValue(tag.TagKey)
-						if _, ok := smokeSelectors(cluster, run)[k]; ok || k == v1alpha1.TagNodePool || k == v1alpha1.TagNodeClaim || k == v1alpha1.TagNodeClaimUID {
+						if _, ok := smokeSelectors(cluster, run)[k]; ok || k == v1alpha1.TagNodePool || k == v1alpha1.TagNodeClaim || k == v1alpha1.TagNodeClaimUID || k == "ack.aliyun.com" || k == "ack.alibabacloud.com/nodepool-id" || k == "acs:autoscaling:scalingGroupId" {
 							tags[k] = tea.StringValue(tag.TagValue)
 						}
 					}
@@ -246,6 +260,10 @@ func releaseSmokeInstance(client smokeInstanceAPI, region, cluster, run, id stri
 	if len(rows) != 1 || rows[0]["InstanceId"] != id || !strictSmokeOwnership(rows[0], cluster, run) {
 		return fmt.Errorf("refusing release outside exact run ownership")
 	}
+	tags, _ := rows[0]["Tags"].(map[string]string)
+	if tags["ack.alibabacloud.com/nodepool-id"] != "" || tags["acs:autoscaling:scalingGroupId"] != "" {
+		return fmt.Errorf("native ACK/ESS instance requires controller-coordinated removal; direct fallback refused")
+	}
 	_, err = client.DeleteInstances(&ecs.DeleteInstancesRequest{RegionId: tea.String(region), InstanceId: []*string{tea.String(id)}, Force: tea.Bool(true)})
 	if err != nil {
 		return cloudError("DeleteInstances", err)
@@ -263,6 +281,7 @@ func runSmokeCloud(args []string) error {
 	output := fs.String("output", "", "private kubeconfig output")
 	zone := fs.String("zone", "", "capacity zone")
 	strategy := fs.String("strategy", "NoSpot", "capacity strategy")
+	vpc := fs.String("vpc-id", "", "exact VPC inventory scope")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -283,7 +302,7 @@ func runSmokeCloud(args []string) error {
 		}
 	}
 	var result interface{}
-	if *op == "cluster" || *op == "kubeconfig" || *op == "native-pool" {
+	if *op == "cluster" || *op == "kubeconfig" || *op == "native-pool" || *op == "native-capacity" {
 		client, err := newCSClient(cfg)
 		if err != nil {
 			return err
@@ -305,6 +324,13 @@ func runSmokeCloud(args []string) error {
 			}
 			return json.NewEncoder(os.Stdout).Encode(map[string]string{"nodepool_id": cfg.Smoke.ACKNodePoolID, "result": "supported"})
 		}
+		if *op == "native-capacity" {
+			capacity, err := smokeNativeCapacity(client, cfg.AlibabaCloud.ClusterID, cfg.Smoke.ACKNodePoolID)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode(capacity)
+		}
 		resp, err := client.DescribeClusterDetail(tea.String(cfg.AlibabaCloud.ClusterID))
 		if err != nil {
 			return cloudError("ACK detail", err)
@@ -320,7 +346,7 @@ func runSmokeCloud(args []string) error {
 		if err = kubernetesversion.Validate(tea.StringValue(resp.Body.CurrentVersion)); err != nil {
 			return err
 		}
-		result, err = selectedJSON(resp.Body, "cluster_id", "name", "region_id", "current_version", "state", "rrsa_config")
+		result, err = selectedJSON(resp.Body, "cluster_id", "name", "region_id", "vpc_id", "current_version", "state", "rrsa_config")
 		if err != nil {
 			return err
 		}
@@ -346,7 +372,23 @@ func runSmokeCloud(args []string) error {
 		switch *op {
 		case "instances":
 			result, err = smokeInstances(client, region, cfg.AlibabaCloud.ClusterID, *run, ids)
+		case "vpc-instances":
+			if *vpc == "" {
+				return fmt.Errorf("exact VPC identity required")
+			}
+			result, err = smokeInstances(client, region, cfg.AlibabaCloud.ClusterID, "", nil, *vpc)
 		case "release":
+			csSDK, e := newCSClient(cfg)
+			if e != nil {
+				return e
+			}
+			member, e := nodepool.New(cfg.AlibabaCloud.ClusterID, clients.NewDefaultCSClient(csSDK)).LookupInstance(context.Background(), *instance)
+			if e != nil {
+				return fmt.Errorf("fallback cannot verify native membership")
+			}
+			if member != nil {
+				return fmt.Errorf("native ACK member cannot be released by direct ECS fallback")
+			}
 			err = releaseSmokeInstance(client, region, cfg.AlibabaCloud.ClusterID, *run, *instance)
 			result = map[string]bool{"release_requested": err == nil}
 		case "types":

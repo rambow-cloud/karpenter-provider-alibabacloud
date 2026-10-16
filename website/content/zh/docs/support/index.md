@@ -66,7 +66,9 @@ Custom 只接受 ECS 返回的 self/others 镜像，并核对 Linux、架构和�
 
 本节描述当前**开发候选版本**的 [资源计算修复 #16](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/16) 和 [网络发现修复 #76](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/issues/76)。部署时选择同一待测提交的 controller、Chart 和 CRD；合入 main 不代表稳定发布或真实 ACK 验收。
 
-`spec.ackNodePoolID` 选择一个已有、active 的普通 ACK ESS/containerd 节点池。省略时必须有且只有一个默认池。controller 需要 `cs:DescribeClusterNodePools` 和 `cs:DescribeClusterNodePoolDetail`，把实际池 ID 和 kubelet 设置写入 `status.ackNodePool`，引导脚本固定该 ID。创建前再次读取池；配置改变后等待 NodeClass status 刷新，不修改原生池。
+`spec.ackNodePoolID` 选择一个已有、active 的普通 ACK ESS/containerd 节点池。省略时必须有且只有一个默认池。controller 需要 `cs:DescribeClusterNodePools` 和 `cs:DescribeClusterNodePoolDetail`，把实际池 ID 和 kubelet 设置写入 `status.ackNodePool`，引导脚本固定该 ID。创建前再次读取池；配置改变后等待 NodeClass status 刷新，不修改池配置。
+
+ACK 接管节点可能提高原生期望数量，关闭自动伸缩不能防止补节点（#101）。终止流程需要集群范围的 `cs:DescribeClusterNodes`、`cs:RemoveNodePoolNodes`，以及仅支持 `Resource: "*"` 的 `cs:DescribeTaskInfo`：Karpenter 排空后，先移除精确的自有原生成员，持久化并等待 ACK 任务成功，确认成员消失后再释放 ECS。任务失败不会退回直接删 ECS。此修复仍待新的真实 ACK 验收；不能把之前的测试标记零残留视为全 VPC 容量已稳定缩减。
 
 **不要填写 `spec.kubelet`。** ACK attach script 不应用该字段，因此 CRD 和运行时都会拒绝，包括 maxPods、podsPerCore 和预留设置。请在 ACK 原生节点池配置受支持的 kubelet 参数。API 未提供 podsPerCore，不能据此声明节点容量。含 native userdata、auto mode、CPU/内存 manager 或 soft eviction overrides 的池暂不支持。
 

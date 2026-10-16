@@ -68,6 +68,24 @@ func (c *DefaultCSClient) DescribeClusterNodePoolDetail(ctx context.Context, clu
 	})
 }
 
+func (c *DefaultCSClient) DescribeClusterNodes(ctx context.Context, clusterID string, request *cs.DescribeClusterNodesRequest) (*cs.DescribeClusterNodesResponse, error) {
+	return callSDK(ctx, func() (*cs.DescribeClusterNodesResponse, error) {
+		return c.withContext(ctx).DescribeClusterNodes(&clusterID, request)
+	})
+}
+
+func (c *DefaultCSClient) RemoveNodePoolNodes(ctx context.Context, clusterID, poolID string, request *cs.RemoveNodePoolNodesRequest) (*cs.RemoveNodePoolNodesResponse, error) {
+	return callSDK(ctx, func() (*cs.RemoveNodePoolNodesResponse, error) {
+		return c.withContext(ctx).RemoveNodePoolNodes(&clusterID, &poolID, request)
+	})
+}
+
+func (c *DefaultCSClient) DescribeTaskInfo(ctx context.Context, taskID string) (*cs.DescribeTaskInfoResponse, error) {
+	return callSDK(ctx, func() (*cs.DescribeTaskInfoResponse, error) {
+		return c.withContext(ctx).DescribeTaskInfo(&taskID)
+	})
+}
+
 // withContext copies SDK configuration so calls keep their own context.
 func (c *DefaultCSClient) withContext(ctx context.Context) *cs.Client {
 	copy := *c.client

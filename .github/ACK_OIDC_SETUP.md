@@ -1,5 +1,20 @@
 # ACK E2E OIDC configuration status
 
+**Current status (2026-10-16): the dedicated ACK and its chargeable resources
+have been deleted.** Its worker/controller/runner roles, dedicated policies,
+RRSA provider, local credentials and GitHub cluster configuration were removed.
+`ACK_E2E_ENABLED=false`; shared platform identities and ACR artifacts remain.
+The sections below describe historical preparation and experiments.
+
+#101 found delayed native replacements: ACK attach raised desired capacity from
+1 to 5 despite autoscaling being disabled. Full teardown released all five
+native workers. Earlier tagged-instance cleanup did not establish stable total
+capacity reduction. The corrected termination path removes ACK membership and
+waits for its task before deleting ECS. E2E now checks native desired/member
+counts and all VPC instances for five minutes after tagged capacity disappears.
+This change still needs an explicitly authorized new live acceptance; no cloud
+environment is currently provisioned and no live rerun is implied by this fix.
+
 Initial identity configuration was prepared on 2026-10-12. On 2026-10-16 the
 maintainer authorized creation of a dedicated ACK Basic environment using the
 local `oss-sftp` Alibaba Cloud CLI OAuth profile. No profile credentials,
@@ -12,8 +27,8 @@ Optimized. It has one Ready on-demand system worker (4 vCPU / 8 GiB, 40 GiB ESSD
 PL0) in the active regular `system` node pool. The separate zero-capacity
 `karpenter-template` pool was removed at the maintainer's request after verifying
 it held no nodes. Smoke now reads native ACK metadata from the existing system
-pool; a separate template pool is not required. That pool disables autoscaling
-and managed upgrades. CoreDNS uses one replica for
+pool; this reuse exposed #101's native capacity ownership conflict. Disabling
+autoscaling and managed upgrades did not prevent native replacements. CoreDNS used one replica for
 this single-system-node test baseline; this is not a production HA topology.
 
 ## Configured runner identity
