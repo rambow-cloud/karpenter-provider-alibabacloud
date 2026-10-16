@@ -54,6 +54,9 @@ namespace are retained as cluster test infrastructure after cleanup.
    in that receipt; retain its cluster/pool/instance/claim identity fields. Only
    clear an intent after proving ACK never accepted it. Do not remove finalizers
    or retry a potentially completed native-capacity decrement blindly.
+   A successful receipt does not authorize later ownership changes: native
+   cluster/pool tags are checked again before ECS deletion, even after the
+   original cluster no longer reports membership.
    The runner additionally needs ACK detail/native-pool/node/temp-kubeconfig reads;
    ECS DescribeInstances/InstanceTypes/AvailableResource/Disks/NetworkInterfaces
    and exact run-owned DeleteInstances for fallback. Describe authorization
