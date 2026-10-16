@@ -25,10 +25,12 @@ namespace are retained as cluster test infrastructure after cleanup.
    supported by this fresh-install smoke.
 2. Pin an active regular native ACK containerd pool with a supported kubelet
    resource model, no custom userdata/auto-mode and **autoscaling disabled**.
-   Reuse the fixed system worker's ACK pool when it satisfies these checks; no
-   separate zero-capacity template pool is required. Karpenter creates the three
-   business workers; ACK pool desired capacity is not increased by this test.
-   Existing pool/scripts are inspected, not created or changed. Select 1..5
+   ACK attach can increase native desired capacity even with autoscaling off
+   (#101). System-pool reuse needs live revalidation with coordinated removal;
+   a separate zero-capacity template pool alone does not prove exclusive
+   capacity ownership. The provider does not create or reconfigure pools, but
+   termination now removes the exact owned native member and decrements its
+   capacity through ACK before deleting ECS. Select 1..5
    confirmed amd64 instance types with identical vCPU counts, explicit vSwitch
    and security-group IDs, worker RAM role, system disk category/size and an
    exact public image ID accepted by the target ACK's regional/version metadata.
@@ -39,7 +41,20 @@ namespace are retained as cluster test infrastructure after cleanup.
 4. Configure the separate RRSA role/SA (`karpenter/karpenter`) and runner role's
    cloud permissions and ACK Kubernetes RBAC. Start from the provider's current
    README controller permission list; limit worker PassRole appropriately.
-   The runner additionally needs ACK detail/native-pool/temp-kubeconfig reads;
+   The controller additionally needs cluster-scoped `cs:DescribeClusterNodes`
+   and `cs:RemoveNodePoolNodes`, plus `cs:DescribeTaskInfo` (only `Resource: "*"`
+   is supported for this read). Karpenter drains first; native removal uses
+   `drain_node=false` and `release_node=false`, persists the task receipt, and
+   waits for success and membership absence before exact ECS release. Failed
+   or ambiguous tasks retain the finalizer; never bypass them by deleting ECS.
+   Before submission the controller writes an optimistic-lock removal intent
+   to `karpenter.alibabacloud.com/ack-removal` on the NodeClaim. If the outcome
+   is unknown (for example, a restart before saving `taskID`), automatic native
+   removal stops. Inspect the exact ACK task and restore its verified `taskID`
+   in that receipt; retain its cluster/pool/instance/claim identity fields. Only
+   clear an intent after proving ACK never accepted it. Do not remove finalizers
+   or retry a potentially completed native-capacity decrement blindly.
+   The runner additionally needs ACK detail/native-pool/node/temp-kubeconfig reads;
    ECS DescribeInstances/InstanceTypes/AvailableResource/Disks/NetworkInterfaces
    and exact run-owned DeleteInstances for fallback. Describe authorization
    dry-run requires `DryRunOperation`, including before absence assertions.
@@ -92,8 +107,18 @@ setup. It exchanges a **new** GitHub OIDC/STS session first and only runs cleanu
 if that exchange succeeds. It has an independent ten-minute deadline. It removes
 demand, deletes exact owned NodeClaims and waits for Kubernetes and cloud
 termination. It does not remove finalizers or globally delete pools/classes.
-Only proven recorded/run-owned ECS can be released by fallback; using fallback
-still fails normal termination acceptance.
+Only proven recorded/run-owned, non-native ECS can be released by fallback;
+native membership/tags refuse a direct ECS fallback. Using any fallback still
+fails normal termination acceptance. No additional runner CS write is needed.
+
+Before mutation, capture native desired size, total count, exact member IDs and
+all ECS IDs in the ACK VPC, including instances without Karpenter tags. After
+tagged resources disappear, require those baselines to remain restored for five
+minutes within the independent cleanup deadline. Native replacements or a
+changed desired size fail acceptance and remain evidence; do not delete
+unattributed replacements. Old manifests without this baseline cannot claim
+complete zero residue. The earlier 2026-10-16 deletion result was insufficient
+because delayed native replacements escaped its run-tag queries.
 
 Both the original manifest and partial-resource inventory are uploaded as
 `ack-smoke-RUN_ID`. After a hard cancellation, disable new creation, select the

@@ -80,6 +80,8 @@ SDK v5.1.0 的生成模型缺少 `Usable` 请求及响应字段。adapter 通过
 
 通过 `spec.ackNodePoolID` 选择现有 ACK 原生节点池；省略时要求唯一默认池。仅接受 active 的普通 ESS/containerd 节点池，并读取 `cs:DescribeClusterNodePools` / `cs:DescribeClusterNodePoolDetail`。将池 ID 和资源相关 kubelet 设置写入 `status.ackNodePool`；attach script 固定该池 ID，脚本缓存按池和配置哈希隔离。创建前再次读取，配置改变时等待 status 刷新，不修改原生节点池。缺失、权限错误、身份不符、native userdata、auto mode、CPU/内存 manager 或 soft eviction overrides 均明确拒绝。
 
+ACK 接管节点可能增加原生期望数量，即使关闭自动伸缩也会补节点（#101）。终止先核验精确的实例归属，持久化移除意图，通过 `cs:RemoveNodePoolNodes` 移除成员并调整期望数量，等待任务成功和成员消失后再释放 ECS。新增权限包括集群范围的 `cs:DescribeClusterNodes` / `cs:RemoveNodePoolNodes` 及 `cs:DescribeTaskInfo`（仅支持 `Resource: "*"`）。未知请求结果不自动重试扣减，参见 [恢复说明](test/hack/e2e/smoke/README.md)。离线回归不代表真实 ACK 验收；E2E 保持手动关闭，云端复验需另行授权。
+
 ACK attach script 不能应用 `spec.kubelet`；admission 和启动路径明确拒绝该字段，包括 maxPods、podsPerCore 和预留配置。请在所选原生节点池配置 kubelet。原生 API 不提供 podsPerCore，不能假设已生效。Pod 候选上限取原生 maxPods 与已发现网络上限的较小值：Flannel 使用实际 mask/256 配额；Terway 使用 ECS 的已知 ENI/IP 数量，保守地不扩大 trunk 容量。不支持 exclusive ENI 或非默认 pod-density-mode；未知 ENI 元数据不会获得候选。Terway maxPods 的 host-network 语义可能使此保守上限低于实际节点容量，真实值以注册节点为准。
 
 VM 内存损耗通过百分比和固定量的较大值扣减一次 Capacity。ACK 1.28+ CPU 分段规则、内存 `min(11×Pod上限+255 MiB, 可用内存×25%)` 分别计算 kube/system reservation，按 50/50 分配；采用网络和原生上限的较大值计算默认内存预留，避免保守 Pod 上限导致预留不足。显式原生 kubeReserved/systemReserved 按字段覆盖；eviction 单独扣减，ACK 默认 memory.available 为 300Mi。自定义 evictionHard 必须显式包含 memory.available，支持数量/百分比，拒绝未知信号和无效值；不假设 ACK 未公开的默认合并设置。调度和创建共用此模型，不再固定均分总 overhead。

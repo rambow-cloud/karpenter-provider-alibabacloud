@@ -347,6 +347,9 @@ func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *coreapis.NodeClai
 	}
 
 	log.FromContext(ctx).Info("Extracted instanceID from providerID", "instanceID", instanceID, "providerID", nodeClaim.Status.ProviderID)
+	if c.ackNodePoolProvider != nil {
+		return c.deleteACKInstance(ctx, nodeClaim, instanceID)
+	}
 
 	// 调用已实现的 instanceProvider.Delete()
 	err := c.instanceProvider.Delete(ctx, instanceID)
