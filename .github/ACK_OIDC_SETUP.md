@@ -1,9 +1,17 @@
 # ACK E2E OIDC configuration status
 
-Configuration was prepared on 2026-10-12 using the maintainer-authorized local
-`oss-sftp` Alibaba Cloud CLI OAuth profile. No credentials were copied from that
-profile into the repository or GitHub secrets. The maintainer confirmed that
-there is currently no ACK cluster; none was created during configuration.
+Initial identity configuration was prepared on 2026-10-12. On 2026-10-16 the
+maintainer authorized creation of a dedicated ACK Basic environment using the
+local `oss-sftp` Alibaba Cloud CLI OAuth profile. No profile credentials,
+kubeconfig, ServiceAccount tokens or STS credentials were copied into the
+repository or GitHub secrets.
+
+The dedicated `karpenter-ack-e2e` cluster is running in `cn-hangzhou-k` on ACK
+`1.35.7-aliyun.1`, containerd `2.3.4`, Flannel and Alibaba Cloud Linux 3 Container
+Optimized. It has one Ready on-demand system worker (4 vCPU / 8 GiB, 40 GiB ESSD
+PL0) and an active, zero-capacity regular `karpenter-template` node pool. Both
+pools disable autoscaling and managed upgrades. CoreDNS uses one replica for
+this single-system-node test baseline; this is not a production HA topology.
 
 ## Configured runner identity
 
@@ -11,9 +19,15 @@ there is currently no ACK cluster; none was created during configuration.
   `https://token.actions.githubusercontent.com`; its audience is `sts.aliyuncs.com`.
   Existing provider settings and other roles were not changed.
 - Created `karpenter-ack-e2e-runner`, max STS session 3600 seconds. Its trust is
-  limited to that provider, issuer, audience and the exact subject below. No
-  operation policies are attached until a dedicated cluster is selected; the
-  role currently cannot create or delete ACK/ECS resources.
+  limited to that provider, issuer, audience and the exact subject below. The
+  dedicated `KarpenterACKE2ERunner20261016` custom policy permits that cluster's
+  temporary kubeconfig (maximum 1440 minutes), cluster/pool reads and the ECS
+  inventory reads needed by smoke. Fallback instance deletion requires the
+  dedicated cluster tag, `karpenter.sh/managed-by=karpenter`, `testing/type=e2e`
+  and a `testing/karpenter-run=ack-*` tag together. The role cannot create/delete
+  clusters, networks or IAM resources, or create ECS instances.
+- Granted this runner Kubernetes `admin` RBAC on the dedicated test cluster
+  only, for fresh Helm/CRD installation. This is separate from its RAM policy.
 - Created GitHub Environment `ack-e2e`, with branch deployment rules permitting
   only `dev` and `main`. No approval requirement was added. Its environment
   variables are `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`, `ALIBABA_CLOUD_ROLE_ARN` and
@@ -41,7 +55,58 @@ reach its SDK clients. They must never be copied into the controller. Before
 cleanup, obtain a fresh OIDC/STS session and rebuild the clients. Secret/token
 values, kubeconfig and userdata must not appear in logs or uploaded reports.
 
-## Pending dedicated ACK configuration
+## Dedicated ACK configuration and remaining acceptance
+
+The ignored, access-restricted `.e2e/ack-private/config.yaml` contains the actual
+cluster, subnet, security group, worker role and native pool identifiers. Its
+credential-free contents were set as the `ALIBABA_CLOUD_E2E_CONFIG` secret of
+GitHub Environment `ack-e2e`. The temporary local kubeconfig and SSH private key
+remain outside Git tracking in that restricted directory. Never upload it.
+
+The system node matches `e2e.karpenter.alibabacloud.com/system=true`. Worker
+candidates are `ecs.c8i.large`, `ecs.c7.large` and `ecs.u1-c1m2.large`, all amd64
+2-vCPU candidates with on-demand/Spot stock at preparation time. Stock is checked
+again by the manually started smoke, rather than treated as a reservation.
+
+RRSA is enabled. `karpenter-controller-e2e` trusts only the actual ACK OIDC
+provider, its external issuer, `sts.aliyuncs.com`, and the exact subject
+`system:serviceaccount:karpenter:karpenter`. Its custom policy limits writes to
+the dedicated VPC, the three candidate instance types, PostPaid instances and
+the test ownership tags above; PassRole/GetRole target the actual pool worker
+role only. APIs without resource-level read scoping retain explicit read actions
+on `*`. Default ACK first-use service roles are platform prerequisites; the
+maintainer separately approved the six missing official roles and policies.
+
+Actual short-lived TokenRequests verified both successful controller-role STS
+exchange and rejection of `default/default`. No temporary credentials were
+persisted, and the temporary controller ServiceAccount was deleted afterward.
+This proves the trust boundary, not an admitted controller Pod or provisioning.
+
+ACK reports `https://kubernetes.default.svc` as its cluster default audience;
+the RAM OIDC provider accepts `sts.aliyuncs.com`. These are different settings.
+The Chart's explicitly projected token and admitted-Pod verification must still
+use `sts.aliyuncs.com`. #95 fixes this preflight distinction and aligns Python
+ECS ownership checks with the provider's `karpenter.sh/*` cloud tag keys.
+
+The existing public ACR controller image (source commit
+`7121262490ebfdaa979987e72e70324759508632`, index digest
+`sha256:50beeadb8f4848b8653de1c7924b2e1741c3fa73ceae106cf989f4ef0b51a037`)
+and mirrored official pause 3.10.1 amd64 image were successfully pulled without
+an imagePullSecret on the system worker. Controller executed only `--help`;
+both temporary pull-check Pods were deleted. The config pins both digests.
+
+`ACK_E2E_ENABLED=false` remains set. No controller release or three Karpenter
+workers were deployed. GitHub runner OIDC exchange, admitted controller RRSA,
+three-worker lifecycle, Spot capacity and zero-residue cleanup still require one
+explicitly requested manual smoke after the default branch contains the manual
+entry point and #95. #23 and #88 therefore remain open.
+
+The fixed system worker and disk were quoted at approximately CNY 0.744/hour at
+preparation time; NAT, API endpoint/load balancer, EIPs and traffic add charges.
+The baseline remains running until explicitly released. Smoke cleanup does not
+delete this baseline, its VPC/subnet, roles or OIDC providers.
+
+### Checklist for recreating the dedicated environment
 
 Once a test ACK exists, record its region, ID, actual Kubernetes version >=1.34,
 API access path, baseline system worker, vSwitch/security group, worker role and
@@ -92,8 +157,8 @@ Publishing to dev alone does not update the default-branch entry points.
 
 Inspect the configuration in [GitHub environments](https://github.com/rambow-cloud/karpenter-provider-alibabacloud/settings/environments)
 and the RAM console's role/OIDC provider pages. #88 and #23 remain open pending
-implementation and selected-environment runtime evidence; configuration did not
-run Go builds/tests, vulnerability scans, KWOK or ACK E2E.
+real runtime acceptance. Environment preparation did not dispatch GitHub E2E,
+KWOK, a vulnerability scan or the three-worker smoke.
 
 Sources: [ACK RRSA](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/use-rrsa-to-authorize-pods-to-access-different-cloud-services),
 [GitHub OIDC](https://docs.github.com/en/actions/reference/security/oidc),

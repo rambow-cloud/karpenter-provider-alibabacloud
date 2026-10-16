@@ -31,7 +31,7 @@ def data():
         claims.append({"metadata":{"name":f"claim-{i}","uid":uid,"labels":labels},"spec":{"nodeClassRef":{"name":pool}},"status":{"nodeName":name,"providerID":"cn-hangzhou."+ident,"conditions":[{"type":c,"status":"True"} for c in ("Ready","Launched","Registered","Initialized")]}})
         nodes.append({"metadata":{"name":name,"uid":f"node-uid-{i}","labels":labels},"spec":{"providerID":"cn-hangzhou."+ident},"status":{"conditions":[{"type":"Ready","status":"True"}]}})
         pods.append({"metadata":{"name":f"pod-{i}"},"spec":{"nodeName":name},"status":{"phase":"Running","podIP":"10.0.0.1","conditions":[{"type":"Ready","status":"True"}]}})
-        instances.append({"InstanceId":ident,"InstanceChargeType":"PostPaid","SpotStrategy":"SpotAsPriceGo" if capacity=="spot" else "NoSpot","Status":"Running","ZoneId":"zone-test","ImageId":"image-test","InstanceType":"ecs.test","VpcAttributes":{"VSwitchId":"vsw-test"},"SecurityGroupIds":{"SecurityGroupId":["sg-test"]},"Tags":{smoke.RUN_TAG:run,smoke.CLUSTER:"c-test",smoke.MANAGED:"karpenter",smoke.GROUP+"/nodepool":pool,smoke.GROUP+"/nodeclaim":f"claim-{i}",smoke.GROUP+"/nodeclaim-uid":uid}})
+        instances.append({"InstanceId":ident,"InstanceChargeType":"PostPaid","SpotStrategy":"SpotAsPriceGo" if capacity=="spot" else "NoSpot","Status":"Running","ZoneId":"zone-test","ImageId":"image-test","InstanceType":"ecs.test","VpcAttributes":{"VSwitchId":"vsw-test"},"SecurityGroupIds":{"SecurityGroupId":["sg-test"]},"Tags":{"testing/karpenter-run":run,"karpenter.sh/cluster-id":"c-test","karpenter.sh/managed-by":"karpenter","karpenter.sh/nodepool":pool,"karpenter.sh/nodeclaim":f"claim-{i}","karpenter.sh/nodeclaim-uid":uid}})
     return plan,manifest,claims,nodes,pods,instances
 
 
@@ -51,12 +51,20 @@ class SmokeContracts(unittest.TestCase):
                 if change=="fallback": args[5][2]["SpotStrategy"]="NoSpot"
                 if change=="duplicate": args[5][2]["InstanceId"]="i-0"
                 if change=="baseline": args[3][0]["metadata"]["uid"]="baseline-uid"
-                if change=="wrong_cloud_uid": args[5][0]["Tags"][smoke.GROUP+"/nodeclaim-uid"]="foreign"
+                if change=="wrong_cloud_uid": args[5][0]["Tags"]["karpenter.sh/nodeclaim-uid"]="foreign"
                 if change=="wrong_network": args[5][0]["VpcAttributes"]["VSwitchId"]="foreign"
                 if change=="misplaced_pod": args[4][2]["spec"]["nodeName"]="node-0"
                 if change=="pending": args[2][0]["status"]["conditions"][0]["status"]="False"
                 with self.assertRaises(smoke.Pending if change=="pending" else smoke.Failure):
                     smoke.verify(*args)
+
+    def test_api_group_tags_cannot_substitute_for_ecs_ownership(self):
+        args = data()
+        for row in args[5]:
+            row["Tags"] = {key.replace("karpenter.sh/", "karpenter.alibabacloud.com/"): value
+                           for key, value in row["Tags"].items()}
+        with self.assertRaises(smoke.Failure):
+            smoke.verify(*args)
 
     def test_small_pods_force_distinct_nodes_with_no_capacity_fallback(self):
         plan,manifest,*_ = data()

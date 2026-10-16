@@ -13,8 +13,11 @@ import uuid
 
 RUN_TAG = "testing/karpenter-run"
 GROUP = "karpenter.alibabacloud.com"
-MANAGED = GROUP + "/managed-by"
-CLUSTER = GROUP + "/cluster-id"
+# ECS ownership tags use the provider's karpenter.sh contract, independently
+# of the ECSNodeClass Kubernetes API group.
+TAG_PREFIX = "karpenter.sh"
+MANAGED = TAG_PREFIX + "/managed-by"
+CLUSTER = TAG_PREFIX + "/cluster-id"
 POOL = "karpenter.sh/nodepool"
 CAPACITY = "karpenter.sh/capacity-type"
 CUSTOM = {"NodePool":"nodepools.karpenter.sh","NodeClaim":"nodeclaims.karpenter.sh","ECSNodeClass":"ecsnodeclasses.karpenter.alibabacloud.com"}
@@ -121,7 +124,7 @@ def verify(plan, manifest, claims, nodes, pods, instances):
         if not row:
             raise Failure("Kubernetes instance is missing from authenticated cloud inventory")
         tags = row.get("Tags",{})
-        if any(tags.get(k)!=v for k,v in {RUN_TAG:run,CLUSTER:plan["cluster_id"],MANAGED:"karpenter",GROUP+"/nodepool":pool,GROUP+"/nodeclaim":claim["metadata"]["name"],GROUP+"/nodeclaim-uid":claim["metadata"]["uid"]}.items()):
+        if any(tags.get(k)!=v for k,v in {RUN_TAG:run,CLUSTER:plan["cluster_id"],MANAGED:"karpenter",TAG_PREFIX+"/nodepool":pool,TAG_PREFIX+"/nodeclaim":claim["metadata"]["name"],TAG_PREFIX+"/nodeclaim-uid":claim["metadata"]["uid"]}.items()):
             raise Failure("cloud ownership/NodeClaim identity mismatch")
         if row.get("Status") != "Running":
             raise Pending("ECS is not Running")
