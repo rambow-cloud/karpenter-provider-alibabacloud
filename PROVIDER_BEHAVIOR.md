@@ -14,6 +14,10 @@ ECSNodeClass controller 与 CloudProvider 共享 `ECSNodeClass.Hash()`，使用�
 
 镜像、交换机与安全组 selector 的原文、顺序和重复项不参与静态哈希。修改 selector 后，当前节点的镜像和交换机仍在解析集合中、安全组集合仍相同时，不会仅因 selector 改写报告漂移。节点使用的资源不再被允许时，分别报告 `ImageDrift`、`VSwitchDrift` 或 `SecurityGroupDrift`。出现更新的镜像不会自动淘汰仍在允许集合中的旧镜像。当前 generation 尚未 Ready 时暂停漂移判断，避免使用未完成的解析结果。
 
+动态漂移绕过通用实例缓存，按精确实例 ID 和区域重新读取 ECS，并校验响应数量、身份及必需字段。不完整响应返回错误，不能当作不存在；未观察到安全组字段或交换机信息时延后判断，不报告资源漂移。不完整网络快照不写入 Get 缓存；明确返回的空安全组集合与字段缺失保持区别，缺失或额外的实际安全组仍会触发漂移。静态配置哈希变化无需等待网络信息。#100 的本地回归覆盖旧缓存到新云响应和缺失字段恢复，但此前真实 ACK 的瞬时误漂移根因及修复效果仍须云端复验。
+
+debug 日志 `Evaluating fresh ECS drift observation` 记录带时间戳的 claim 名称/UID、实例 ID/区域/状态、实际与 NodeClass 已解析安全组 ID、字段是否已观察到及交换机 ID，供后续有界云端复验关联；不记录完整云响应、userdata 或凭据。
+
 启动脚本、集群身份及 API endpoint、RAM role、kubelet、标签、metadata、Spot 配置、LaunchTemplate ID/具体 version 与磁盘配置等静态字段变化仍会触发 `NodeClassDrift`。磁盘使用创建路径的默认值与校验；数据盘顺序和 clusterDNS 顺序保留。容量预留 selector 暂无动态 membership drift 检查，仍按排序去重的 OR 集合参与静态哈希。
 
 ## LaunchTemplate 磁盘与版本
