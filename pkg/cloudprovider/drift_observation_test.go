@@ -126,3 +126,11 @@ func TestStaticNodeClassDriftDoesNotDependOnPartialCloudObservation(t *testing.T
 	require.Equal(t, NodeClassDrift, reason)
 	require.Zero(t, api.calls, "known static drift should not spend a cloud read")
 }
+
+func TestDriftRejectsClaimRegionMismatch(t *testing.T) {
+	p, claim := observationFixture(t, &observationECS{})
+	claim.Status.ProviderID = "cn-shanghai.i-worker"
+	reason, err := p.IsDrifted(context.Background(), claim)
+	require.ErrorContains(t, err, "identity does not match")
+	require.Empty(t, reason)
+}

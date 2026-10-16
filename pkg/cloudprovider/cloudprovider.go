@@ -786,6 +786,9 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *coreapis.NodeC
 	if err != nil {
 		return "", fmt.Errorf("failed to get instance: %w", err)
 	}
+	if nodeClaim.Status.ProviderID != inst.Region+"."+inst.InstanceID {
+		return "", fmt.Errorf("fresh ECS identity does not match NodeClaim providerID")
+	}
 	log.FromContext(ctx).V(1).Info("Evaluating fresh ECS drift observation",
 		"nodeClaim", nodeClaim.Name, "nodeClaimUID", nodeClaim.UID, "instanceID", inst.InstanceID, "region", inst.Region,
 		"instanceStatus", inst.Status, "securityGroupsObserved", inst.SecurityGroupIDs != nil,
